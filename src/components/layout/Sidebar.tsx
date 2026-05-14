@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, AlertTriangle, Users, Plane, Brain,
   Package, FolderOpen, BarChart2, Settings, LogOut,
-  ChevronLeft, ChevronRight, Zap, HardHat,
+  ChevronLeft, ChevronRight, Zap, HardHat, Truck,
   Landmark, Camera, IndianRupee, ClipboardCheck, FileBarChart,
   Shield, Banknote, ScanLine, Beaker, FileStack, CloudRain,
   MessageSquare, MapPin, TrendingUp, FileX, Scale
@@ -46,6 +46,15 @@ const advancedItems = [
   { to: '/tpa-portal', icon: ClipboardCheck, label: 'TPA Portal' },
   { to: '/hindrance-register', icon: FileX, label: 'Hindrance Register' },
   { to: '/disputes', icon: Scale, label: 'Dispute Resolution' },
+];
+
+const contractorItems = [
+  { to: '/diesel', icon: Truck, label: 'Diesel' },
+  { to: '/materials/reconciliation', icon: Package, label: 'Materials' },
+  { to: '/labour/payments', icon: IndianRupee, label: 'Labour' },
+  { to: '/recovery/dashboard', icon: ClipboardCheck, label: 'Recovery' },
+  { to: '/maintenance', icon: HardHat, label: 'Maintenance' },
+  { to: '/admin/audit-logs', icon: Shield, label: 'Audit Logs' },
 ];
 
 export function Sidebar() {
@@ -133,6 +142,30 @@ export function Sidebar() {
         )}
         {collapsed && <div className="my-2 mx-2 h-px bg-[#1F1F2E]" />}
         {advancedItems.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
+                isActive
+                  ? 'bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/20'
+                  : 'text-[#808080] hover:text-white hover:bg-white/5'
+              } ${collapsed ? 'justify-center px-2' : ''}`
+            }
+            title={collapsed ? label : undefined}
+          >
+            <Icon size={18} className="flex-shrink-0" />
+            {!collapsed && <span className="text-sm font-medium">{label}</span>}
+          </NavLink>
+        ))}
+
+        {!collapsed && (
+          <div className="mt-4 mb-2 mx-4 flex items-center gap-1.5">
+            <HardHat size={10} style={{ color: '#FF6B00' }} />
+            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#FF6B00' }}>FIELD OPS</span>
+          </div>
+        )}
+        {contractorItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}

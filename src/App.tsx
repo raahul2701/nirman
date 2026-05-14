@@ -37,7 +37,14 @@ const BudgetProgressPage = lazy(() => import('./pages/BudgetProgressPage').then(
 const TpaPortalPage = lazy(() => import('./pages/TpaPortalPage').then((mod) => ({ default: mod.TpaPortalPage })));
 const HindranceRegisterPage = lazy(() => import('./pages/HindranceRegisterPage').then((mod) => ({ default: mod.HindranceRegisterPage })));
 const DisputesPage = lazy(() => import('./pages/DisputesPage').then((mod) => ({ default: mod.DisputesPage })));
+const DieselDashboard = lazy(() => import('./pages/diesel/DieselDashboard').then((mod) => ({ default: mod.DieselDashboard })));
+const DieselIssue = lazy(() => import('./pages/diesel/DieselIssue').then((mod) => ({ default: mod.DieselIssue })));
+const DieselAlerts = lazy(() => import('./pages/diesel/DieselAlerts').then((mod) => ({ default: mod.DieselAlerts })));
+const DieselReports = lazy(() => import('./pages/diesel/DieselReports').then((mod) => ({ default: mod.DieselReports })));
+const MaintenanceDashboard = lazy(() => import('./pages/maintenance/MaintenanceDashboard').then((mod) => ({ default: mod.MaintenanceDashboard })));
+const ServiceSchedules = lazy(() => import('./pages/maintenance/ServiceSchedules').then((mod) => ({ default: mod.ServiceSchedules })));
 const AdminSystemPage = lazy(() => import('./pages/AdminSystemPage').then((mod) => ({ default: mod.AdminSystemPage })));
+const AuditLogsPage = lazy(() => import('./pages/admin/AuditLogsPage').then((mod) => ({ default: mod.AuditLogsPage })));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -100,6 +107,22 @@ function AppRoutes() {
       <Route path="/tpa-portal" element={<ProtectedRoute><OnboardingGuard><TpaPortalPage /></OnboardingGuard></ProtectedRoute>} />
       <Route path="/hindrance-register" element={<ProtectedRoute><OnboardingGuard><HindranceRegisterPage /></OnboardingGuard></ProtectedRoute>} />
       <Route path="/disputes" element={<ProtectedRoute><OnboardingGuard><DisputesPage /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/diesel" element={<ProtectedRoute><OnboardingGuard><DieselDashboard /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/diesel/new" element={<ProtectedRoute><OnboardingGuard><DieselIssue /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/diesel/alerts" element={<ProtectedRoute><OnboardingGuard><DieselAlerts /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/diesel/reports" element={<ProtectedRoute><OnboardingGuard><DieselReports /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/materials/reconciliation" element={<ProtectedRoute><OnboardingGuard><MaterialReconciliation /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/materials/variance" element={<ProtectedRoute><OnboardingGuard><WastageAlerts /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/materials/theft-alerts" element={<ProtectedRoute><OnboardingGuard><WastageAlerts /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/labour/payments" element={<ProtectedRoute><OnboardingGuard><LabourPayments /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/labour/advances" element={<ProtectedRoute><OnboardingGuard><LabourAdvances /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/labour/settlements" element={<ProtectedRoute><OnboardingGuard><LabourSettlements /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/recovery/dashboard" element={<ProtectedRoute><OnboardingGuard><PaymentRecovery /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/recovery/followups" element={<ProtectedRoute><OnboardingGuard><DepartmentFollowups /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/maintenance" element={<ProtectedRoute><OnboardingGuard><MaintenanceDashboard /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/maintenance/breakdowns" element={<ProtectedRoute><OnboardingGuard><BreakdownReports /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/maintenance/schedule" element={<ProtectedRoute><OnboardingGuard><ServiceSchedules /></OnboardingGuard></ProtectedRoute>} />
+      <Route path="/admin/audit-logs" element={<ProtectedRoute><OnboardingGuard><AuditLogsPage /></OnboardingGuard></ProtectedRoute>} />
       <Route path="/admin/system" element={<ProtectedRoute><OnboardingGuard><AdminSystemPage /></OnboardingGuard></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

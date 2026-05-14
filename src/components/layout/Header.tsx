@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Bell, X, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
+import { useOfflineSync } from '../../hooks/useOfflineSync';
+import { isOnline, watchConnectivity } from '../../services/offline/connectivity';
 import { formatDistanceToNow } from '../../lib/utils';
 
 interface HeaderProps {
@@ -13,7 +15,14 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { profile } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
+  const [online, setOnline] = useState(isOnline());
+  const { pendingSync, status } = useOfflineSync();
   const notifRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unsubscribe = watchConnectivity(setOnline);
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -40,6 +49,15 @@ export function Header({ title, subtitle }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        <div className={`rounded-full px-3 py-1 text-[11px] uppercase font-semibold ${online ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>
+          {online ? '🟢 Online' : '🔴 Offline Mode Active'}
+        </div>
+        {pendingSync > 0 && (
+          <div className="rounded-full px-3 py-1 text-[11px] uppercase font-semibold bg-yellow-500/10 text-amber-300">
+            🟡 Sync Pending ({pendingSync})
+          </div>
+        )}
+
         {/* Notification bell */}
         <div className="relative" ref={notifRef}>
           <button
@@ -77,7 +95,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 {notifications.length === 0 ? (
                   <div className="py-8 text-center text-[#606060] text-sm">No notifications</div>
                 ) : (
-                  notifications.slice(0, 20).map(n => (
+                  notifications.slice(0, 20).map((n) => (
                     <div
                       key={n.id}
                       onClick={() => markAsRead(n.id)}
