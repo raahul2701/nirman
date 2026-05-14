@@ -1,4 +1,4 @@
-import { cn } from '../../lib/utils';
+import { ReactNode } from 'react';
 import { SEVERITY_COLORS, SEVERITY_BG, STATUS_COLORS } from '../../lib/utils';
 
 export function SeverityBadge({ severity }: { severity: string }) {
@@ -24,12 +24,30 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function Badge({ children, color = '#FF6B00' }: { children: string; color?: string }) {
+export function Badge({
+  children,
+  color = '#FF6B00',
+  variant = 'solid',
+  className = ''
+}: {
+  children: ReactNode;
+  color?: string;
+  variant?: 'solid' | 'outline' | 'ghost' | 'secondary' | 'destructive' | string;
+  className?: string;
+}) {
+  const baseClass = 'px-2 py-0.5 rounded-full text-[10px] font-medium';
+  const style = variant === 'outline'
+    ? { color, background: 'transparent', border: `1px solid ${color}` }
+    : variant === 'ghost'
+      ? { color, background: 'rgba(255,255,255,0.08)' }
+      : variant === 'secondary'
+        ? { color, background: 'rgba(255,255,255,0.08)' }
+        : variant === 'destructive'
+          ? { color: '#ef4444', background: 'rgba(239,68,68,0.15)' }
+          : { color, background: `${color}15` };
+
   return (
-    <span
-      className="px-2 py-0.5 rounded-full text-[10px] font-medium"
-      style={{ color, background: `${color}15` }}
-    >
+    <span className={`${baseClass} ${className}`} style={style}>
       {children}
     </span>
   );

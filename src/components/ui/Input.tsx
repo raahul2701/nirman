@@ -24,7 +24,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               'w-full rounded-xl px-3 py-2.5 text-sm text-white placeholder-[#404040] outline-none transition-all',
               'border focus:border-[#FF6B00]/50 focus:ring-1 focus:ring-[#FF6B00]/20',
               error ? 'border-red-400/50' : 'border-[#2A2A2A]',
-              icon && 'pl-9',
+              icon ? 'pl-9' : undefined,
               className
             )}
             style={{ background: '#111111' }}

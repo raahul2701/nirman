@@ -2,6 +2,16 @@
 -- File: 003_advanced_features.sql
 
 -- ─────────────────────────────────────
+-- DROP EXISTING TRIGGERS/FUNCTIONS (SAFE)
+-- ─────────────────────────────────────
+
+DROP TRIGGER IF EXISTS set_hindrance_code ON hindrance_register;
+DROP FUNCTION IF EXISTS generate_hindrance_code();
+
+DROP TRIGGER IF EXISTS set_dispute_code ON disputes;
+DROP FUNCTION IF EXISTS generate_dispute_code();
+
+-- ─────────────────────────────────────
 -- FEATURE 3: BLACKLIST CONTRACTOR
 -- ─────────────────────────────────────
 
@@ -742,3 +752,45 @@ CREATE POLICY "Auth see disputes"
 CREATE POLICY "Auth see hindrance"
   ON hindrance_register FOR SELECT
   USING (auth.role() = 'authenticated');
+
+-- ─────────────────────────────────────
+-- INDEXES FOR PERFORMANCE
+-- ─────────────────────────────────────
+
+-- Blacklist indexes
+CREATE INDEX IF NOT EXISTS idx_blacklisted_contractors_phone ON blacklisted_contractors(phone);
+CREATE INDEX IF NOT EXISTS idx_blacklisted_contractors_pan ON blacklisted_contractors(pan_number);
+CREATE INDEX IF NOT EXISTS idx_blacklisted_contractors_aadhaar ON blacklisted_contractors(aadhaar);
+CREATE INDEX IF NOT EXISTS idx_blacklisted_contractors_status ON blacklisted_contractors(status);
+
+-- Bank guarantee indexes
+CREATE INDEX IF NOT EXISTS idx_bank_guarantees_project ON bank_guarantees(project_id);
+CREATE INDEX IF NOT EXISTS idx_bank_guarantees_expiry ON bank_guarantees(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_bank_guarantees_status ON bank_guarantees(status);
+
+-- Material tests indexes
+CREATE INDEX IF NOT EXISTS idx_material_tests_project ON material_tests(project_id);
+CREATE INDEX IF NOT EXISTS idx_material_tests_date ON material_tests(test_date);
+CREATE INDEX IF NOT EXISTS idx_material_tests_result ON material_tests(result);
+
+-- Hindrance register indexes
+CREATE INDEX IF NOT EXISTS idx_hindrance_register_project ON hindrance_register(project_id);
+CREATE INDEX IF NOT EXISTS idx_hindrance_register_code ON hindrance_register(hindrance_code);
+CREATE INDEX IF NOT EXISTS idx_hindrance_register_status ON hindrance_register(resolution_status);
+
+-- Disputes indexes
+CREATE INDEX IF NOT EXISTS idx_disputes_project ON disputes(project_id);
+CREATE INDEX IF NOT EXISTS idx_disputes_code ON disputes(dispute_code);
+CREATE INDEX IF NOT EXISTS idx_disputes_status ON disputes(resolution_status);
+
+-- Weather logs indexes
+CREATE INDEX IF NOT EXISTS idx_weather_logs_project ON weather_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_weather_logs_date ON weather_logs(log_date);
+
+-- Extension applications indexes
+CREATE INDEX IF NOT EXISTS idx_extension_applications_project ON extension_applications(project_id);
+CREATE INDEX IF NOT EXISTS idx_extension_applications_status ON extension_applications(status);
+
+-- Budget progress indexes
+CREATE INDEX IF NOT EXISTS idx_budget_progress_project ON budget_progress_snapshots(project_id);
+CREATE INDEX IF NOT EXISTS idx_budget_progress_date ON budget_progress_snapshots(snapshot_date);

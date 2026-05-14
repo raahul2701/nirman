@@ -293,3 +293,110 @@ export interface ApprovalWorkflow {
   comments: string;
   action_at: string;
 }
+
+export type WeatherType =
+  | 'heavy_rain'
+  | 'light_rain'
+  | 'storm'
+  | 'extreme_heat'
+  | 'fog'
+  | 'flood'
+  | 'normal';
+
+export interface WeatherLog {
+  id: string;
+  site_id: string;
+  project_id: string;
+  log_date: string;
+  weather_type: WeatherType;
+  work_stopped: boolean;
+  hours_lost: number;
+  reason_details: string;
+  auto_fetched: boolean;
+  temperature: number;
+  rainfall_mm: number;
+  wind_speed: number;
+  weather_api_data: Record<string, unknown>;
+  photos: string[];
+  reported_by: string;
+  created_at: string;
+}
+
+export interface BudgetProgressSnapshot {
+  id: string;
+  project_id: string;
+  snapshot_date: string;
+  total_contract_value: number;
+  total_paid_amount: number;
+  financial_progress_percent: number;
+  physical_progress_percent: number;
+  gap_percentage: number;
+  gap_alert_sent: boolean;
+  ai_analysis: string;
+  risk_flag: boolean;
+  created_at: string;
+}
+
+export interface DailyReport {
+  id: string;
+  project_id: string;
+  site_id: string;
+  report_date: string;
+  supervisor_name: string;
+  labor_count: number;
+  equipment_count: number;
+  work_description: string;
+  materials_used: string;
+  issues_faced: string;
+  weather_conditions: string;
+  total_workers: number;
+  report_data: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface WhatsappMessage {
+  id: string;
+  phone: string;
+  message_in: string;
+  message_out: string;
+  parsed_data: Record<string, unknown>;
+  action_taken: string;
+  report_created_id?: string;
+  status: string;
+  received_at: string;
+}
+
+export interface ExtensionApplication {
+  id: string;
+  project_id: string;
+  application_date: string;
+  days_requested: number;
+  rain_days: number;
+  flood_days: number;
+  other_hindrance_days: number;
+  total_hindrance_days: number;
+  weather_report_url: string;
+  hindrance_register_url: string;
+  supporting_docs: string[];
+  ai_application_letter: string;
+  application_pdf_url: string;
+  drive_link: string;
+  status: string;
+  approved_days?: number;
+  new_completion_date?: string;
+  authority_response: string;
+  submitted_by: string;
+  created_at: string;
+}
+
+export interface SiteGISData {
+  id: string;
+  site_id: string;
+  project_id: string;
+  latitude: number;
+  longitude: number;
+  boundary_coordinates: Array<[number, number]>;
+  site_area_sqm: number;
+  health_status: 'critical' | 'delayed' | 'normal' | 'completed';
+  last_updated: string;
+}

@@ -74,24 +74,29 @@ export function GovProjectDetailPage() {
   async function analyzeMilestone(m: PaymentMilestone) {
     toast('Running AI analysis...', 'info');
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analyze`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'milestone', milestone_name: m.milestone_name, description: m.description, payment_amount: m.payment_amount, completion_percentage: m.completion_percentage }),
+      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
+        body: {
+          type: 'milestone',
+          milestone_name: m.milestone_name,
+          description: m.description,
+          payment_amount: m.payment_amount,
+          completion_percentage: m.completion_percentage,
+        },
       });
-      const aiData = await res.json();
+      if (fnError) throw fnError;
+      const result = aiData as any;
       await supabase.from('payment_milestones').update({
-        ai_safe_amount: aiData.safe_amount || m.payment_amount * 0.85,
-        ai_hold_amount: aiData.hold_amount || m.payment_amount * 0.15,
-        ai_risk_level: aiData.risk_level || 'low',
-        ai_analysis: aiData.analysis || 'Analysis complete.',
+        ai_safe_amount: result?.safe_amount || m.payment_amount * 0.85,
+        ai_hold_amount: result?.hold_amount || m.payment_amount * 0.15,
+        ai_risk_level: result?.risk_level || 'low',
+        ai_analysis: result?.analysis || 'Analysis complete.',
       }).eq('id', m.id);
       setMilestones(prev => prev.map(ms => ms.id === m.id ? {
         ...ms,
-        ai_safe_amount: aiData.safe_amount || ms.payment_amount * 0.85,
-        ai_hold_amount: aiData.hold_amount || ms.payment_amount * 0.15,
-        ai_risk_level: aiData.risk_level || 'low',
-        ai_analysis: aiData.analysis || 'Analysis complete.',
+        ai_safe_amount: result?.safe_amount || ms.payment_amount * 0.85,
+        ai_hold_amount: result?.hold_amount || ms.payment_amount * 0.15,
+        ai_risk_level: result?.risk_level || 'low',
+        ai_analysis: result?.analysis || 'Analysis complete.',
       } : ms));
       toast('AI analysis complete!', 'success');
     } catch {

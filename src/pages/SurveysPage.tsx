@@ -54,30 +54,21 @@ export function SurveysPage() {
     }).select().maybeSingle();
     if (error) { toast('Failed to create survey', 'error'); setAiLoading(false); return; }
 
-    // Simulate AI processing
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analyze`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            type: 'survey',
-            survey_type: form.survey_type,
-            notes: form.notes,
-          }),
-        }
-      );
-      const aiData = await response.json();
+      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
+        body: {
+          type: 'survey',
+          survey_type: form.survey_type,
+          notes: form.notes,
+        },
+      });
+      if (fnError) throw fnError;
       const progress = Math.floor(Math.random() * 30) + 60;
       await supabase.from('surveys').update({
-        ai_report: aiData.report || 'Survey analysis complete.',
+        ai_report: (aiData as any)?.report || 'Survey analysis complete.',
         progress_percent: progress,
         status: 'complete',
-        findings_count: aiData.findings_count || Math.floor(Math.random() * 5) + 1,
+        findings_count: (aiData as any)?.findings_count || Math.floor(Math.random() * 5) + 1,
       }).eq('id', data!.id);
       toast('Survey analysis complete!', 'success');
     } catch {

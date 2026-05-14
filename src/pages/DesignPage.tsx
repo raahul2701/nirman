@@ -89,19 +89,21 @@ export function DesignPage() {
     if (error) { toast('Failed to create design', 'error'); setGenerating(false); return; }
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analyze`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ type: 'design', ...form }),
-        }
-      );
-      const aiData = await response.json();
-      await supabase.from('designs').update({ ai_output: aiData.output || '', status: 'complete' }).eq('id', data!.id);
+      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
+        body: {
+          type: 'design',
+          project_type: form.project_type,
+          area_sqft: form.area_sqft,
+          budget_min: form.budget_min,
+          budget_max: form.budget_max,
+          floors: form.floors,
+          location: form.location,
+          soil_type: form.soil_type,
+          requirements: form.requirements,
+        },
+      });
+      if (fnError) throw fnError;
+      await supabase.from('designs').update({ ai_output: (aiData as any)?.output || '', status: 'complete' }).eq('id', data!.id);
       toast('Design generated successfully!', 'success');
     } catch {
       await supabase.from('designs').update({ status: 'failed' }).eq('id', data!.id);

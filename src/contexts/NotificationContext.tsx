@@ -3,8 +3,6 @@ import { supabase } from '../lib/supabase';
 import { Notification } from '../types';
 import { useAuth } from './AuthContext';
 
-const SENDER_NAME = 'NIRMAN AI by ARSPL';
-
 interface NotificationContextType {
   notifications: Notification[];
   unreadCount: number;

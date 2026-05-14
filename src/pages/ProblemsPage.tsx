@@ -72,29 +72,21 @@ export function ProblemsPage() {
     }
     setAiLoading(true);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analyze`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            type: 'problem',
-            category: form.category,
-            description: form.description,
-            title: form.title,
-          }),
-        }
-      );
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
+      const { data, error: fnError } = await supabase.functions.invoke('ai-analyze', {
+        body: {
+          type: 'problem',
+          category: form.category,
+          description: form.description,
+          title: form.title,
+        },
+      });
+      if (fnError) throw fnError;
+      const result = data as any;
       setForm(prev => ({
         ...prev,
-        title: data.title || prev.title,
-        severity: data.severity || prev.severity,
-        description: data.description || prev.description,
+        title: result?.title || prev.title,
+        severity: result?.severity || prev.severity,
+        description: result?.description || prev.description,
       }));
       toast('AI analysis complete!', 'success');
     } catch {

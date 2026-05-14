@@ -67,16 +67,18 @@ export function InspectionsPage() {
 
     // AI analysis
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analyze`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'inspection', inspection_type: form.inspection_type, notes: form.notes }),
+      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
+        body: {
+          type: 'inspection',
+          inspection_type: form.inspection_type,
+          notes: form.notes,
+        },
       });
-      const aiData = await res.json();
+      if (fnError) throw fnError;
       await supabase.from('inspection_reports').update({
-        ai_report: aiData.report || 'Inspection analysis complete.',
-        overall_quality_score: aiData.quality_score || 80,
-        recommendation: aiData.recommendation || 'approve',
+        ai_report: (aiData as any)?.report || 'Inspection analysis complete.',
+        overall_quality_score: (aiData as any)?.quality_score || 80,
+        recommendation: (aiData as any)?.recommendation || 'approve',
       }).eq('id', data!.id);
       toast('Inspection created with AI analysis!', 'success');
     } catch {

@@ -92,18 +92,20 @@ export function UploadWorkPage() {
 
     // Run AI analysis
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-analyze`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'work_upload', work_category: form.work_category, description: form.description }),
+      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
+        body: {
+          type: 'work_upload',
+          work_category: form.work_category,
+          description: form.description,
+        },
       });
-      const aiData = await res.json();
+      if (fnError) throw fnError;
       await supabase.from('work_uploads').update({
-        ai_analysis: aiData.analysis || 'Quality check complete.',
-        ai_quality_score: aiData.quality_score || 75,
-        issues_found: aiData.issues || [],
+        ai_analysis: (aiData as any)?.analysis || 'Quality check complete.',
+        ai_quality_score: (aiData as any)?.quality_score || 75,
+        issues_found: (aiData as any)?.issues || [],
       }).eq('id', data!.id);
-      if (data) setUploads(prev => [{ ...(data as WorkUpload), ai_analysis: aiData.analysis, ai_quality_score: aiData.quality_score || 75 }, ...prev]);
+      if (data) setUploads(prev => [{ ...(data as WorkUpload), ai_analysis: (aiData as any)?.analysis, ai_quality_score: (aiData as any)?.quality_score || 75 }, ...prev]);
       toast('Work uploaded and AI analyzed!', 'success');
     } catch {
       if (data) setUploads(prev => [data as WorkUpload, ...prev]);
