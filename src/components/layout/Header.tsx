@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
-import { Bell, X, Check } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { memo, useEffect, useMemo, useState, useRef } from 'react';
+import { Bell, X, Check } from '../../lib/icons';
+import { useAuth } from '../../contexts/useAuth';
+import { useNotifications } from '../../contexts/useNotifications';
 import { useOfflineSync } from '../../hooks/useOfflineSync';
 import { isOnline, watchConnectivity } from '../../services/offline/connectivity';
 import { formatDistanceToNow } from '../../lib/utils';
@@ -11,12 +11,12 @@ interface HeaderProps {
   subtitle?: string;
 }
 
-export function Header({ title, subtitle }: HeaderProps) {
+function HeaderComponent({ title, subtitle }: HeaderProps) {
   const { profile } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [online, setOnline] = useState(isOnline());
-  const { pendingSync, status } = useOfflineSync();
+  const { pendingSync } = useOfflineSync();
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,12 +34,15 @@ export function Header({ title, subtitle }: HeaderProps) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const typeColors: Record<string, string> = {
-    info: '#00D4AA',
-    warning: '#FF6B00',
-    error: '#ef4444',
-    success: '#22c55e',
-  };
+  const typeColors = useMemo(
+    () => ({
+      info: '#00D4AA',
+      warning: '#FF6B00',
+      error: '#ef4444',
+      success: '#22c55e',
+    }),
+    []
+  );
 
   return (
     <header className="h-16 flex items-center justify-between px-6 border-b border-[#1F1F2E]" style={{ background: '#0D0D0D' }}>
@@ -130,3 +133,5 @@ export function Header({ title, subtitle }: HeaderProps) {
     </header>
   );
 }
+
+export const Header = memo(HeaderComponent);

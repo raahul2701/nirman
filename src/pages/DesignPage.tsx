@@ -8,8 +8,9 @@ import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../components/ui/Toast';
+import { invokeAiAnalyze } from '../services/ai/claudeService';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../components/ui/useToast';
 import { Design } from '../types';
 import { formatDistanceToNow } from '../lib/utils';
 
@@ -89,21 +90,25 @@ export function DesignPage() {
     if (error) { toast('Failed to create design', 'error'); setGenerating(false); return; }
 
     try {
-      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          type: 'design',
-          project_type: form.project_type,
-          area_sqft: form.area_sqft,
-          budget_min: form.budget_min,
-          budget_max: form.budget_max,
-          floors: form.floors,
-          location: form.location,
-          soil_type: form.soil_type,
-          requirements: form.requirements,
-        },
+      const aiData = await invokeAiAnalyze<{ output?: string }>({
+        type: 'design',
+        project_type: form.project_type,
+        area_sqft: form.area_sqft,
+        budget_min: form.budget_min,
+        budget_max: form.budget_max,
+        floors: form.floors,
+        location: form.location,
+        soil_type: form.soil_type,
+        requirements: form.requirements,
+      }, {
+        retries: 2,
+        timeoutMs: 25000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'designGeneration',
+        maxQuotaPerDay: 30,
+        errorMessage: 'Design generation failed'
       });
-      if (fnError) throw fnError;
-      await supabase.from('designs').update({ ai_output: (aiData as any)?.output || '', status: 'complete' }).eq('id', data!.id);
+      await supabase.from('designs').update({ ai_output: aiData.output || '', status: 'complete' }).eq('id', data!.id);
       toast('Design generated successfully!', 'success');
     } catch {
       await supabase.from('designs').update({ status: 'failed' }).eq('id', data!.id);

@@ -9,8 +9,9 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../components/ui/Toast';
+import { invokeAiAnalyze } from '../../services/ai/claudeService';
+import { useAuth } from '../../contexts/useAuth';
+import { useToast } from '../../components/ui/useToast';
 import { PaymentRequest, GovProject, PaymentMilestone } from '../../types';
 import { formatCurrency, formatDistanceToNow } from '../../lib/utils';
 
@@ -89,19 +90,23 @@ export function PaymentsPage() {
 
     // AI analysis
     try {
-      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          type: 'payment',
-          claimed_amount: form.claimed_amount,
-          project_id: form.project_id,
-        },
+      const aiData = await invokeAiAnalyze<{ recommended_amount?: number; hold_amount?: number; risk_level?: string; report?: string }>({
+        type: 'payment',
+        claimed_amount: form.claimed_amount,
+        project_id: form.project_id,
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'paymentAnalysis',
+        maxQuotaPerDay: 35,
+        errorMessage: 'Payment AI analysis failed'
       });
-      if (fnError) throw fnError;
       await supabase.from('payment_requests').update({
-        ai_recommended_amount: (aiData as any)?.recommended_amount || parseFloat(form.claimed_amount) * 0.85,
-        ai_hold_amount: (aiData as any)?.hold_amount || parseFloat(form.claimed_amount) * 0.15,
-        ai_risk_level: (aiData as any)?.risk_level || 'low',
-        ai_full_report: (aiData as any)?.report || 'Payment verification complete.',
+        ai_recommended_amount: aiData.recommended_amount ?? parseFloat(form.claimed_amount) * 0.85,
+        ai_hold_amount: aiData.hold_amount ?? parseFloat(form.claimed_amount) * 0.15,
+        ai_risk_level: aiData.risk_level || 'low',
+        ai_full_report: aiData.report || 'Payment verification complete.',
       }).eq('id', data!.id);
       toast('Payment request submitted with AI analysis!', 'success');
     } catch {

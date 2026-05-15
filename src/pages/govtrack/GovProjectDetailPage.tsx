@@ -10,9 +10,10 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../components/ui/Toast';
-import { GovProject, PaymentMilestone } from '../../types';
+import { invokeAiAnalyze } from '../../services/ai/claudeService';
+import { useAuth } from '../../contexts/useAuth';
+import { useToast } from '../../components/ui/useToast';
+import { GovProject, PaymentMilestone, AIRiskLevel } from '../../types';
 import { formatCurrency, formatDistanceToNow } from '../../lib/utils';
 
 const RISK_COLORS: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#eab308', safe: '#22c55e' };
@@ -74,28 +75,35 @@ export function GovProjectDetailPage() {
   async function analyzeMilestone(m: PaymentMilestone) {
     toast('Running AI analysis...', 'info');
     try {
-      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          type: 'milestone',
-          milestone_name: m.milestone_name,
-          description: m.description,
-          payment_amount: m.payment_amount,
-          completion_percentage: m.completion_percentage,
-        },
+      const result = await invokeAiAnalyze<{ safe_amount?: number; hold_amount?: number; risk_level?: string; analysis?: string }>({
+        type: 'milestone',
+        milestone_name: m.milestone_name,
+        description: m.description,
+        payment_amount: m.payment_amount,
+        completion_percentage: m.completion_percentage,
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'milestoneAnalysis',
+        maxQuotaPerDay: 35,
+        errorMessage: 'Milestone AI analysis failed'
       });
-      if (fnError) throw fnError;
-      const result = aiData as any;
+      const aiRiskLevel = ['high', 'medium', 'low', 'safe'].includes(result?.risk_level || '')
+        ? (result!.risk_level as AIRiskLevel)
+        : 'low';
+
       await supabase.from('payment_milestones').update({
-        ai_safe_amount: result?.safe_amount || m.payment_amount * 0.85,
-        ai_hold_amount: result?.hold_amount || m.payment_amount * 0.15,
-        ai_risk_level: result?.risk_level || 'low',
-        ai_analysis: result?.analysis || 'Analysis complete.',
+        ai_safe_amount: result.safe_amount ?? m.payment_amount * 0.85,
+        ai_hold_amount: result.hold_amount ?? m.payment_amount * 0.15,
+        ai_risk_level: aiRiskLevel,
+        ai_analysis: result.analysis || 'Analysis complete.',
       }).eq('id', m.id);
       setMilestones(prev => prev.map(ms => ms.id === m.id ? {
         ...ms,
         ai_safe_amount: result?.safe_amount || ms.payment_amount * 0.85,
         ai_hold_amount: result?.hold_amount || ms.payment_amount * 0.15,
-        ai_risk_level: result?.risk_level || 'low',
+        ai_risk_level: aiRiskLevel,
         ai_analysis: result?.analysis || 'Analysis complete.',
       } : ms));
       toast('AI analysis complete!', 'success');

@@ -25,9 +25,10 @@ export async function uploadFile(
   bucket: string,
   path: string,
   file: File,
-  options?: { cacheControl?: number; upsert?: boolean }
+  options?: { cacheControl?: string | number; upsert?: boolean }
 ) {
-  const result = await supabase.storage.from(bucket).upload(path, file, options);
+  const payload = options ? { ...options, cacheControl: options.cacheControl?.toString() } : undefined;
+  const result = await supabase.storage.from(bucket).upload(path, file, payload);
   if (result.error) {
     throw result.error;
   }

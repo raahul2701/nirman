@@ -8,8 +8,8 @@ import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../components/ui/Toast';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../components/ui/useToast';
 import { Material } from '../types';
 
 const categoryOptions = [

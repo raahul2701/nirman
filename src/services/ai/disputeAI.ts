@@ -1,3 +1,4 @@
+import { invokeEdgeFunction, invokeAiAnalyze } from './claudeService';
 import { supabase } from '../../lib/supabase';
 
 export interface DisputeAnalysis {
@@ -67,20 +68,23 @@ RESPONSE FORMAT: Return JSON with this exact structure:
 Respond ONLY with valid JSON.`;
 
       // Call analyze-dispute edge function
-      const { data, error } = await supabase.functions.invoke('analyze-dispute', {
-        body: {
-          disputeId,
-          agreementText: disputeData.contractClauses?.join('\n') || 'Standard contract terms apply',
-          boq: disputeData.contractClauses?.join('\n') || '',
-          disputeDescription: disputeData.description,
-          claimAmount: disputeData.claimAmount,
-          contractClauses: disputeData.contractClauses
-        }
+      const response = await invokeEdgeFunction<{ response: string }>('analyze-dispute', {
+        disputeId,
+        agreementText: disputeData.contractClauses?.join('\n') || 'Standard contract terms apply',
+        boq: disputeData.contractClauses?.join('\n') || '',
+        disputeDescription: disputeData.description,
+        claimAmount: disputeData.claimAmount,
+        contractClauses: disputeData.contractClauses,
+      }, {
+        retries: 2,
+        timeoutMs: 25000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'disputeAnalysis',
+        maxQuotaPerDay: 30,
+        errorMessage: 'Dispute AI analysis failed'
       });
 
-      if (error) throw error;
-
-      const analysis: DisputeAnalysis = JSON.parse(data.response);
+      const analysis: DisputeAnalysis = JSON.parse(response.response);
 
       // Validate the response structure
       if (!analysis.contractAnalysis || typeof analysis.validClaimAmount !== 'number') {
@@ -113,17 +117,20 @@ Format as a formal report with:
 
 Use formal language suitable for submission to arbitration panel.`;
 
-      const { data, error } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          prompt: reportPrompt,
-          message: 'Generate dispute resolution report',
-          model: 'claude-3-sonnet-20240229'
-        }
+      const response = await invokeAiAnalyze<{ response: string }>({
+        prompt: reportPrompt,
+        message: 'Generate dispute resolution report',
+        model: 'claude-3-sonnet-20240229'
+      }, {
+        retries: 1,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'disputeReport',
+        maxQuotaPerDay: 30,
+        errorMessage: 'Dispute report generation failed'
       });
 
-      if (error) throw error;
-
-      return data.response;
+      return response.response;
 
     } catch (error) {
       console.error('Dispute report generation error:', error);

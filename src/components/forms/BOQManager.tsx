@@ -23,17 +23,24 @@ const boqItemSchema = z.object({
 
 type BOQItemFormData = z.infer<typeof boqItemSchema>;
 
+type BOQItem = BOQItemFormData & {
+  id: string;
+  boq_id: string;
+  completed_quantity: number;
+  completion_percentage: number;
+};
+
 interface BOQManagerProps {
   projectId: string;
   onSuccess?: () => void;
 }
 
 export const BOQManager: React.FC<BOQManagerProps> = ({ projectId, onSuccess }) => {
-  const [boqItems, setBoqItems] = useState<any[]>([]);
+  const [boqItems, setBoqItems] = useState<BOQItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<BOQItem | null>(null);
 
   const {
     register,
@@ -56,12 +63,7 @@ export const BOQManager: React.FC<BOQManagerProps> = ({ projectId, onSuccess }) 
     setValue('amount', quantity * rate);
   }, [watchedQuantity, watchedRate, setValue]);
 
-  // Load BOQ items
-  useEffect(() => {
-    loadBOQItems();
-  }, [projectId]);
-
-  const loadBOQItems = async () => {
+  const loadBOQItems = React.useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('project_boq')
@@ -85,18 +87,24 @@ export const BOQManager: React.FC<BOQManagerProps> = ({ projectId, onSuccess }) 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [projectId]);
+
+  // Load BOQ items
+  useEffect(() => {
+    loadBOQItems();
+  }, [loadBOQItems]);
 
   const onSubmit = async (data: BOQItemFormData) => {
     setIsSubmitting(true);
 
     try {
       // First ensure project_boq exists
-      let { data: boqData, error: boqError } = await supabase
+      const { data: currentBoq, error: boqError } = await supabase
         .from('project_boq')
         .select('id')
         .eq('project_id', projectId)
         .single();
+      let boqData = currentBoq;
 
       if (boqError && boqError.code === 'PGRST116') {
         // Create project_boq if it doesn't exist
@@ -111,6 +119,8 @@ export const BOQManager: React.FC<BOQManagerProps> = ({ projectId, onSuccess }) 
       } else if (boqError) {
         throw boqError;
       }
+
+      if (!boqData) throw new Error('Failed to get or create BOQ');
 
       const itemData = {
         ...data,
@@ -151,7 +161,7 @@ export const BOQManager: React.FC<BOQManagerProps> = ({ projectId, onSuccess }) 
     }
   };
 
-  const handleEdit = (item: any) => {
+  const handleEdit = (item: BOQItem) => {
     setEditingItem(item);
     setValue('item_code', item.item_code);
     setValue('description', item.description);
@@ -193,17 +203,17 @@ export const BOQManager: React.FC<BOQManagerProps> = ({ projectId, onSuccess }) 
       const fileName = `boq-${Date.now()}.${fileExt}`;
       const filePath = `boq-files/${fileName}`;
 
-      const { data, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('uploads')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       // Call extract-boq edge function
-      const { data: extractData, error: extractError } = await supabase.functions
+      const { error: extractError } = await supabase.functions
         .invoke('extract-boq', {
           body: {
-            file_url: `${supabase.supabaseUrl}/storage/v1/object/public/uploads/${filePath}`,
+            file_url: `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/uploads/${filePath}`,
             file_type: fileExt,
             project_id: projectId
           }
@@ -226,9 +236,6 @@ export const BOQManager: React.FC<BOQManagerProps> = ({ projectId, onSuccess }) 
     const rate = item.rate || 0;
     return sum + (completed * rate);
   }, 0);
-
-  const categories = [...new Set(boqItems.map(item => item.category))];
-  const workTypes = [...new Set(boqItems.map(item => item.work_type))];
 
   if (isLoading) {
     return (

@@ -1,5 +1,5 @@
 import { Bell } from 'lucide-react';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotifications } from '../../contexts/useNotifications';
 
 export function NotificationBell({ onClick }: { onClick: () => void }) {
   const { unreadCount } = useNotifications();

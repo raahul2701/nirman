@@ -7,8 +7,9 @@ import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../components/ui/Toast';
+import { invokeAiAnalyze } from '../services/ai/claudeService';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../components/ui/useToast';
 import { Survey } from '../types';
 
 const surveyTypes = [
@@ -55,20 +56,24 @@ export function SurveysPage() {
     if (error) { toast('Failed to create survey', 'error'); setAiLoading(false); return; }
 
     try {
-      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          type: 'survey',
-          survey_type: form.survey_type,
-          notes: form.notes,
-        },
+      const aiData = await invokeAiAnalyze<{ report?: string; findings_count?: number }>({
+        type: 'survey',
+        survey_type: form.survey_type,
+        notes: form.notes,
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'surveyAnalysis',
+        maxQuotaPerDay: 35,
+        errorMessage: 'Survey analysis failed'
       });
-      if (fnError) throw fnError;
       const progress = Math.floor(Math.random() * 30) + 60;
       await supabase.from('surveys').update({
-        ai_report: (aiData as any)?.report || 'Survey analysis complete.',
+        ai_report: aiData.report || 'Survey analysis complete.',
         progress_percent: progress,
         status: 'complete',
-        findings_count: (aiData as any)?.findings_count || Math.floor(Math.random() * 5) + 1,
+        findings_count: aiData.findings_count || Math.floor(Math.random() * 5) + 1,
       }).eq('id', data!.id);
       toast('Survey analysis complete!', 'success');
     } catch {

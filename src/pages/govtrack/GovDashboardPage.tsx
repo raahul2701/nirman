@@ -10,7 +10,7 @@ import { StatCard } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 import { GovProject, PaymentRequest } from '../../types';
 import { formatCurrency, formatDistanceToNow } from '../../lib/utils';
 

@@ -10,8 +10,9 @@ import { SeverityBadge, StatusBadge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../components/ui/Toast';
+import { invokeAiAnalyze } from '../services/ai/claudeService';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../components/ui/useToast';
 import { Problem, ProblemCategory, ProblemSeverity } from '../types';
 import { formatDistanceToNow, generateProblemCode, CATEGORY_LABELS, SEVERITY_COLORS } from '../lib/utils';
 
@@ -72,22 +73,31 @@ export function ProblemsPage() {
     }
     setAiLoading(true);
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          type: 'problem',
-          category: form.category,
-          description: form.description,
-          title: form.title,
-        },
+      const result = await invokeAiAnalyze<{ title?: string; severity?: string; description?: string }>({
+        type: 'problem',
+        category: form.category,
+        description: form.description,
+        title: form.title,
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'problemAnalysis',
+        maxQuotaPerDay: 35,
+        errorMessage: 'Problem analysis failed'
       });
-      if (fnError) throw fnError;
-      const result = data as any;
-      setForm(prev => ({
-        ...prev,
-        title: result?.title || prev.title,
-        severity: result?.severity || prev.severity,
-        description: result?.description || prev.description,
-      }));
+      setForm(prev => {
+        const severity = ['critical', 'high', 'medium', 'low'].includes(result?.severity || '')
+          ? (result.severity as ProblemSeverity)
+          : prev.severity;
+
+        return {
+          ...prev,
+          title: result?.title || prev.title,
+          severity,
+          description: result?.description || prev.description,
+        };
+      });
       toast('AI analysis complete!', 'success');
     } catch {
       toast('AI analysis failed. Please try again.', 'error');

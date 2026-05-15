@@ -1,45 +1,74 @@
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import {
-  FolderOpen, AlertTriangle, Users, Package, Plane, Brain,
-  TrendingUp, Plus, ChevronRight, Activity, Clock, CheckCircle2
+  FolderOpen,
+  AlertTriangle,
+  Users,
+  Package,
+  Plane,
+  Brain,
+  Plus,
+  ChevronRight,
+  Activity,
+  CheckCircle2
 } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppLayout } from '../components/layout/AppLayout';
 import { StatCard } from '../components/ui/Card';
 import { SeverityBadge, StatusBadge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { Problem } from '../types';
 import { formatDistanceToNow, CATEGORY_LABELS } from '../lib/utils';
+import { DashboardSectionSkeleton } from '../components/dashboard/DashboardSectionSkeleton';
 
-const CHART_COLORS = ['#FF6B00', '#00D4AA', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981'];
+const ChartsSection = lazy(() => import('../components/dashboard/ChartsSection').then((mod) => ({ default: mod.ChartsSection })));
+const MaterialChart = lazy(() => import('../components/dashboard/MaterialChart').then((mod) => ({ default: mod.MaterialChart })));
 
-const materialData = [
-  { name: 'Cement', used: 420, total: 600 },
-  { name: 'Steel', used: 280, total: 400 },
-  { name: 'Sand', used: 190, total: 300 },
-  { name: 'Bricks', used: 350, total: 500 },
-  { name: 'Tiles', used: 120, total: 200 },
-];
+const QUICK_ACTIONS = [
+  { label: 'Report Problem', icon: AlertTriangle, color: '#ef4444', to: '/problems' },
+  { label: 'Add Worker', icon: Users, color: '#00D4AA', to: '/workers' },
+  { label: 'Drone Survey', icon: Plane, color: '#3B82F6', to: '/surveys' },
+  { label: 'AI Design', icon: Brain, color: '#FF6B00', to: '/design' },
+  { label: 'Inventory', icon: Package, color: '#F59E0B', to: '/inventory' },
+] as const;
 
-const progressData = [
-  { week: 'W1', resolved: 4, reported: 7 },
-  { week: 'W2', resolved: 8, reported: 10 },
-  { week: 'W3', resolved: 12, reported: 13 },
-  { week: 'W4', resolved: 15, reported: 16 },
-  { week: 'W5', resolved: 11, reported: 12 },
-  { week: 'W6', resolved: 18, reported: 19 },
-];
+type ProblemRowProps = {
+  problem: Problem;
+  onOpen: () => void;
+};
 
-const categoryData = [
-  { name: 'Structural', value: 32 },
-  { name: 'Safety', value: 24 },
-  { name: 'Equipment', value: 18 },
-  { name: 'Material', value: 14 },
-  { name: 'Other', value: 12 },
-];
+const ProblemRow = memo(function ProblemRow({ problem, onOpen }: ProblemRowProps) {
+  return (
+    <div
+      onClick={onOpen}
+      className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-white/3 transition-all"
+      style={{ background: '#111111' }}
+    >
+      <div
+        className="w-1.5 h-8 rounded-full flex-shrink-0"
+        style={{
+          background:
+            problem.severity === 'critical'
+              ? '#ef4444'
+              : problem.severity === 'high'
+              ? '#f97316'
+              : problem.severity === 'medium'
+              ? '#eab308'
+              : '#22c55e',
+        }}
+      />
+      <div className="flex-1 min-w-0">
+        <p className="text-white text-xs font-medium truncate">{problem.title || CATEGORY_LABELS[problem.category]}</p>
+        <p className="text-[#606060] text-[10px] mt-0.5">{problem.problem_code} · {formatDistanceToNow(problem.created_at)}</p>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <SeverityBadge severity={problem.severity} />
+        <StatusBadge status={problem.status} />
+      </div>
+    </div>
+  );
+});
 
 export function DashboardPage() {
   const { user, profile } = useAuth();
@@ -48,17 +77,36 @@ export function DashboardPage() {
   const [recentProblems, setRecentProblems] = useState<Problem[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
 
+  const onViewProblems = useCallback(() => navigate('/problems'), [navigate]);
+
+  const recentProblemItems = useMemo(
+    () => recentProblems.map((problem) => (
+      <ProblemRow key={problem.id} problem={problem} onOpen={onViewProblems} />
+    )),
+    [recentProblems, onViewProblems]
+  );
+
   useEffect(() => {
-    if (!user) return;
-    async function load() {
+    if (!user) {
+      setLoadingStats(false);
+      return;
+    }
+
+    const currentUserId = user.id;
+    let isActive = true;
+
+    async function loadDashboard() {
       const [proj, probs, workers, materials, surveys] = await Promise.all([
-        supabase.from('projects').select('id', { count: 'exact' }).eq('owner_id', user!.id).eq('status', 'active'),
-        supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', user!.id).eq('status', 'open'),
-        supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', user!.id).eq('status', 'active'),
-        supabase.from('materials').select('id, current_qty, threshold_qty').eq('owner_id', user!.id),
-        supabase.from('surveys').select('id', { count: 'exact' }).eq('owner_id', user!.id).eq('status', 'complete'),
+        supabase.from('projects').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
+        supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', currentUserId).eq('status', 'open'),
+        supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
+        supabase.from('materials').select('id, current_qty, threshold_qty').eq('owner_id', currentUserId),
+        supabase.from('surveys').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'complete'),
       ]);
-      const lowStock = (materials.data || []).filter(m => m.current_qty <= m.threshold_qty).length;
+
+      if (!isActive) return;
+
+      const lowStock = (materials.data || []).filter((m) => m.current_qty <= m.threshold_qty).length;
       setStats({
         activeProjects: proj.count || 0,
         openIssues: probs.count || 0,
@@ -66,45 +114,48 @@ export function DashboardPage() {
         lowStockAlerts: lowStock,
         surveysCompleted: surveys.count || 0,
       });
+
       const { data: recentData } = await supabase
         .from('problems')
         .select('*')
-        .eq('reported_by', user!.id)
+        .eq('reported_by', currentUserId)
         .order('created_at', { ascending: false })
         .limit(5);
-      if (recentData) setRecentProblems(recentData as Problem[]);
-      setLoadingStats(false);
+
+      if (isActive && recentData) {
+        setRecentProblems(recentData as Problem[]);
+      }
+
+      if (isActive) {
+        setLoadingStats(false);
+      }
     }
-    load();
+
+    loadDashboard();
+    return () => {
+      isActive = false;
+    };
   }, [user]);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const actionButtons = useMemo(
+    () => QUICK_ACTIONS.map((action) => (
+      <button
+        key={action.label}
+        onClick={() => navigate(action.to)}
+        className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white transition-all hover:scale-105"
+        style={{ background: `${action.color}15`, border: `1px solid ${action.color}25`, color: action.color }}
+      >
+        <action.icon size={13} />
+        {action.label}
+      </button>
+    )),
+    [navigate]
+  );
 
   return (
     <AppLayout title="Dashboard" subtitle={`Welcome to NIRMAN AI, ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
-      {/* Quick actions */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        {[
-          { label: 'Report Problem', icon: AlertTriangle, color: '#ef4444', to: '/problems' },
-          { label: 'Add Worker', icon: Users, color: '#00D4AA', to: '/workers' },
-          { label: 'Drone Survey', icon: Plane, color: '#3B82F6', to: '/surveys' },
-          { label: 'AI Design', icon: Brain, color: '#FF6B00', to: '/design' },
-          { label: 'Inventory', icon: Package, color: '#F59E0B', to: '/inventory' },
-        ].map(a => (
-          <button
-            key={a.label}
-            onClick={() => navigate(a.to)}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white transition-all hover:scale-105"
-            style={{ background: `${a.color}15`, border: `1px solid ${a.color}25`, color: a.color }}
-          >
-            <a.icon size={13} />
-            {a.label}
-          </button>
-        ))}
-      </div>
+      <div className="flex flex-wrap gap-2 mb-6">{actionButtons}</div>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
         <StatCard label="Active Projects" value={stats.activeProjects} icon={<FolderOpen size={18} />} loading={loadingStats} color="#00D4AA" />
         <StatCard label="Open Issues" value={stats.openIssues} icon={<AlertTriangle size={18} />} loading={loadingStats} color="#ef4444" />
@@ -113,76 +164,15 @@ export function DashboardPage() {
         <StatCard label="Surveys Done" value={stats.surveysCompleted} icon={<Plane size={18} />} loading={loadingStats} color="#3B82F6" />
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {/* Issue timeline */}
-        <div className="lg:col-span-2 rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-white font-semibold text-sm">Issue Resolution Timeline</h3>
-              <p className="text-[#606060] text-xs mt-0.5">Reported vs Resolved weekly</p>
-            </div>
-            <TrendingUp size={16} className="text-[#00D4AA]" />
-          </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <LineChart data={progressData}>
-              <XAxis dataKey="week" tick={{ fill: '#606060', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#606060', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: '#1F1F1F', border: '1px solid #333', borderRadius: '8px', fontSize: '11px', color: '#fff' }} />
-              <Line type="monotone" dataKey="reported" stroke="#ef4444" strokeWidth={2} dot={{ r: 3, fill: '#ef4444' }} name="Reported" />
-              <Line type="monotone" dataKey="resolved" stroke="#00D4AA" strokeWidth={2} dot={{ r: 3, fill: '#00D4AA' }} name="Resolved" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+      <Suspense fallback={<DashboardSectionSkeleton />}>
+        <ChartsSection />
+      </Suspense>
 
-        {/* Category pie */}
-        <div className="rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
-          <div className="mb-4">
-            <h3 className="text-white font-semibold text-sm">Problem Categories</h3>
-            <p className="text-[#606060] text-xs mt-0.5">Distribution by type</p>
-          </div>
-          <ResponsiveContainer width="100%" height={120}>
-            <PieChart>
-              <Pie data={categoryData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" paddingAngle={3}>
-                {categoryData.map((_, i) => (
-                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: '#1F1F1F', border: '1px solid #333', borderRadius: '8px', fontSize: '11px', color: '#fff' }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="grid grid-cols-2 gap-1 mt-2">
-            {categoryData.slice(0, 4).map((c, i) => (
-              <div key={c.name} className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ background: CHART_COLORS[i] }} />
-                <span className="text-[10px] text-[#606060]">{c.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Material consumption */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <div className="rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-white font-semibold text-sm">Material Consumption</h3>
-              <p className="text-[#606060] text-xs mt-0.5">Used vs Total (demo data)</p>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={150}>
-            <BarChart data={materialData} barSize={14}>
-              <XAxis dataKey="name" tick={{ fill: '#606060', fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#606060', fontSize: 10 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: '#1F1F1F', border: '1px solid #333', borderRadius: '8px', fontSize: '11px', color: '#fff' }} />
-              <Bar dataKey="total" fill="#2A2A2A" radius={[4, 4, 0, 0]} name="Total" />
-              <Bar dataKey="used" fill="#FF6B00" radius={[4, 4, 0, 0]} name="Used" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <Suspense fallback={<DashboardSectionSkeleton />}>
+          <MaterialChart />
+        </Suspense>
 
-        {/* Recent activity */}
         <div className="rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -203,32 +193,12 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {recentProblems.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => navigate('/problems')}
-                  className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-white/3 transition-all"
-                  style={{ background: '#111111' }}
-                >
-                  <div className="w-1.5 h-8 rounded-full flex-shrink-0" style={{
-                    background: p.severity === 'critical' ? '#ef4444' : p.severity === 'high' ? '#f97316' : p.severity === 'medium' ? '#eab308' : '#22c55e'
-                  }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-medium truncate">{p.title || CATEGORY_LABELS[p.category]}</p>
-                    <p className="text-[#606060] text-[10px] mt-0.5">{p.problem_code} · {formatDistanceToNow(p.created_at)}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <SeverityBadge severity={p.severity} />
-                    <StatusBadge status={p.status} />
-                  </div>
-                </div>
-              ))}
+              {recentProblemItems}
             </div>
           )}
         </div>
       </div>
 
-      {/* Projects progress */}
       <div className="rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
         <div className="flex items-center justify-between mb-4">
           <div>

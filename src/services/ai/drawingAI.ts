@@ -1,3 +1,4 @@
+import { invokeEdgeFunction } from './claudeService';
 import { supabase } from '../../lib/supabase';
 
 export interface DrawingComparison {
@@ -69,21 +70,24 @@ RESPONSE FORMAT: Return JSON with this exact structure:
 Consider construction tolerances and industry standards. Respond ONLY with valid JSON.`;
 
       // Call analyze-drawing edge function
-      const { data, error } = await supabase.functions.invoke('analyze-drawing', {
-        body: {
-          projectId,
-          drawingUrl: comparisonData.drawingUrl,
-          sitePhotoUrl: comparisonData.sitePhotoUrl,
-          drawingType: comparisonData.drawingType,
-          elementType: comparisonData.elementType,
-          drawingSpec: comparisonData.drawingSpec,
-          siteObservation: comparisonData.siteObservation
-        }
+      const response = await invokeEdgeFunction<{ response: string }>('analyze-drawing', {
+        projectId,
+        drawingUrl: comparisonData.drawingUrl,
+        sitePhotoUrl: comparisonData.sitePhotoUrl,
+        drawingType: comparisonData.drawingType,
+        elementType: comparisonData.elementType,
+        drawingSpec: comparisonData.drawingSpec,
+        siteObservation: comparisonData.siteObservation
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'drawingAnalysis',
+        maxQuotaPerDay: 40,
+        errorMessage: 'Drawing analysis failed'
       });
 
-      if (error) throw error;
-
-      const comparison: DrawingComparison = JSON.parse(data.response);
+      const comparison: DrawingComparison = JSON.parse(response.response);
 
       // Validate response structure
       if (typeof comparison.deviationFound !== 'boolean' ||

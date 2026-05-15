@@ -9,8 +9,8 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input, Select } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../components/ui/Toast';
+import { useAuth } from '../../contexts/useAuth';
+import { useToast } from '../../components/ui/useToast';
 import { GovProject } from '../../types';
 import { formatCurrency } from '../../lib/utils';
 

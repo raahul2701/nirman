@@ -1,3 +1,4 @@
+import { invokeAiAnalyze, invokeEdgeFunction } from './claudeService';
 import { supabase } from '../../lib/supabase';
 
 export interface ExtensionAnalysis {
@@ -79,17 +80,20 @@ RESPONSE FORMAT: Return JSON with this exact structure:
 Respond ONLY with valid JSON.`;
 
       // Call ai-analyze edge function
-      const { data, error } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          prompt,
-          message: JSON.stringify(extensionData),
-          model: 'claude-3-sonnet-20240229'
-        }
+      const analysisResponse = await invokeAiAnalyze<{ response: string }>({
+        prompt,
+        message: JSON.stringify(extensionData),
+        model: 'claude-3-sonnet-20240229'
+      }, {
+        retries: 2,
+        timeoutMs: 25000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'extensionAnalysis',
+        maxQuotaPerDay: 40,
+        errorMessage: 'Extension AI analysis failed'
       });
 
-      if (error) throw error;
-
-      const analysis: ExtensionAnalysis = JSON.parse(data.response);
+      const analysis: ExtensionAnalysis = JSON.parse(analysisResponse.response);
 
       // Validate response structure
       if (typeof analysis.daysGranted !== 'number' ||
@@ -130,17 +134,18 @@ Generate a professional letter that includes:
 
 Format as a proper business letter suitable for official records.`;
 
-      const { data, error } = await supabase.functions.invoke('generate-extension-letter', {
-        body: {
-          projectId,
-          extensionRequest: requestData,
-        },
+      const response = await invokeEdgeFunction<{ letter: string }>('generate-extension-letter', {
+        projectId,
+        extensionRequest: requestData,
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        quotaKey: 'extensionLetter',
+        maxQuotaPerDay: 30,
+        errorMessage: 'Extension letter generation failed'
       });
 
-      if (error) throw error;
-
-      const result = data as any;
-      return result?.letter || '';
+      return response.letter;
 
     } catch (error) {
       console.error('Extension letter generation error:', error);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '../components/ui/Button';
@@ -18,8 +18,8 @@ const materialTestSchema = z.object({
   sample_id: z.string().min(1, 'Sample ID is required'),
   test_date: z.string().min(1, 'Test date is required'),
   tested_by: z.string().min(1, 'Tester name is required'),
-  test_results: z.record(z.any()).optional(),
-  status: z.enum(['pending', 'completed', 'failed']).default('pending'),
+  test_results: z.record(z.string(), z.any()).optional(),
+  status: z.enum(['pending', 'completed', 'failed']),
   remarks: z.string().optional()
 });
 
@@ -39,7 +39,10 @@ export const MaterialTestsPage: React.FC = () => {
     reset,
     formState: { errors }
   } = useForm<MaterialTestFormData>({
-    resolver: zodResolver(materialTestSchema)
+    resolver: zodResolver(materialTestSchema),
+    defaultValues: {
+      status: 'pending',
+    },
   });
 
   useEffect(() => {
@@ -66,7 +69,7 @@ export const MaterialTestsPage: React.FC = () => {
     }
   };
 
-  const onSubmit = async (data: MaterialTestFormData) => {
+  const onSubmit: SubmitHandler<MaterialTestFormData> = async (data) => {
     try {
       const { error } = await supabase
         .from('material_tests')
@@ -120,7 +123,7 @@ export const MaterialTestsPage: React.FC = () => {
       const { error: updateError } = await supabase
         .from('material_tests')
         .update({
-          status: analysis.isAuthentic ? 'completed' : 'failed',
+          status: analysis.authenticityVerified ? 'completed' : 'failed',
           test_results: analysis,
           report_url: urlData.publicUrl
         })

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { memo, ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
@@ -8,7 +8,7 @@ interface AppLayoutProps {
   subtitle?: string;
 }
 
-export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
+function AppLayoutComponent({ children, title, subtitle }: AppLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#0D0D0D' }}>
       <Sidebar />
@@ -21,3 +21,5 @@ export function AppLayout({ children, title, subtitle }: AppLayoutProps) {
     </div>
   );
 }
+
+export const AppLayout = memo(AppLayoutComponent);

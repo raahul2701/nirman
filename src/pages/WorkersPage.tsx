@@ -8,8 +8,8 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../components/ui/Toast';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../components/ui/useToast';
 import { Worker, WorkerSkill } from '../types';
 
 const skillOptions = [

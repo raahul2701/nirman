@@ -7,8 +7,9 @@ import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { useToast } from '../components/ui/Toast';
+import type { UserRole } from '../types';
+import { useAuth } from '../contexts/useAuth';
+import { useToast } from '../components/ui/useToast';
 
 const tabs = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -96,7 +97,7 @@ export function SettingsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <Input label="Full Name" value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} />
                 <Input label="Company" value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))} icon={<Building2 size={13} />} />
-                <Select label="Role" value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))} options={roleOptions} />
+                <Select label="Role" value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value as UserRole }))} options={roleOptions} />
                 <Input label="Phone" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
                 <div className="col-span-2">
                   <Input label="Location" value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} />

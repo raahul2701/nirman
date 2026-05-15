@@ -1,3 +1,4 @@
+import { invokeAiAnalyze, invokeEdgeFunction } from './claudeService';
 import { supabase } from '../../lib/supabase';
 
 export interface MaterialTestAnalysis {
@@ -60,22 +61,25 @@ RESPONSE FORMAT: Return JSON with this exact structure:
 Respond ONLY with valid JSON.`;
 
       // Call verify-material-test edge function
-      const { data, error } = await supabase.functions.invoke('verify-material-test', {
-        body: {
-          testId,
-          materialType: testData.materialType,
-          testType: testData.testType,
-          requiredValue: testData.requiredValue,
-          achievedValue: testData.achievedValue,
-          labName: testData.labName,
-          labCertificateNumber: testData.labCertificateNumber,
-          reportUrl: testData.testReportUrl
-        }
+      const response = await invokeEdgeFunction<{ response: string }>('verify-material-test', {
+        testId,
+        materialType: testData.materialType,
+        testType: testData.testType,
+        requiredValue: testData.requiredValue,
+        achievedValue: testData.achievedValue,
+        labName: testData.labName,
+        labCertificateNumber: testData.labCertificateNumber,
+        reportUrl: testData.testReportUrl
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'materialVerification',
+        maxQuotaPerDay: 40,
+        errorMessage: 'Material verification AI failed'
       });
 
-      if (error) throw error;
-
-      const analysis: MaterialTestAnalysis = JSON.parse(data.response);
+      const analysis: MaterialTestAnalysis = JSON.parse(response.response);
 
       // Validate response structure
       if (typeof analysis.authenticityVerified !== 'boolean' ||
@@ -176,17 +180,20 @@ Provide trend analysis in JSON format:
   "recommendations": ["actionable recommendations"]
 }`;
 
-      const { data, error: aiError } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          prompt,
-          message: 'Analyze material test trends',
-          model: 'claude-3-sonnet-20240229'
-        }
+      const response = await invokeAiAnalyze<{ response: string }>({
+        prompt,
+        message: 'Analyze material test trends',
+        model: 'claude-3-sonnet-20240229'
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 10 * 60 * 1000,
+        quotaKey: 'materialTrends',
+        maxQuotaPerDay: 30,
+        errorMessage: 'Material trend analysis failed'
       });
 
-      if (aiError) throw aiError;
-
-      return JSON.parse(data.response);
+      return JSON.parse(response.response);
 
     } catch (error) {
       console.error('Material trend analysis error:', error);

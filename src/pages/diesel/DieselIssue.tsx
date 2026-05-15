@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useToast } from '../../components/ui/Toast';
+import { useToast } from '../../components/ui/useToast';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { buildStoragePath, compressImage, uploadFileWithRetry } from '../../services/storageService';
 import { saveOfflineEntry } from '../../services/offline/offlineStorage';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/useAuth';
 
 export function DieselIssue() {
   const { user } = useAuth();

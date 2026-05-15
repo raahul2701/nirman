@@ -7,7 +7,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tool
 import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 const CHART_COLORS = ['#FF6B00', '#00D4AA', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899'];
 

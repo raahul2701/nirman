@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Path, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
-import { Badge } from '../ui/Badge';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { Upload, Users, Wrench, FileText, Camera } from 'lucide-react';
+import { Users, Wrench, FileText, Camera } from 'lucide-react';
 
 const dailyReportSchema = z.object({
   project_id: z.string().min(1, 'Project is required'),
@@ -60,6 +59,18 @@ const dailyReportSchema = z.object({
 });
 
 type DailyReportFormData = z.infer<typeof dailyReportSchema>;
+
+const checklistItems: Array<{ key: keyof DailyReportFormData['checklist']; label: string }> = [
+  { key: 'site_clean', label: 'Site clean' },
+  { key: 'safety_measures', label: 'Safety measures' },
+  { key: 'quality_checks', label: 'Quality checks' },
+  { key: 'material_stacked', label: 'Materials stacked safely' },
+  { key: 'equipment_maintained', label: 'Equipment maintained' },
+  { key: 'workers_protected', label: 'Workers protected' },
+  { key: 'documentation_complete', label: 'Documentation complete' },
+  { key: 'measurements_recorded', label: 'Measurements recorded' },
+  { key: 'supervisor_present', label: 'Supervisor present' }
+];
 
 interface DailyReportFormProps {
   projectId?: string;
@@ -130,7 +141,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
         const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
         const filePath = `daily-reports/${fileName}`;
 
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
           .from('uploads')
           .upload(filePath, file);
 
@@ -545,7 +556,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
               <label key={item.key} className="flex items-center space-x-3">
                 <input
                   type="checkbox"
-                  {...register(`checklist.${item.key}` as any)}
+                  {...register(`checklist.${item.key}` as Path<DailyReportFormData>)}
                   className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                 />
                 <span className="text-sm">{item.label}</span>

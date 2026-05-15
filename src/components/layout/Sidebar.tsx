@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, AlertTriangle, Users, Plane, Brain,
@@ -7,8 +7,8 @@ import {
   Landmark, Camera, IndianRupee, ClipboardCheck, FileBarChart,
   Shield, Banknote, ScanLine, Beaker, FileStack, CloudRain,
   MessageSquare, MapPin, TrendingUp, FileX, Scale
-} from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+} from '../../lib/icons';
+import { useAuth } from '../../contexts/useAuth';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -57,7 +57,7 @@ const contractorItems = [
   { to: '/admin/audit-logs', icon: Shield, label: 'Audit Logs' },
 ];
 
-export function Sidebar() {
+function SidebarComponent() {
   const [collapsed, setCollapsed] = useState(false);
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
@@ -233,3 +233,5 @@ export function Sidebar() {
     </aside>
   );
 }
+
+export const Sidebar = memo(SidebarComponent);

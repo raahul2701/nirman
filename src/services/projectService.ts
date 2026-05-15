@@ -1,37 +1,37 @@
 import { supabase } from '../lib/supabase';
-import type { BudgetProgressSnapshot, DisputeAnalysis, WeatherLog, DailyReport } from '../types';
+import type { BudgetProgressSnapshot, WeatherLog, DailyReport } from '../types';
 
 export async function fetchBudgetSnapshots(projectId: string) {
   const { data, error } = await supabase
-    .from<BudgetProgressSnapshot>('budget_progress_snapshots')
+    .from('budget_progress_snapshots')
     .select('*')
     .eq('project_id', projectId)
     .order('snapshot_date', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data as BudgetProgressSnapshot[]) || [];
 }
 
 export async function fetchWeatherLogs(projectId: string) {
   const { data, error } = await supabase
-    .from<WeatherLog>('weather_logs')
+    .from('weather_logs')
     .select('*')
     .eq('project_id', projectId)
     .order('log_date', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data as WeatherLog[]) || [];
 }
 
 export async function fetchDailyReports(projectId: string) {
   const { data, error } = await supabase
-    .from<DailyReport>('daily_reports')
+    .from('daily_reports')
     .select('*')
     .eq('project_id', projectId)
     .order('report_date', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data as DailyReport[]) || [];
 }
 
 export async function fetchDisputes(projectId: string) {

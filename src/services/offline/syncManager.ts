@@ -32,19 +32,42 @@ export async function processOfflineImageQueue() {
 export function startOfflineSync() {
   if (typeof window === 'undefined') return;
 
-  const processAll = () => {
-    if (navigator.onLine) {
-      processOfflineSync();
-      processOfflineImageQueue();
-    }
+  let active = true;
+  let timerId: number | undefined;
+
+  const scheduleNextSync = (delay = 30000) => {
+    if (!active) return;
+    timerId = window.setTimeout(runSync, delay);
   };
 
-  const interval = window.setInterval(processAll, 30000);
-  window.addEventListener('online', processAll);
+  const runSync = async () => {
+    if (!active) return;
+
+    if (navigator.onLine) {
+      const queue = await getPendingSyncItems();
+      if (queue.length > 0) {
+        await processOfflineSync();
+        await processOfflineImageQueue();
+      }
+    }
+
+    scheduleNextSync();
+  };
+
+  const onlineHandler = () => {
+    if (!active) return;
+    void runSync();
+  };
+
+  void runSync();
+  window.addEventListener('online', onlineHandler);
 
   return () => {
-    window.clearInterval(interval);
-    window.removeEventListener('online', processAll);
+    active = false;
+    if (typeof timerId === 'number') {
+      window.clearTimeout(timerId);
+    }
+    window.removeEventListener('online', onlineHandler);
   };
 }
 

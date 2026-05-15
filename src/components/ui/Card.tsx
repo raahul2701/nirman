@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, memo } from 'react';
 import { cn } from '../../lib/utils';
 
 interface CardProps {
@@ -25,7 +25,7 @@ export function Card({ children, className, glow, onClick }: CardProps) {
   );
 }
 
-export function StatCard({
+export const StatCard = memo(({
   label,
   value,
   icon,
@@ -39,7 +39,7 @@ export function StatCard({
   trend?: string;
   color?: string;
   loading?: boolean;
-}) {
+}) => {
   return (
     <Card glow>
       <div className="flex items-start justify-between">
@@ -58,4 +58,4 @@ export function StatCard({
       </div>
     </Card>
   );
-}
+});

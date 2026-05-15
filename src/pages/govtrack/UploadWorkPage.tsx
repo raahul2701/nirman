@@ -8,8 +8,9 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../components/ui/Toast';
+import { invokeAiAnalyze } from '../../services/ai/claudeService';
+import { useAuth } from '../../contexts/useAuth';
+import { useToast } from '../../components/ui/useToast';
 import { WorkUpload, GovProject, PaymentMilestone } from '../../types';
 import { formatDistanceToNow } from '../../lib/utils';
 
@@ -92,18 +93,22 @@ export function UploadWorkPage() {
 
     // Run AI analysis
     try {
-      const { data: aiData, error: fnError } = await supabase.functions.invoke('ai-analyze', {
-        body: {
-          type: 'work_upload',
-          work_category: form.work_category,
-          description: form.description,
-        },
+      const aiData = await invokeAiAnalyze<{ analysis?: string; quality_score?: number; issues?: string[] }>({
+        type: 'work_upload',
+        work_category: form.work_category,
+        description: form.description,
+      }, {
+        retries: 2,
+        timeoutMs: 20000,
+        cacheTTLms: 5 * 60 * 1000,
+        quotaKey: 'workUploadAnalysis',
+        maxQuotaPerDay: 35,
+        errorMessage: 'Work upload AI analysis failed'
       });
-      if (fnError) throw fnError;
       await supabase.from('work_uploads').update({
-        ai_analysis: (aiData as any)?.analysis || 'Quality check complete.',
-        ai_quality_score: (aiData as any)?.quality_score || 75,
-        issues_found: (aiData as any)?.issues || [],
+        ai_analysis: aiData.analysis || 'Quality check complete.',
+        ai_quality_score: aiData.quality_score || 75,
+        issues_found: aiData.issues || [],
       }).eq('id', data!.id);
       if (data) setUploads(prev => [{ ...(data as WorkUpload), ai_analysis: (aiData as any)?.analysis, ai_quality_score: (aiData as any)?.quality_score || 75 }, ...prev]);
       toast('Work uploaded and AI analyzed!', 'success');

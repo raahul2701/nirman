@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useAuth } from '../contexts/useAuth';
 import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
@@ -22,8 +22,7 @@ export function ProtectedRoute({
     if (loading) return;
 
     if (requireAuth && !user) {
-      // Redirect to login with return URL
-      navigate('/auth/login', {
+      navigate('/login', {
         state: { from: location.pathname },
         replace: true
       });
@@ -61,6 +60,15 @@ export function ProtectedRoute({
       return null; // Will redirect in useEffect
     }
   }
+
+  return <>{children}</>;
+}
+
+export function OnboardingGuard({ children }: { children: React.ReactNode }) {
+  const { profile, loading } = useAuth();
+
+  if (loading) return null;
+  if (profile && !profile.onboarding_complete) return <Navigate to="/onboarding" replace />;
 
   return <>{children}</>;
 }

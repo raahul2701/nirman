@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '../components/ui/Button';
@@ -19,8 +19,8 @@ const extensionSchema = z.object({
   requested_date: z.string().min(1, 'Requested date is required'),
   original_completion_date: z.string().min(1, 'Original completion date is required'),
   supporting_documents: z.array(z.string()).optional(),
-  status: z.enum(['pending', 'approved', 'rejected', 'under_review']).default('pending'),
-  remarks: z.string().optional()
+  status: z.enum(['pending', 'approved', 'rejected', 'under_review']),
+  remarks: z.string().optional(),
 });
 
 type ExtensionFormData = z.infer<typeof extensionSchema>;
@@ -38,7 +38,10 @@ export const ExtensionsPage: React.FC = () => {
     reset,
     formState: { errors }
   } = useForm<ExtensionFormData>({
-    resolver: zodResolver(extensionSchema)
+    resolver: zodResolver(extensionSchema),
+    defaultValues: {
+      status: 'pending',
+    },
   });
 
   useEffect(() => {
@@ -66,7 +69,7 @@ export const ExtensionsPage: React.FC = () => {
     }
   };
 
-  const onSubmit = async (data: ExtensionFormData) => {
+  const onSubmit: SubmitHandler<ExtensionFormData> = async (data) => {
     try {
       const { error } = await supabase
         .from('time_extensions')
