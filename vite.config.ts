@@ -9,11 +9,6 @@ export default defineConfig({
     host: 'localhost',
     port: 5173,
     strictPort: true,
-    hmr: {
-      protocol: 'ws',
-      host: 'localhost',
-      port: 5173,
-    },
     middlewareMode: false,
   },
   define: {
@@ -44,12 +39,24 @@ export default defineConfig({
             return 'vendor-charts';
           }
 
-          if (id.includes('node_modules/@supabase')) {
-            return 'vendor-supabase';
+          if (id.includes('node_modules/jspdf') || id.includes('node_modules/autotable')) {
+            return 'vendor-pdf';
           }
 
-          if (id.includes('node_modules/react-router-dom')) {
-            return 'vendor-router';
+          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) {
+            return 'vendor-maps';
+          }
+
+          if (id.includes('node_modules/zod') || id.includes('node_modules/@hookform') || id.includes('node_modules/react-hook-form')) {
+            return 'vendor-forms';
+          }
+
+          if (id.includes('node_modules/zustand')) {
+            return 'vendor-state';
+          }
+
+          if (id.includes('node_modules/@supabase')) {
+            return 'vendor-supabase';
           }
 
           if (

@@ -16,7 +16,7 @@ NIRMAN AI is a comprehensive Government Construction Monitoring ERP system desig
 
 ### 🎯 Key Features
 
-- **AI-Powered Analysis**: Claude Sonnet 4 integration for intelligent project insights
+- **AI-Powered Analysis**: Gemini proxy integration for intelligent project insights
 - **Real-time Monitoring**: Live dashboards with automated alerts
 - **Government Compliance**: Multi-level approval workflows and audit trails
 - **Contractor Management**: Blacklist database and performance tracking
@@ -34,7 +34,7 @@ NIRMAN AI is a comprehensive Government Construction Monitoring ERP system desig
 - **Node.js 18+**
 - **npm or yarn**
 - **Supabase account**
-- **Claude API key** (Anthropic)
+- **Gemini API key** (server-side Supabase secret)
 - **Google Cloud Console** (for Drive integration)
 
 ### Installation
@@ -85,7 +85,7 @@ NIRMAN AI is a comprehensive Government Construction Monitoring ERP system desig
 |----------|-------------|----------|
 | `VITE_SUPABASE_URL` | Your Supabase project URL | ✅ |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key | ✅ |
-| `VITE_CLAUDE_API_KEY` | Anthropic Claude API key | ✅ |
+| `GEMINI_API_KEY` | Server-side Gemini API key for the Supabase AI proxy | ✅ |
 | `VITE_GOOGLE_CLIENT_ID` | Google OAuth client ID | ✅ |
 | `VITE_GOOGLE_CLIENT_SECRET` | Google OAuth client secret | ✅ |
 | `VITE_OPENWEATHER_API_KEY` | OpenWeatherMap API key | ❌ |
@@ -197,7 +197,7 @@ The project includes automated CI/CD with:
 ```
 VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
-VITE_CLAUDE_API_KEY
+GEMINI_API_KEY
 VITE_GOOGLE_CLIENT_ID
 VERCEL_TOKEN
 VERCEL_ORG_ID
@@ -222,7 +222,7 @@ npm run build
 ### Supabase Edge Functions
 
 #### `ai-analyze`
-Analyzes construction data using Claude AI.
+Analyzes construction data using the configured AI proxy.
 
 **Endpoint:** `POST /functions/v1/ai-analyze`
 ```json

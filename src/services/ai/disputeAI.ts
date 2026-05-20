@@ -1,4 +1,4 @@
-import { invokeEdgeFunction, invokeAiAnalyze } from './claudeService';
+import { invokeEdgeFunction, invokeAiAnalyze } from './aiService';
 import { supabase } from '../../lib/supabase';
 
 export interface DisputeAnalysis {
@@ -120,7 +120,7 @@ Use formal language suitable for submission to arbitration panel.`;
       const response = await invokeAiAnalyze<{ response: string }>({
         prompt: reportPrompt,
         message: 'Generate dispute resolution report',
-        model: 'claude-3-sonnet-20240229'
+        model: 'gemini-2.5-flash'
       }, {
         retries: 1,
         timeoutMs: 20000,

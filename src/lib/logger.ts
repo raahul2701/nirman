@@ -106,21 +106,27 @@ function summarizePayload(payload: unknown): string | undefined {
   return truncateString(JSON.stringify(sanitized));
 }
 
+const globalScope = globalThis as typeof globalThis & {
+  __NIRMAN_LOGGER_INSTANCE__?: Logger;
+  __NIRMAN_LOGGER_INITIALIZED__?: boolean;
+};
+
 class Logger {
   private static instance: Logger;
   private logs: LogEntry[] = [];
   private maxLogs = 100;
 
   static getInstance(): Logger {
-    if (!Logger.instance) {
-      Logger.instance = new Logger();
+    if (!globalScope.__NIRMAN_LOGGER_INSTANCE__) {
+      globalScope.__NIRMAN_LOGGER_INSTANCE__ = new Logger();
     }
-    return Logger.instance;
+    return globalScope.__NIRMAN_LOGGER_INSTANCE__;
   }
 
   private constructor() {
-    // Setup global error handlers
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !globalScope.__NIRMAN_LOGGER_INITIALIZED__) {
+      globalScope.__NIRMAN_LOGGER_INITIALIZED__ = true;
+
       window.addEventListener('error', (event) => {
         this.error('Global error', {
           message: event.message,

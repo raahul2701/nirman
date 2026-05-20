@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { trackEvent } from '../lib/telemetry';
 
 export type RealtimeRowEvent<T> = {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -31,7 +32,13 @@ export function useRealtimeSubscription<T = Record<string, unknown>>(
         const eventType = payload.eventType as RealtimeRowEvent<T>['eventType'];
         callbackRef.current({ eventType, new: payload.new as T, old: payload.old as T });
       })
-      .subscribe();
+      .subscribe((status: string) => {
+        trackEvent({
+          name: 'realtime:subscription-status',
+          failed: status === 'CHANNEL_ERROR' || status === 'TIMED_OUT',
+          properties: { table, filter, status },
+        });
+      });
 
     channelRef.current = channel;
 

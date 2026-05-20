@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
-import { invokeAiAnalyze } from '../../services/ai/claudeService';
+import { invokeAiAnalyze } from '../../services/ai/aiService';
 import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { PaymentRequest, GovProject, PaymentMilestone } from '../../types';
@@ -210,7 +210,7 @@ export function PaymentsPage() {
                 <Zap size={11} style={{ color: '#00D4AA' }} />
                 <span className="text-[#00D4AA] text-[10px] font-semibold">AI will verify</span>
               </div>
-              <p className="text-[#606060] text-xs">Claude AI will analyze work evidence, assess risk, and recommend safe payment amounts.</p>
+              <p className="text-[#606060] text-xs">AI will analyze work evidence, assess risk, and recommend safe payment amounts.</p>
             </div>
             <div className="flex gap-3 mt-5">
               <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>

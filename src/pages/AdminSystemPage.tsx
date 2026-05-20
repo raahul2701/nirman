@@ -9,6 +9,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
+import { featureFlags } from '../lib/featureFlags';
 import { formatDistanceToNow } from '../lib/utils';
 
 interface SystemStats {
@@ -64,7 +65,9 @@ export function AdminSystemPage() {
         supabase.storage.from('files').list(),
         supabase.from('error_logs').select('*', { count: 'exact', head: true }).eq('level', 'error').gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
         supabase.from('bank_guarantees').select('*', { count: 'exact', head: true }).eq('status', 'alert').gte('alert_date', new Date().toISOString().split('T')[0]),
-        supabase.from('disputes').select('*', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
+        featureFlags.disputes
+          ? supabase.from('disputes').select('*', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+          : Promise.resolve({ count: 0 }),
         supabase.from('problems').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(10)
       ]);
@@ -74,7 +77,7 @@ export function AdminSystemPage() {
         activeUsers: activeUsers || 0,
         onlineUsers: onlineUsers || 0,
         aiUsageToday: aiUsage?.length || 0,
-        storageUsed: storage?.reduce((acc, file) => acc + (file.metadata?.size || 0), 0) || 0,
+        storageUsed: storage?.reduce((acc: number, file: any) => acc + (file.metadata?.size || 0), 0) || 0,
         storageLimit: 100 * 1024 * 1024 * 1024, // 100GB
         failedJobs: failedJobs || 0,
         bgAlertsToday: bgAlertsToday || 0,
@@ -166,12 +169,14 @@ export function AdminSystemPage() {
                 {stats?.bgAlertsToday.toString() || '0'}
               </Badge>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[#606060] text-sm">Active Disputes</span>
-              <Badge color={stats?.disputesToday ? '#f97316' : '#22c55e'}>
-                {stats?.disputesToday.toString() || '0'}
-              </Badge>
-            </div>
+            {featureFlags.disputes && (
+              <div className="flex justify-between items-center">
+                <span className="text-[#606060] text-sm">Active Disputes</span>
+                <Badge color={stats?.disputesToday ? '#f97316' : '#22c55e'}>
+                  {stats?.disputesToday.toString() || '0'}
+                </Badge>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span className="text-[#606060] text-sm">Pending Defects</span>
               <Badge color={stats?.pendingDefects ? '#f97316' : '#22c55e'}>

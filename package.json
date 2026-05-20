@@ -8,7 +8,16 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "analyze": "vite build --mode analyze",
+    "env:check": "node scripts/validate-env.mjs",
+    "deploy:validate": "node scripts/deployment-validate.mjs",
+    "supabase:types": "supabase gen types typescript --local > src/types/database.ts",
+    "supabase:deploy:functions": "supabase functions deploy ai-proxy health",
+    "supabase:health": "node scripts/supabase-healthcheck.mjs",
+    "supabase:bootstrap:buckets": "node scripts/supabase-bucket-bootstrap.mjs",
+    "supabase:verify:rls": "node scripts/supabase-rls-verify.mjs",
+    "supabase:verify:storage": "node scripts/supabase-storage-verify.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

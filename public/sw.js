@@ -1,13 +1,15 @@
 // Service Worker for NIRMAN AI PWA
-const CACHE_NAME = 'nirman-v1.0.0';
-const STATIC_CACHE = 'nirman-static-v1.0.0';
-const DYNAMIC_CACHE = 'nirman-dynamic-v1.0.0';
+const CACHE_NAME = 'nirman-v1.1.0';
+const STATIC_CACHE = 'nirman-static-v1.1.0';
+const DYNAMIC_CACHE = 'nirman-dynamic-v1.1.0';
+const API_CACHE = 'nirman-api-v1.1.0';
 
 // Files to cache immediately
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/offline.html',
   '/icon-192.png',
   '/icon-512.png',
   // Add other static assets
@@ -31,7 +33,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== STATIC_CACHE && cacheName !== DYNAMIC_CACHE) {
+          if (cacheName !== STATIC_CACHE && cacheName !== DYNAMIC_CACHE && cacheName !== API_CACHE) {
             console.log('[SW] Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
@@ -50,9 +52,9 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // Skip Supabase API calls (handle with network-first)
+  // Supabase reads get network-first caching; writes are handled by app queues.
   if (url.hostname.includes('supabase.co')) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, API_CACHE));
     return;
   }
 
@@ -68,7 +70,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Network-first for everything else
-  event.respondWith(networkFirst(request));
+  event.respondWith(networkFirst(request, DYNAMIC_CACHE));
 });
 
 // Cache-first strategy
@@ -93,11 +95,11 @@ async function cacheFirst(request) {
 }
 
 // Network-first strategy
-async function networkFirst(request) {
+async function networkFirst(request, cacheName = DYNAMIC_CACHE) {
   try {
     const networkResponse = await fetch(request);
     if (networkResponse.ok) {
-      const cache = await caches.open(DYNAMIC_CACHE);
+      const cache = await caches.open(cacheName);
       cache.put(request, networkResponse.clone());
     }
     return networkResponse;
@@ -116,14 +118,15 @@ async function networkFirst(request) {
 self.addEventListener('sync', (event) => {
   console.log('[SW] Background sync:', event.tag);
 
-  if (event.tag === 'background-sync') {
+  if (event.tag === 'background-sync' || event.tag === 'nirman-offline-sync') {
     event.waitUntil(doBackgroundSync());
   }
 });
 
 async function doBackgroundSync() {
-  // Implement offline data sync logic here
   console.log('[SW] Performing background sync');
+  const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  clientsList.forEach((client) => client.postMessage({ type: 'NIRMAN_BACKGROUND_SYNC' }));
 }
 
 // Push notifications

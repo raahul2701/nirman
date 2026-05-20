@@ -72,7 +72,7 @@ export function LoginPage() {
 
         <div className="relative z-10 flex items-center gap-2">
           <Zap size={12} style={{ color: '#00D4AA' }} />
-          <span className="text-[11px] text-[#606060]">Powered by Claude AI · Supabase · Real-time</span>
+          <span className="text-[11px] text-[#606060]">Powered by Gemini AI · Supabase · Real-time</span>
         </div>
       </div>
 

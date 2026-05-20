@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
-import { invokeAiAnalyze } from '../../services/ai/claudeService';
+import { invokeAiAnalyze } from '../../services/ai/aiService';
 import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { GovProject, PaymentMilestone, AIRiskLevel } from '../../types';

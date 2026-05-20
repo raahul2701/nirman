@@ -6,21 +6,22 @@ import { NotificationContext } from './notificationContextCore';
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id;
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const fetchNotifications = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     const { data } = await supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50);
     if (data) setNotifications(data as Notification[]);
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setNotifications([]);
       return;
     }
@@ -35,8 +36,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        }, (payload) => {
+          filter: `user_id=eq.${userId}`,
+        }, (payload: any) => {
           setNotifications(prev => [payload.new as Notification, ...prev]);
         })
         .subscribe();
@@ -57,7 +58,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       }
       cleanupChannel?.();
     };
-  }, [fetchNotifications, user]);
+  }, [fetchNotifications, userId]);
 
   const markAsRead = useCallback(async (id: string) => {
     await supabase.from('notifications').update({ read: true }).eq('id', id);
@@ -65,18 +66,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const markAllAsRead = useCallback(async () => {
-    if (!user) return;
-    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id);
+    if (!userId) return;
+    await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }, [user]);
+  }, [userId]);
 
   const addNotification = useCallback(async (title: string, message: string, type: Notification['type'] = 'info', category = 'general') => {
-    if (!user) return;
+    if (!userId) return;
     const { data } = await supabase.from('notifications').insert({
-      user_id: user.id, title, message, type, category
+      user_id: userId, title, message, type, category
     }).select().maybeSingle();
     if (data) setNotifications(prev => [data as Notification, ...prev]);
-  }, [user]);
+  }, [userId]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 

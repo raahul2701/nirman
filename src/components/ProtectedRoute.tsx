@@ -1,43 +1,25 @@
-import { useEffect } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 import { Loader2 } from 'lucide-react';
+import { hasPermission, type Permission } from '../services/auth/rbac';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?: string[];
+  requiredPermission?: Permission;
   requireAuth?: boolean;
 }
 
+const DEFAULT_REQUIRED_ROLES: string[] = [];
+
 export function ProtectedRoute({
   children,
-  requiredRole = [],
+  requiredRole = DEFAULT_REQUIRED_ROLES,
+  requiredPermission,
   requireAuth = true
 }: ProtectedRouteProps) {
   const { user, profile, loading } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    if (loading) return;
-
-    if (requireAuth && !user) {
-      navigate('/login', {
-        state: { from: location.pathname },
-        replace: true
-      });
-      return;
-    }
-
-    if (user && requiredRole.length > 0 && profile) {
-      const hasRequiredRole = requiredRole.includes(profile.role);
-      if (!hasRequiredRole) {
-        // Redirect to unauthorized page or dashboard
-        navigate('/unauthorized', { replace: true });
-        return;
-      }
-    }
-  }, [user, profile, loading, requiredRole, requireAuth, navigate, location]);
 
   if (loading) {
     return (
@@ -51,14 +33,18 @@ export function ProtectedRoute({
   }
 
   if (requireAuth && !user) {
-    return null; // Will redirect in useEffect
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
   if (user && requiredRole.length > 0 && profile) {
     const hasRequiredRole = requiredRole.includes(profile.role);
     if (!hasRequiredRole) {
-      return null; // Will redirect in useEffect
+      return <Navigate to="/dashboard" replace />;
     }
+  }
+
+  if (user && requiredPermission && !hasPermission(profile, requiredPermission)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

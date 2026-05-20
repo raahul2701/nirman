@@ -8,7 +8,8 @@ import { AuthContext } from './authContextCore';
 const SESSION_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const SESSION_REFRESH_LEAD = 60 * 1000; // refresh 1 minute before expiry
 const ACTIVITY_THROTTLE_MS = 1000;
-const IS_DEV = import.meta.env.DEV;
+const REFRESH_FAILURE_COOLDOWN = 30 * 1000;
+const DEVICE_SESSION_KEY = 'nirman-device-id';
 
 function areSessionsEqual(a: Session | null, b: Session | null) {
   if (a === b) return true;
@@ -21,19 +22,35 @@ function areSessionsEqual(a: Session | null, b: Session | null) {
   );
 }
 
+function isLikelyOffline(error: unknown) {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+  if (!(error instanceof Error)) return false;
+
+  return /Failed to fetch|NetworkError|Load failed|fetch/i.test(error.message);
+}
+
+function getDeviceId() {
+  const existing = localStorage.getItem(DEVICE_SESSION_KEY);
+  if (existing) return existing;
+  const next = crypto.randomUUID();
+  localStorage.setItem(DEVICE_SESSION_KEY, next);
+  return next;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastActivity, setLastActivity] = useState<number>(Date.now());
+  const userId = user?.id;
+  const sessionExpiresAt = session?.expires_at;
   const activityTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshFailureRef = useRef(0);
   const mountedRef = useRef(true);
   const currentSessionRef = useRef<Session | null>(null);
-  const authInitializedRef = useRef(false);
-  // Development-only ref to suppress StrictMode duplicate logs
-  const authSetupLoggedRef = useRef(false);
 
   const updateActivity = useCallback(() => {
     setLastActivity(Date.now());
@@ -59,6 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
@@ -88,11 +107,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ip_address: null,
         user_agent: navigator.userAgent,
         ...details,
-      });
+      } as any);
     } catch (error) {
       logger.error('Failed to log audit event', { error, action, userId: auditUserId });
     }
-  }, [user]);
+  }, [user?.id]);
+
+  const trackDeviceSession = useCallback(async (nextUserId: string) => {
+    try {
+      await supabase.from('device_sessions').upsert({
+        user_id: nextUserId,
+        device_id: getDeviceId(),
+        user_agent: navigator.userAgent,
+        last_seen_at: new Date().toISOString(),
+      } as any, { onConflict: 'user_id,device_id' });
+    } catch (error) {
+      logger.warn('Failed to update device session', { error, userId: nextUserId });
+    }
+  }, []);
 
   const signOut = useCallback(async () => {
     try {
@@ -112,19 +144,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logAudit, user]);
 
   const refreshSession = useCallback(async () => {
+    const now = Date.now();
+    if (refreshInFlightRef.current || now - lastRefreshFailureRef.current < REFRESH_FAILURE_COOLDOWN) {
+      return;
+    }
+
+    refreshInFlightRef.current = true;
     try {
       const { data, error } = await supabase.auth.refreshSession();
       if (error) throw error;
       if (data.session && mountedRef.current) {
+        currentSessionRef.current = data.session;
         setSession(data.session);
         setUser(data.session.user);
+        void trackDeviceSession(data.session.user.id);
         logger.info('Session refreshed successfully', { userId: data.session.user.id });
       }
     } catch (error) {
+      lastRefreshFailureRef.current = Date.now();
+      if (isLikelyOffline(error)) {
+        logger.warn('Session refresh skipped while offline', { error });
+        return;
+      }
+
       logger.error('Session refresh failed', { error });
       void signOut();
+    } finally {
+      refreshInFlightRef.current = false;
     }
-  }, [signOut]);
+  }, [signOut, trackDeviceSession]);
 
   const refreshProfile = useCallback(async () => {
     if (user) {
@@ -170,11 +218,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user || !session) return;
+    if (!userId) return;
 
     const scheduleRefresh = () => {
       const now = Date.now();
-      const expiresAt = session.expires_at ? session.expires_at * 1000 : now + SESSION_CHECK_INTERVAL;
+      const expiresAt = sessionExpiresAt ? sessionExpiresAt * 1000 : now + SESSION_CHECK_INTERVAL;
       const delay = Math.max(expiresAt - now - SESSION_REFRESH_LEAD, 1000);
 
       if (refreshTimeoutRef.current) {
@@ -195,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.clearTimeout(refreshTimeoutRef.current);
       }
     };
-  }, [refreshSession, session, user]);
+  }, [refreshSession, sessionExpiresAt, userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (initialSession?.user && !cancelled) {
           await fetchProfile(initialSession.user.id);
+          void trackDeviceSession(initialSession.user.id);
           void logAudit('session_init', { table_name: 'auth' }, initialSession.user.id);
           logger.info('Initial auth session loaded', { userId: initialSession.user.id });
         }
@@ -225,23 +274,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } finally {
         if (mountedRef.current && !cancelled) {
           setLoading(false);
-          authInitializedRef.current = true;
         }
       }
     };
 
     initializeAuth();
 
-    if (IS_DEV && authSetupLoggedRef.current) {
-      // In StrictMode during development, guard against duplicate listener setup.
-      return undefined;
-    }
-
-    if (IS_DEV) {
-      authSetupLoggedRef.current = true;
-    }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, nextSession: any) => {
       if (!mountedRef.current || cancelled) return;
 
       const isSameSession = areSessionsEqual(nextSession, currentSessionRef.current);
@@ -255,6 +294,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (nextSession?.user) {
         await fetchProfile(nextSession.user.id);
+        void trackDeviceSession(nextSession.user.id);
         void logAudit(event, { table_name: 'auth' }, nextSession.user.id);
         logger.info(`Auth state changed: ${event}`, { userId: nextSession.user.id });
       } else {
@@ -269,11 +309,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
       subscription.unsubscribe();
-      if (IS_DEV) {
-        authSetupLoggedRef.current = false;
-      }
     };
-  }, [fetchProfile, logAudit]);
+  }, [fetchProfile, logAudit, trackDeviceSession]);
 
   const value = useMemo(
     () => ({

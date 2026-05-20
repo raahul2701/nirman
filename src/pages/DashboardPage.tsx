@@ -24,6 +24,7 @@ import { DashboardSectionSkeleton } from '../components/dashboard/DashboardSecti
 
 const ChartsSection = lazy(() => import('../components/dashboard/ChartsSection').then((mod) => ({ default: mod.ChartsSection })));
 const MaterialChart = lazy(() => import('../components/dashboard/MaterialChart').then((mod) => ({ default: mod.MaterialChart })));
+const OperationalIntelligenceWidgets = lazy(() => import('../components/dashboard/OperationalIntelligenceWidgets').then((mod) => ({ default: mod.OperationalIntelligenceWidgets })));
 
 const QUICK_ACTIONS = [
   { label: 'Report Problem', icon: AlertTriangle, color: '#ef4444', to: '/problems' },
@@ -106,7 +107,7 @@ export function DashboardPage() {
 
       if (!isActive) return;
 
-      const lowStock = (materials.data || []).filter((m) => m.current_qty <= m.threshold_qty).length;
+      const lowStock = (materials.data || []).filter((m: any) => m.current_qty <= m.threshold_qty).length;
       setStats({
         activeProjects: proj.count || 0,
         openIssues: probs.count || 0,
@@ -163,6 +164,10 @@ export function DashboardPage() {
         <StatCard label="Low Stock Items" value={stats.lowStockAlerts} icon={<Package size={18} />} loading={loadingStats} color="#F59E0B" />
         <StatCard label="Surveys Done" value={stats.surveysCompleted} icon={<Plane size={18} />} loading={loadingStats} color="#3B82F6" />
       </div>
+
+      <Suspense fallback={<DashboardSectionSkeleton />}>
+        <OperationalIntelligenceWidgets />
+      </Suspense>
 
       <Suspense fallback={<DashboardSectionSkeleton />}>
         <ChartsSection />

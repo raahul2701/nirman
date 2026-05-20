@@ -1,4 +1,4 @@
-import { invokeEdgeFunction } from './claudeService';
+import { invokeEdgeFunction } from './aiService';
 
 export interface DieselRuntimeLog {
   machine_name: string;

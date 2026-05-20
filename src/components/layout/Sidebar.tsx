@@ -6,12 +6,14 @@ import {
   ChevronLeft, ChevronRight, Zap, HardHat, Truck,
   Landmark, Camera, IndianRupee, ClipboardCheck, FileBarChart,
   Shield, Banknote, ScanLine, Beaker, FileStack, CloudRain,
-  MessageSquare, MapPin, TrendingUp, FileX, Scale
+  MessageSquare, MapPin, TrendingUp, FileX, Scale, Activity
 } from '../../lib/icons';
 import { useAuth } from '../../contexts/useAuth';
+import { featureFlags } from '../../lib/featureFlags';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/operations', icon: Activity, label: 'Ops Center' },
   { to: '/problems', icon: AlertTriangle, label: 'Problems' },
   { to: '/workers', icon: Users, label: 'Workforce' },
   { to: '/surveys', icon: Plane, label: 'Drone Surveys' },
@@ -32,7 +34,7 @@ const govTrackItems = [
 ];
 
 const advancedItems = [
-  { to: '/blacklist', icon: Shield, label: 'Blacklist DB' },
+  ...(featureFlags.blacklist ? [{ to: '/blacklist', icon: Shield, label: 'Blacklist DB' }] : []),
   { to: '/bank-guarantees', icon: Banknote, label: 'BG & SD Tracker' },
   { to: '/drawing-compare', icon: ScanLine, label: 'Drawing Compare' },
   { to: '/material-tests', icon: Beaker, label: 'Material Tests' },
@@ -45,7 +47,7 @@ const advancedItems = [
   { to: '/budget-progress', icon: TrendingUp, label: 'Budget vs Progress' },
   { to: '/tpa-portal', icon: ClipboardCheck, label: 'TPA Portal' },
   { to: '/hindrance-register', icon: FileX, label: 'Hindrance Register' },
-  { to: '/disputes', icon: Scale, label: 'Dispute Resolution' },
+  ...(featureFlags.disputes ? [{ to: '/disputes', icon: Scale, label: 'Dispute Resolution' }] : []),
 ];
 
 const contractorItems = [
@@ -55,6 +57,15 @@ const contractorItems = [
   { to: '/recovery/dashboard', icon: ClipboardCheck, label: 'Recovery' },
   { to: '/maintenance', icon: HardHat, label: 'Maintenance' },
   { to: '/admin/audit-logs', icon: Shield, label: 'Audit Logs' },
+];
+
+const enterpriseItems = [
+  ...(featureFlags.eeWorkspaceIsolation ? [{ to: '/enterprise', icon: Landmark, label: 'Hierarchy' }] : []),
+  ...(featureFlags.pilotMode ? [{ to: '/enterprise/pilot', icon: ClipboardCheck, label: 'Pilot Admin' }] : []),
+  ...(featureFlags.googleDrivePerEe ? [{ to: '/enterprise/setup', icon: Settings, label: 'Workspace Setup' }] : []),
+  ...(featureFlags.contractorBilling ? [{ to: '/enterprise/billing', icon: IndianRupee, label: 'Licensing' }] : []),
+  ...(featureFlags.contractorBilling ? [{ to: '/enterprise/onboarding', icon: Users, label: 'Onboarding' }] : []),
+  ...(featureFlags.eeWorkspaceIsolation ? [{ to: '/enterprise/access', icon: Shield, label: 'Access Control' }] : []),
 ];
 
 function SidebarComponent() {
@@ -173,6 +184,31 @@ function SidebarComponent() {
               `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
                 isActive
                   ? 'bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/20'
+                  : 'text-[#808080] hover:text-white hover:bg-white/5'
+              } ${collapsed ? 'justify-center px-2' : ''}`
+            }
+            title={collapsed ? label : undefined}
+          >
+            <Icon size={18} className="flex-shrink-0" />
+            {!collapsed && <span className="text-sm font-medium">{label}</span>}
+          </NavLink>
+        ))}
+
+        {enterpriseItems.length > 0 && !collapsed && (
+          <div className="mt-4 mb-2 mx-4 flex items-center gap-1.5">
+            <Landmark size={10} style={{ color: '#00D4AA' }} />
+            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#00D4AA' }}>ENTERPRISE</span>
+          </div>
+        )}
+        {enterpriseItems.length > 0 && collapsed && <div className="my-2 mx-2 h-px bg-[#1F1F2E]" />}
+        {enterpriseItems.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
+                isActive
+                  ? 'bg-[#00D4AA]/10 text-[#00D4AA] border border-[#00D4AA]/20'
                   : 'text-[#808080] hover:text-white hover:bg-white/5'
               } ${collapsed ? 'justify-center px-2' : ''}`
             }

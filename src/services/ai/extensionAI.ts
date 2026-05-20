@@ -1,4 +1,4 @@
-import { invokeAiAnalyze, invokeEdgeFunction } from './claudeService';
+import { invokeAiAnalyze, invokeEdgeFunction } from './aiService';
 import { supabase } from '../../lib/supabase';
 
 export interface ExtensionAnalysis {
@@ -83,7 +83,7 @@ Respond ONLY with valid JSON.`;
       const analysisResponse = await invokeAiAnalyze<{ response: string }>({
         prompt,
         message: JSON.stringify(extensionData),
-        model: 'claude-3-sonnet-20240229'
+        model: 'gemini-2.5-flash'
       }, {
         retries: 2,
         timeoutMs: 25000,

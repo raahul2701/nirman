@@ -1,4 +1,4 @@
-import { invokeAiAnalyze, invokeEdgeFunction } from './claudeService';
+import { invokeAiAnalyze, invokeEdgeFunction } from './aiService';
 import { supabase } from '../../lib/supabase';
 
 export interface MaterialTestAnalysis {
@@ -162,7 +162,7 @@ Respond ONLY with valid JSON.`;
       const prompt = `Analyze material test trends for ${materialType} over ${days} days with ${tests.length} test records.
 
 TEST DATA SUMMARY:
-${tests.map((test, index) => `
+${tests.map((test: any, index: number) => `
 Test ${index + 1}:
 - Date: ${test.test_date}
 - Result: ${test.result}
@@ -183,7 +183,7 @@ Provide trend analysis in JSON format:
       const response = await invokeAiAnalyze<{ response: string }>({
         prompt,
         message: 'Analyze material test trends',
-        model: 'claude-3-sonnet-20240229'
+        model: 'gemini-2.5-flash'
       }, {
         retries: 2,
         timeoutMs: 20000,

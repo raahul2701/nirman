@@ -1,4 +1,4 @@
-import { invokeEdgeFunction } from './claudeService';
+import { invokeEdgeFunction } from './aiService';
 import { supabase } from '../../lib/supabase';
 
 export interface DrawingComparison {

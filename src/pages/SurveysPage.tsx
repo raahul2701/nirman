@@ -7,7 +7,7 @@ import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
-import { invokeAiAnalyze } from '../services/ai/claudeService';
+import { invokeAiAnalyze } from '../services/ai/aiService';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../components/ui/useToast';
 import { Survey } from '../types';

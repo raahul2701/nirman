@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   AlertTriangle, Plus, Search, Filter, Upload, Loader2, X,
   MapPin, Clock, CheckCircle2, ChevronDown, Brain, Camera,
@@ -10,7 +10,7 @@ import { SeverityBadge, StatusBadge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input, Select, Textarea } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
-import { invokeAiAnalyze } from '../services/ai/claudeService';
+import { invokeAiAnalyze } from '../services/ai/aiService';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../components/ui/useToast';
 import { Problem, ProblemCategory, ProblemSeverity } from '../types';
@@ -34,7 +34,9 @@ interface ProblemFormData {
 
 export function ProblemsPage() {
   const { user } = useAuth();
+  const userId = useMemo(() => user?.id, [user?.id]);
   const toast = useToast();
+  const loadRequestRef = useRef(0);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -51,20 +53,45 @@ export function ProblemsPage() {
     location_text: '',
   });
 
-  useEffect(() => {
-    if (user) loadProblems();
-  }, [user]);
+  const loadProblems = useCallback(async () => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
 
-  async function loadProblems() {
-    setLoading(true);
-    const { data } = await supabase
-      .from('problems')
-      .select('*')
-      .eq('reported_by', user!.id)
-      .order('created_at', { ascending: false });
-    if (data) setProblems(data as Problem[]);
-    setLoading(false);
-  }
+    if (!userId) {
+      setProblems([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(prev => (prev ? prev : true));
+      const { data, error } = await supabase
+        .from('problems')
+        .select('*')
+        .eq('reported_by', userId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      if (loadRequestRef.current === requestId && data) {
+        setProblems(data as Problem[]);
+      }
+    } catch (error) {
+      if (loadRequestRef.current !== requestId) {
+        return;
+      }
+
+      console.error('Failed to load problems:', error);
+      toast('Failed to load problems', 'error');
+    } finally {
+      if (loadRequestRef.current === requestId) {
+        setLoading(false);
+      }
+    }
+  }, [userId, toast]);
+
+  useEffect(() => {
+    loadProblems();
+  }, [loadProblems]);
 
   async function analyzeWithAI() {
     if (!form.description && !form.category) {
@@ -132,11 +159,19 @@ export function ProblemsPage() {
     toast(`Status updated to ${status}`, 'success');
   }
 
-  const filtered = problems.filter(p => {
-    const matchStatus = filterStatus === 'all' || p.status === filterStatus;
-    const matchSearch = !search || p.title?.toLowerCase().includes(search.toLowerCase()) || p.problem_code?.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchSearch;
-  });
+  const filtered = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return problems.filter(p => {
+      const matchStatus = filterStatus === 'all' || p.status === filterStatus;
+      const matchSearch =
+        !normalizedSearch ||
+        p.title?.toLowerCase().includes(normalizedSearch) ||
+        p.problem_code?.toLowerCase().includes(normalizedSearch);
+
+      return matchStatus && matchSearch;
+    });
+  }, [filterStatus, problems, search]);
 
   return (
     <AppLayout title="Problem Detector" subtitle="AI-powered issue reporting and management">
