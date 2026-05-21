@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, LockKeyhole, Shield, UserCheck } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
+import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { EMPTY_WORKSPACE_SUMMARY, getMyWorkspaceSummary, normalizeWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
 
@@ -10,6 +12,7 @@ function shortId(value: string | null | undefined, fallback = '-') {
 }
 
 export function ProjectAccessControlPage() {
+  const navigate = useNavigate();
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +79,11 @@ export function ProjectAccessControlPage() {
             <h2 className="text-white font-semibold">Project Assignments</h2>
             <p className="text-[#606060] text-xs">Contractors only see their assigned project rows; documents are filtered by workspace and project.</p>
           </div>
-          <Badge color="#FF6B00">RLS enforced</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="primary" onClick={() => navigate('/enterprise/start-pilot')}>Start New Pilot Assignment</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate('/enterprise/assign-project')}>Create/Edit Project Assignment</Button>
+            <Badge color="#FF6B00">RLS enforced</Badge>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

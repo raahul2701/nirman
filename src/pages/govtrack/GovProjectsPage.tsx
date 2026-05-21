@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { GovProject } from '../../types';
 import { formatCurrency } from '../../lib/utils';
+import { featureFlags } from '../../lib/featureFlags';
 
 const projectTypes = [
   { value: 'highway', label: 'Highway' },
@@ -108,6 +109,9 @@ export function GovProjectsPage() {
           {projectTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select>
         <Button variant="primary" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>New Project</Button>
+        {featureFlags.pilotMode && (
+          <Button variant="outline" icon={<FolderOpen size={14} />} onClick={() => navigate('/enterprise/assign-project')}>Assign Project</Button>
+        )}
       </div>
 
       {/* Create Modal */}
@@ -140,6 +144,11 @@ export function GovProjectsPage() {
               <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
               <Button variant="primary" className="flex-1" loading={submitting} onClick={createProject}>Create Project</Button>
             </div>
+            {featureFlags.pilotMode && (
+              <div className="mt-4 rounded-lg border border-[#CDBD82] bg-[#FFF8E1] px-3 py-2 text-xs text-[#6B5A1E]">
+                After creating the project, open Enterprise Assignment to map AE, JE, Contractor, and workspace ownership.
+              </div>
+            )}
           </div>
         </div>
       )}

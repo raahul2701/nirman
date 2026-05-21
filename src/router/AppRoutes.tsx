@@ -58,6 +58,9 @@ const ContractorLicensingPage = lazyWithRetry(() => import('../pages/enterprise/
 const ContractorOnboardingPage = lazyWithRetry(() => import('../pages/enterprise/ContractorOnboardingPage').then((mod) => ({ default: mod.ContractorOnboardingPage })));
 const ProjectAccessControlPage = lazyWithRetry(() => import('../pages/enterprise/ProjectAccessControlPage').then((mod) => ({ default: mod.ProjectAccessControlPage })));
 const PilotAdminPage = lazyWithRetry(() => import('../pages/enterprise/PilotAdminPage').then((mod) => ({ default: mod.PilotAdminPage })));
+const PilotGuidePage = lazyWithRetry(() => import('../pages/enterprise/PilotGuidePage').then((mod) => ({ default: mod.PilotGuidePage })));
+const AssignProjectPage = lazyWithRetry(() => import('../pages/enterprise/AssignProjectPage').then((mod) => ({ default: mod.AssignProjectPage })));
+const StartPilotWizardPage = lazyWithRetry(() => import('../pages/enterprise/StartPilotWizardPage').then((mod) => ({ default: mod.StartPilotWizardPage })));
 
 const protectedTree = (
   <ProtectedRoute>
@@ -173,6 +176,9 @@ const routes: RouteObject[] = [
       { path: 'onboarding', element: <ContractorOnboardingPage /> },
       { path: 'access', element: <ProjectAccessControlPage /> },
       { path: 'pilot', element: <PilotAdminPage /> },
+      { path: 'pilot-guide', element: <PilotGuidePage /> },
+      { path: 'assign-project', element: <AssignProjectPage /> },
+      { path: 'start-pilot', element: <StartPilotWizardPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/dashboard" replace /> },

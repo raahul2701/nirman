@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, FolderTree, IndianRupee, Link, Send, ShieldCheck, UserPlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, CheckCircle2, ClipboardCheck, FolderTree, IndianRupee, Link, Send, ShieldCheck, UserPlus } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -23,6 +24,7 @@ function personName(id: string | null | undefined) {
 }
 
 export function PilotAdminPage() {
+  const navigate = useNavigate();
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [demoStep, setDemoStep] = useState<DemoStep>('recommended');
   const [demoUsers, setDemoUsers] = useState(8);
@@ -55,6 +57,29 @@ export function PilotAdminPage() {
         <StatCard label="Billable Users" value={totals.billableUsers} icon={<IndianRupee size={18} />} color="#F59E0B" />
         <StatCard label="Monthly Billing" value={`₹${totals.monthlyAmount.toLocaleString('en-IN')}`} icon={<IndianRupee size={18} />} color="#FF6B00" />
       </div>
+
+      <Card className="mb-6 border-[#CDBD82]">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex gap-3">
+            <AlertTriangle size={22} className="mt-0.5 flex-shrink-0 text-[#F59E0B]" />
+            <div>
+              <h2 className="text-[#12332D] font-semibold">Pilot Assignment UI Status</h2>
+              <p className="mt-1 text-sm text-[#4D5B52]">
+                Project creation exists in GovTrack Projects. Live AE/JE/Contractor assignment editing is available in Enterprise Assignment, and assignment display remains in Access Control.
+              </p>
+              <p className="mt-2 text-xs text-[#6C7568]">
+                Active, Pilot, Paused, Locked, Completed, and Archived statuses are supported by the project assignment schema.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="primary" onClick={() => navigate('/enterprise/start-pilot')}>Start Pilot Wizard</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate('/enterprise/pilot-guide')}>Open Guide</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate('/enterprise/assign-project')}>Assign Project</Button>
+            <Button size="sm" variant="outline" onClick={() => navigate('/enterprise/access')}>View Assignments</Button>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
         <Card className="xl:col-span-2">

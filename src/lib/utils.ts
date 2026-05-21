@@ -41,6 +41,12 @@ export const STATUS_COLORS: Record<string, string> = {
   in_progress: '#FF6B00',
   resolved: '#22c55e',
   closed: '#808080',
+  active: '#22c55e',
+  pilot: '#3B82F6',
+  paused: '#F59E0B',
+  locked: '#808080',
+  completed: '#00D4AA',
+  archived: '#606060',
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {

@@ -5,7 +5,7 @@ import {
   Package, FolderOpen, BarChart2, Settings, LogOut,
   ChevronLeft, ChevronRight, Zap, HardHat, Truck,
   Landmark, Camera, IndianRupee, ClipboardCheck, FileBarChart,
-  Shield, Banknote, ScanLine, Beaker, FileStack, CloudRain,
+  Shield, Banknote, ScanLine, Beaker, FileStack, FileText, CloudRain,
   MessageSquare, MapPin, TrendingUp, FileX, Scale, Activity
 } from '../../lib/icons';
 import { useAuth } from '../../contexts/useAuth';
@@ -62,6 +62,9 @@ const contractorItems = [
 
 const enterpriseItems = [
   ...(featureFlags.eeWorkspaceIsolation ? [{ to: '/enterprise', icon: Landmark, label: 'Hierarchy' }] : []),
+  ...(featureFlags.eeWorkspaceIsolation || featureFlags.pilotMode ? [{ to: '/enterprise/start-pilot', icon: ClipboardCheck, label: 'Start Pilot' }] : []),
+  ...(featureFlags.eeWorkspaceIsolation || featureFlags.pilotMode ? [{ to: '/enterprise/pilot-guide', icon: FileText, label: 'Pilot Guide' }] : []),
+  ...(featureFlags.eeWorkspaceIsolation || featureFlags.pilotMode ? [{ to: '/enterprise/assign-project', icon: FolderOpen, label: 'Assign Project' }] : []),
   ...(featureFlags.pilotMode ? [{ to: '/enterprise/pilot', icon: ClipboardCheck, label: 'Pilot Admin' }] : []),
   ...(featureFlags.googleDrivePerEe ? [{ to: '/enterprise/setup', icon: Settings, label: 'Workspace Setup' }] : []),
   ...(featureFlags.contractorBilling ? [{ to: '/enterprise/billing', icon: IndianRupee, label: 'Licensing' }] : []),
