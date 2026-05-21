@@ -9,7 +9,9 @@ import {
   Plus,
   ChevronRight,
   Activity,
-  CheckCircle2
+  CheckCircle2,
+  ShieldCheck,
+  RadioTower
 } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
 import { StatCard } from '../components/ui/Card';
@@ -21,17 +23,18 @@ import { useNavigate } from 'react-router-dom';
 import { Problem } from '../types';
 import { formatDistanceToNow, CATEGORY_LABELS } from '../lib/utils';
 import { DashboardSectionSkeleton } from '../components/dashboard/DashboardSectionSkeleton';
+import { BRANDING } from '../constants/branding';
 
 const ChartsSection = lazy(() => import('../components/dashboard/ChartsSection').then((mod) => ({ default: mod.ChartsSection })));
 const MaterialChart = lazy(() => import('../components/dashboard/MaterialChart').then((mod) => ({ default: mod.MaterialChart })));
 const OperationalIntelligenceWidgets = lazy(() => import('../components/dashboard/OperationalIntelligenceWidgets').then((mod) => ({ default: mod.OperationalIntelligenceWidgets })));
 
 const QUICK_ACTIONS = [
-  { label: 'Report Problem', icon: AlertTriangle, color: '#ef4444', to: '/problems' },
-  { label: 'Add Worker', icon: Users, color: '#00D4AA', to: '/workers' },
-  { label: 'Drone Survey', icon: Plane, color: '#3B82F6', to: '/surveys' },
-  { label: 'AI Design', icon: Brain, color: '#FF6B00', to: '/design' },
-  { label: 'Inventory', icon: Package, color: '#F59E0B', to: '/inventory' },
+  { label: 'Report Problem', icon: AlertTriangle, color: '#B42318', to: '/problems' },
+  { label: 'Add Worker', icon: Users, color: '#0B8B7D', to: '/workers' },
+  { label: 'Drone Survey', icon: Plane, color: '#2F6B9A', to: '/surveys' },
+  { label: 'AI Design', icon: Brain, color: '#C89B3C', to: '/design' },
+  { label: 'Inventory', icon: Package, color: '#C89B3C', to: '/inventory' },
 ] as const;
 
 type ProblemRowProps = {
@@ -43,25 +46,25 @@ const ProblemRow = memo(function ProblemRow({ problem, onOpen }: ProblemRowProps
   return (
     <div
       onClick={onOpen}
-      className="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-white/3 transition-all"
-      style={{ background: '#111111' }}
+      className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-[#005F56]/5 transition-all"
+      style={{ background: '#F9F7EF', border: '1px solid #EFE8D4' }}
     >
       <div
         className="w-1.5 h-8 rounded-full flex-shrink-0"
         style={{
           background:
             problem.severity === 'critical'
-              ? '#ef4444'
+              ? '#B42318'
               : problem.severity === 'high'
-              ? '#f97316'
+              ? '#C89B3C'
               : problem.severity === 'medium'
-              ? '#eab308'
-              : '#22c55e',
+              ? '#C89B3C'
+              : '#0B8B7D',
         }}
       />
       <div className="flex-1 min-w-0">
-        <p className="text-white text-xs font-medium truncate">{problem.title || CATEGORY_LABELS[problem.category]}</p>
-        <p className="text-[#606060] text-[10px] mt-0.5">{problem.problem_code} · {formatDistanceToNow(problem.created_at)}</p>
+        <p className="text-[#12332D] text-xs font-medium truncate">{problem.title || CATEGORY_LABELS[problem.category]}</p>
+        <p className="text-[#6C7568] text-[10px] mt-0.5">{problem.problem_code} · {formatDistanceToNow(problem.created_at)}</p>
       </div>
       <div className="flex flex-col items-end gap-1">
         <SeverityBadge severity={problem.severity} />
@@ -143,8 +146,8 @@ export function DashboardPage() {
       <button
         key={action.label}
         onClick={() => navigate(action.to)}
-        className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-white transition-all hover:scale-105"
-        style={{ background: `${action.color}15`, border: `1px solid ${action.color}25`, color: action.color }}
+        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all hover:shadow-enterprise"
+        style={{ background: `${action.color}12`, border: `1px solid ${action.color}28`, color: action.color }}
       >
         <action.icon size={13} />
         {action.label}
@@ -154,15 +157,41 @@ export function DashboardPage() {
   );
 
   return (
-    <AppLayout title="Dashboard" subtitle={`Welcome to NIRMAN AI, ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
+    <AppLayout title="National Infra Operations Command Center" subtitle={`ARSPL executive command view for ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
+      <div className="mb-6 rounded-lg p-5 shadow-command" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F7F5EF 100%)', border: '1px solid var(--border-strong)' }}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-4">
+            <img src={BRANDING.LOGO_MARK_PATH} alt="ARSPL" className="h-14 w-14 rounded-lg bg-white object-contain p-1" style={{ border: '1px solid var(--border)' }} />
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em]" style={{ color: '#6B5A1E' }}>{BRANDING.EXECUTIVE_LABEL}</p>
+              <h2 className="mt-1 text-2xl font-black text-[#12332D]">National Infra Operations Command Center</h2>
+              <p className="mt-1 text-sm text-[#6C7568]">Live project control, AI insight routing, and field operations readiness.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: 'Ops', value: 'Live', icon: RadioTower },
+              { label: 'AI', value: 'Ready', icon: Brain },
+              { label: 'Control', value: 'Secure', icon: ShieldCheck },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg px-4 py-3" style={{ background: 'rgba(0,95,86,0.06)', border: '1px solid rgba(0,95,86,0.12)' }}>
+                <item.icon size={16} className="mx-auto text-[#005F56]" />
+                <p className="mt-1 text-sm font-bold text-[#12332D]">{item.value}</p>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-[#6C7568]">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-2 mb-6">{actionButtons}</div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-        <StatCard label="Active Projects" value={stats.activeProjects} icon={<FolderOpen size={18} />} loading={loadingStats} color="#00D4AA" />
-        <StatCard label="Open Issues" value={stats.openIssues} icon={<AlertTriangle size={18} />} loading={loadingStats} color="#ef4444" />
-        <StatCard label="Active Workers" value={stats.workersPresent} icon={<Users size={18} />} loading={loadingStats} color="#FF6B00" />
-        <StatCard label="Low Stock Items" value={stats.lowStockAlerts} icon={<Package size={18} />} loading={loadingStats} color="#F59E0B" />
-        <StatCard label="Surveys Done" value={stats.surveysCompleted} icon={<Plane size={18} />} loading={loadingStats} color="#3B82F6" />
+        <StatCard label="Active Projects" value={stats.activeProjects} icon={<FolderOpen size={18} />} loading={loadingStats} color="#005F56" />
+        <StatCard label="Open Issues" value={stats.openIssues} icon={<AlertTriangle size={18} />} loading={loadingStats} color="#B42318" />
+        <StatCard label="Active Workers" value={stats.workersPresent} icon={<Users size={18} />} loading={loadingStats} color="#0B8B7D" />
+        <StatCard label="Low Stock Items" value={stats.lowStockAlerts} icon={<Package size={18} />} loading={loadingStats} color="#C89B3C" />
+        <StatCard label="Surveys Done" value={stats.surveysCompleted} icon={<Plane size={18} />} loading={loadingStats} color="#2F6B9A" />
       </div>
 
       <Suspense fallback={<DashboardSectionSkeleton />}>
@@ -178,11 +207,11 @@ export function DashboardPage() {
           <MaterialChart />
         </Suspense>
 
-        <div className="rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
+        <div className="rounded-lg p-5 shadow-enterprise" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-white font-semibold text-sm">Recent Problems</h3>
-              <p className="text-[#606060] text-xs mt-0.5">Latest reported issues</p>
+              <h3 className="text-[#12332D] font-semibold text-sm">Recent Problems</h3>
+              <p className="text-[#6C7568] text-xs mt-0.5">Latest reported issues</p>
             </div>
             <Button size="sm" variant="ghost" icon={<ChevronRight size={13} />} onClick={() => navigate('/problems')}>
               View all
@@ -190,8 +219,8 @@ export function DashboardPage() {
           </div>
           {recentProblems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <CheckCircle2 size={32} className="text-[#2A2A2A] mb-2" />
-              <p className="text-[#606060] text-sm">No problems reported yet</p>
+              <CheckCircle2 size={32} className="text-[#CDBD82] mb-2" />
+              <p className="text-[#6C7568] text-sm">No problems reported yet</p>
               <Button size="sm" variant="primary" className="mt-3" icon={<Plus size={13} />} onClick={() => navigate('/problems')}>
                 Report First Issue
               </Button>
@@ -204,11 +233,11 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
+      <div className="rounded-lg p-5 shadow-enterprise" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-white font-semibold text-sm">Project Progress</h3>
-            <p className="text-[#606060] text-xs mt-0.5">Active construction projects</p>
+            <h3 className="text-[#12332D] font-semibold text-sm">Project Progress</h3>
+            <p className="text-[#6C7568] text-xs mt-0.5">Active construction projects</p>
           </div>
           <Button size="sm" variant="primary" icon={<Plus size={13} />} onClick={() => navigate('/projects')}>
             New Project
@@ -216,16 +245,16 @@ export function DashboardPage() {
         </div>
         {stats.activeProjects === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <FolderOpen size={32} className="text-[#2A2A2A] mb-2" />
-            <p className="text-[#606060] text-sm">No active projects</p>
+            <FolderOpen size={32} className="text-[#CDBD82] mb-2" />
+            <p className="text-[#6C7568] text-sm">No active projects</p>
             <Button size="sm" variant="primary" className="mt-3" icon={<Plus size={13} />} onClick={() => navigate('/projects')}>
               Create Project
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: '#111111' }}>
-            <Activity size={16} className="text-[#FF6B00]" />
-            <p className="text-[#A0A0A0] text-sm">{stats.activeProjects} active project{stats.activeProjects !== 1 ? 's' : ''} — visit the Projects page for details</p>
+          <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: '#F9F7EF', border: '1px solid #EFE8D4' }}>
+            <Activity size={16} className="text-[#005F56]" />
+            <p className="text-[#6C7568] text-sm">{stats.activeProjects} active project{stats.activeProjects !== 1 ? 's' : ''} — visit the Projects page for details</p>
             <Button size="sm" variant="ghost" icon={<ChevronRight size={13} />} onClick={() => navigate('/projects')} className="ml-auto">View</Button>
           </div>
         )}

@@ -1,6 +1,8 @@
 function isEnabled(value: unknown, fallback = true) {
   if (typeof value !== 'string') return fallback;
-  return value.toLowerCase() !== 'false';
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return fallback;
+  return !['false', '0', 'off', 'no', 'disabled'].includes(normalized);
 }
 
 export const featureFlags = {

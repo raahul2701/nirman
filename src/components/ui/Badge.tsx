@@ -26,7 +26,7 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function Badge({
   children,
-  color = '#FF6B00',
+  color = '#005F56',
   variant = 'solid',
   className = ''
 }: {
@@ -39,9 +39,9 @@ export function Badge({
   const style = variant === 'outline'
     ? { color, background: 'transparent', border: `1px solid ${color}` }
     : variant === 'ghost'
-      ? { color, background: 'rgba(255,255,255,0.08)' }
+      ? { color, background: 'rgba(0,95,86,0.08)' }
       : variant === 'secondary'
-        ? { color, background: 'rgba(255,255,255,0.08)' }
+        ? { color, background: 'rgba(200,155,60,0.14)' }
         : variant === 'destructive'
           ? { color: '#ef4444', background: 'rgba(239,68,68,0.15)' }
           : { color, background: `${color}15` };

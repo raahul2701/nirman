@@ -3,7 +3,11 @@ import { AlertTriangle, LockKeyhole, Shield, UserCheck } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
-import { getMyWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { EMPTY_WORKSPACE_SUMMARY, getMyWorkspaceSummary, normalizeWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
+
+function shortId(value: string | null | undefined, fallback = '-') {
+  return value ? String(value).slice(0, 8) : fallback;
+}
 
 export function ProjectAccessControlPage() {
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
@@ -13,7 +17,7 @@ export function ProjectAccessControlPage() {
     let cancelled = false;
     getMyWorkspaceSummary()
       .then((data) => {
-        if (!cancelled) setSummary(data);
+        if (!cancelled) setSummary(normalizeWorkspaceSummary(data));
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load project access');
@@ -22,6 +26,8 @@ export function ProjectAccessControlPage() {
       cancelled = true;
     };
   }, []);
+
+  const safeSummary = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY);
 
   return (
     <AppLayout title="Project Access Control" subtitle="Project-level RBAC, licence locking, and document boundaries">
@@ -40,7 +46,7 @@ export function ProjectAccessControlPage() {
             <Shield size={22} className="text-[#00D4AA]" />
             <div>
               <p className="text-white font-semibold">EE Boundary</p>
-              <p className="text-[#808080] text-xs">Workspace ID {summary?.workspace?.id?.slice(0, 8) || 'not assigned'}</p>
+              <p className="text-[#808080] text-xs">Workspace ID {shortId(safeSummary.workspace?.id, 'not assigned')}</p>
             </div>
           </div>
         </Card>
@@ -84,16 +90,16 @@ export function ProjectAccessControlPage() {
               </tr>
             </thead>
             <tbody>
-              {(summary?.projects || []).map((project) => (
+              {safeSummary.projects.map((project) => (
                 <tr key={project.id} className="border-b border-[#232323] text-[#D0D0D0]">
-                  <td className="py-3 pr-4 text-white">{project.project_id.slice(0, 8)}</td>
-                  <td className="py-3 pr-4">{project.assistant_engineer_id?.slice(0, 8) || '-'}</td>
-                  <td className="py-3 pr-4">{project.junior_engineer_id?.slice(0, 8) || '-'}</td>
-                  <td className="py-3 pr-4">{project.contractor_company_name || project.contractor_id?.slice(0, 8) || '-'}</td>
-                  <td className="py-3 pr-4"><StatusBadge status={project.access_status} /></td>
+                  <td className="py-3 pr-4 text-white">{shortId(project.project_id)}</td>
+                  <td className="py-3 pr-4">{shortId(project.assistant_engineer_id)}</td>
+                  <td className="py-3 pr-4">{shortId(project.junior_engineer_id)}</td>
+                  <td className="py-3 pr-4">{project.contractor_company_name || shortId(project.contractor_id)}</td>
+                  <td className="py-3 pr-4"><StatusBadge status={project.access_status || 'unknown'} /></td>
                 </tr>
               ))}
-              {!summary?.projects.length && (
+              {safeSummary.projects.length === 0 && (
                 <tr>
                   <td className="py-6 text-[#808080]" colSpan={5}>No project assignments found.</td>
                 </tr>

@@ -11,12 +11,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  primary: 'text-white font-semibold',
-  secondary: 'text-white font-medium border border-[#2A2A2A] hover:border-[#FF6B00]/40 hover:bg-[#FF6B00]/5',
-  ghost: 'text-[#A0A0A0] hover:text-white hover:bg-white/5',
+  primary: 'text-[#12332D] font-semibold shadow-enterprise',
+  secondary: 'text-white font-medium border border-[#CDBD82]/40 hover:border-[#D8B15A]/70 hover:bg-[#005F56]',
+  ghost: 'text-[#6C7568] hover:text-[#005F56] hover:bg-[#005F56]/5',
   danger: 'text-red-400 border border-red-400/20 hover:bg-red-400/10',
-  outline: 'text-white border border-[#2A2A2A] hover:border-[#FF6B00]/40 hover:bg-[#FF6B00]/5',
-  default: 'text-white border border-[#2A2A2A] hover:border-[#FF6B00]/40 hover:bg-[#FF6B00]/5',
+  outline: 'text-[#005F56] border border-[#CDBD82] hover:border-[#005F56]/50 hover:bg-[#005F56]/5',
+  default: 'text-[#005F56] border border-[#CDBD82] hover:border-[#005F56]/50 hover:bg-[#005F56]/5',
 };
 
 const sizes = {
@@ -33,8 +33,8 @@ export function Button({ variant = 'secondary', size = 'md', loading, icon, chil
         'inline-flex items-center justify-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
         variants[variant],
         sizes[size],
-        variant === 'primary' && 'bg-[#FF6B00] hover:bg-[#FF8C00] active:bg-[#E55A00]',
-        variant === 'secondary' && 'bg-[#1F1F1F]',
+        variant === 'primary' && 'bg-[#C89B3C] hover:bg-[#D8B15A] active:bg-[#B88F18]',
+        variant === 'secondary' && 'bg-[#005F56] hover:text-white',
         className
       )}
       {...props}

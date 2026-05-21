@@ -2,14 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --arspl-green: #005F56;
+  --arspl-green-light: #0B8B7D;
+  --arspl-gold: #C89B3C;
+  --arspl-gold-light: #D8B15A;
+  --arspl-bg: #F7F5EF;
+  --arspl-surface: #FFFFFF;
+  --arspl-text: #12332D;
+  --primary: var(--arspl-green);
+  --secondary: var(--arspl-gold);
+  --accent: var(--arspl-gold-light);
+  --success: var(--arspl-green-light);
+  --warning: var(--arspl-gold);
+  --surface: var(--arspl-bg);
+  --surface-muted: #EFE8D4;
+  --card: var(--arspl-surface);
+  --sidebar: #063B36;
+  --sidebar-soft: #005F56;
+  --text: var(--arspl-text);
+  --text-muted: #6C7568;
+  --border: #DDD4B9;
+  --border-strong: #CDBD82;
+  --danger: #B42318;
+  --info: #2F6B9A;
+  --shadow-enterprise: 0 18px 45px rgba(0, 95, 86, 0.08);
+  --shadow-command: 0 24px 70px rgba(0, 95, 86, 0.14);
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   font-family: 'Roboto', sans-serif;
-  background: #0D0D0D;
-  color: #fff;
+  background: var(--surface);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -26,11 +54,11 @@ h1, h2, h3, h4, h5, h6 {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2A2A2A;
+  background: rgba(11, 79, 58, 0.28);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3A3A3A;
+  background: rgba(11, 79, 58, 0.48);
 }
 
 @keyframes slide-in {
@@ -57,29 +85,52 @@ h1, h2, h3, h4, h5, h6 {
   animation: fade-in 0.3s ease-out;
 }
 
-/* Glass card effect */
 .glass {
-  background: rgba(26, 26, 26, 0.8);
+  background: rgba(255, 255, 255, 0.76);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(214, 182, 90, 0.25);
 }
 
-/* Neon glow */
 .glow-orange {
-  box-shadow: 0 0 20px rgba(255, 107, 0, 0.15);
+  box-shadow: 0 0 20px rgba(201, 162, 39, 0.16);
 }
 
 .glow-green {
-  box-shadow: 0 0 20px rgba(0, 212, 170, 0.15);
+  box-shadow: 0 0 20px rgba(11, 79, 58, 0.16);
 }
 
-/* Input option dark background */
 option {
-  background: #1A1A1A;
-  color: #fff;
+  background: var(--card);
+  color: var(--text);
 }
 
-/* Line clamp utilities */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+table {
+  border-color: var(--border);
+}
+
+.arspl-logo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.arspl-command-card {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(205, 189, 130, 0.58);
+  box-shadow: var(--shadow-enterprise);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -94,13 +145,12 @@ option {
   overflow: hidden;
 }
 
-/* NIRMAN AI Footer */
 .nirman-footer {
   font-size: 0.7rem;
-  color: #606060;
+  color: var(--text-muted);
   text-align: center;
   padding: 1.5rem 1rem;
-  border-top: 1px solid #1F1F2E;
+  border-top: 1px solid var(--border);
   margin-top: auto;
   line-height: 1.5;
 }
@@ -110,7 +160,7 @@ option {
 }
 
 .nirman-footer-brand {
-  color: #FF6B00;
+  color: var(--primary);
   font-weight: 600;
   display: block;
   margin-bottom: 0.5rem;

@@ -91,6 +91,39 @@ export interface WorkspaceSummary {
   googleConnection: WorkspaceGoogleConnection | null;
 }
 
+export const EMPTY_WORKSPACE_SUMMARY: WorkspaceSummary = {
+  workspace: null,
+  members: [],
+  projects: [],
+  licenses: [],
+  recommendations: [],
+  googleConnection: null,
+};
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+type WorkspaceSummaryInput = {
+  workspace?: ExecutiveEngineerWorkspace | null;
+  members?: WorkspaceUser[] | null;
+  projects?: ProjectAssignment[] | null;
+  licenses?: ContractorLicense[] | null;
+  recommendations?: ContractorRecommendation[] | null;
+  googleConnection?: WorkspaceGoogleConnection | null;
+};
+
+export function normalizeWorkspaceSummary(summary?: WorkspaceSummaryInput | null): WorkspaceSummary {
+  return {
+    workspace: summary?.workspace ?? null,
+    members: asArray(summary?.members),
+    projects: asArray(summary?.projects),
+    licenses: asArray(summary?.licenses),
+    recommendations: asArray(summary?.recommendations),
+    googleConnection: summary?.googleConnection ?? null,
+  };
+}
+
 export const CONTRACTOR_LICENSE_PRICE = 270;
 export const CONTRACTOR_MIN_BILLABLE_USERS = 10;
 
@@ -106,62 +139,58 @@ export function calculateContractorMonthlyAmount(actualUsers: number) {
 }
 
 export function getDriveProjectFolderPath(eeNameOrId: string, projectName: string) {
-  const cleanEe = eeNameOrId.trim().replace(/[\\/]+/g, '-').replace(/\s+/g, '_') || 'UnknownEE';
-  const cleanProject = projectName.trim().replace(/[\\/]+/g, '-').replace(/\s+/g, '_') || 'Project';
+  const cleanEe = String(eeNameOrId || '').trim().replace(/[\\/]+/g, '-').replace(/\s+/g, '_') || 'UnknownEE';
+  const cleanProject = String(projectName || '').trim().replace(/[\\/]+/g, '-').replace(/\s+/g, '_') || 'Project';
   return `NIRMAN/ExecutiveEngineer_${cleanEe}/Projects/${cleanProject}`;
 }
 
 export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
-  const { data: memberships, error: memberError } = await supabase
-    .from('workspace_users')
-    .select('*')
-    .eq('active', true)
-    .limit(1);
-  if (memberError) throw memberError;
+  try {
+    const { data: memberships, error: memberError } = await supabase
+      .from('workspace_users')
+      .select('*')
+      .eq('active', true)
+      .limit(1);
+    if (memberError) throw memberError;
 
-  const workspaceId = (memberships?.[0] as any)?.workspace_id as string | undefined;
-  if (!workspaceId) {
-    return {
-      workspace: null,
-      members: [],
-      projects: [],
-      licenses: [],
-      recommendations: [],
-      googleConnection: null,
-    };
+    const workspaceId = (memberships?.[0] as any)?.workspace_id as string | undefined;
+    if (!workspaceId) return EMPTY_WORKSPACE_SUMMARY;
+
+    const [
+      workspaceResult,
+      membersResult,
+      projectsResult,
+      licensesResult,
+      recommendationsResult,
+      googleResult,
+    ] = await Promise.all([
+      supabase.from('executive_engineer_workspaces').select('*').eq('id', workspaceId).maybeSingle(),
+      supabase.from('workspace_users').select('*').eq('workspace_id', workspaceId).eq('active', true),
+      supabase.from('project_assignments').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
+      supabase.from('contractor_licenses').select('*').eq('workspace_id', workspaceId).order('updated_at', { ascending: false }),
+      supabase.from('contractor_recommendations').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
+      supabase.from('workspace_google_connections').select('*').eq('workspace_id', workspaceId).maybeSingle(),
+    ]);
+
+    if (workspaceResult.error) throw workspaceResult.error;
+    if (membersResult.error) throw membersResult.error;
+    if (projectsResult.error) throw projectsResult.error;
+    if (licensesResult.error) throw licensesResult.error;
+    if (recommendationsResult.error) throw recommendationsResult.error;
+    if (googleResult.error) throw googleResult.error;
+
+    return normalizeWorkspaceSummary({
+      workspace: workspaceResult.data as ExecutiveEngineerWorkspace | null,
+      members: membersResult.data as WorkspaceUser[] | null,
+      projects: projectsResult.data as ProjectAssignment[] | null,
+      licenses: licensesResult.data as ContractorLicense[] | null,
+      recommendations: recommendationsResult.data as ContractorRecommendation[] | null,
+      googleConnection: googleResult.data as WorkspaceGoogleConnection | null,
+    });
+  } catch (error) {
+    console.warn('[enterprise] workspace summary unavailable', error);
+    return EMPTY_WORKSPACE_SUMMARY;
   }
-
-  const [
-    workspaceResult,
-    membersResult,
-    projectsResult,
-    licensesResult,
-    recommendationsResult,
-    googleResult,
-  ] = await Promise.all([
-    supabase.from('executive_engineer_workspaces').select('*').eq('id', workspaceId).maybeSingle(),
-    supabase.from('workspace_users').select('*').eq('workspace_id', workspaceId).eq('active', true),
-    supabase.from('project_assignments').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
-    supabase.from('contractor_licenses').select('*').eq('workspace_id', workspaceId).order('updated_at', { ascending: false }),
-    supabase.from('contractor_recommendations').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
-    supabase.from('workspace_google_connections').select('*').eq('workspace_id', workspaceId).maybeSingle(),
-  ]);
-
-  if (workspaceResult.error) throw workspaceResult.error;
-  if (membersResult.error) throw membersResult.error;
-  if (projectsResult.error) throw projectsResult.error;
-  if (licensesResult.error) throw licensesResult.error;
-  if (recommendationsResult.error) throw recommendationsResult.error;
-  if (googleResult.error) throw googleResult.error;
-
-  return {
-    workspace: workspaceResult.data as ExecutiveEngineerWorkspace | null,
-    members: (membersResult.data || []) as WorkspaceUser[],
-    projects: (projectsResult.data || []) as ProjectAssignment[],
-    licenses: (licensesResult.data || []) as ContractorLicense[],
-    recommendations: (recommendationsResult.data || []) as ContractorRecommendation[],
-    googleConnection: googleResult.data as WorkspaceGoogleConnection | null,
-  };
 }
 
 export async function upsertWorkspaceGoogleConnection(workspaceId: string, values: Partial<WorkspaceGoogleConnection>) {

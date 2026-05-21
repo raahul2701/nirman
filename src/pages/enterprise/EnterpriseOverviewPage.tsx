@@ -3,10 +3,14 @@ import { Building2, FileText, Shield, Users, FolderOpen, AlertTriangle, Brain, M
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Card, StatCard } from '../../components/ui/Card';
-import { getMyWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { EMPTY_WORKSPACE_SUMMARY, getMyWorkspaceSummary, normalizeWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
 
 function roleLabel(role: string) {
-  return role.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return String(role || 'unknown').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function shortId(value: string | null | undefined, fallback = '-') {
+  return value ? String(value).slice(0, 8) : fallback;
 }
 
 export function EnterpriseOverviewPage() {
@@ -18,7 +22,7 @@ export function EnterpriseOverviewPage() {
     let cancelled = false;
     getMyWorkspaceSummary()
       .then((data) => {
-        if (!cancelled) setSummary(data);
+        if (!cancelled) setSummary(normalizeWorkspaceSummary(data));
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load hierarchy');
@@ -32,17 +36,20 @@ export function EnterpriseOverviewPage() {
   }, []);
 
   const stats = useMemo(() => {
-    const members = summary?.members || [];
-    const licenses = summary?.licenses || [];
+    const safeSummary = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY);
+    const members = safeSummary.members;
+    const licenses = safeSummary.licenses;
     return {
       ae: members.filter((member) => member.role === 'assistant_engineer').length,
       je: members.filter((member) => member.role === 'junior_engineer').length,
       contractors: members.filter((member) => member.role === 'contractor').length,
-      projects: summary?.projects.length || 0,
+      projects: safeSummary.projects.length,
       activeLicenses: licenses.filter((license) => license.license_status === 'active').length,
       monthlyRevenue: licenses.reduce((total, license) => total + Number(license.monthly_amount || 0), 0),
     };
   }, [summary]);
+
+  const safeSummary = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY);
 
   return (
     <AppLayout title="Business Hierarchy" subtitle="EE-owned workspace, free government access, paid contractor licences">
@@ -87,11 +94,11 @@ export function EnterpriseOverviewPage() {
               </div>
 
               <div className="space-y-3">
-                {(summary?.members || []).map((member) => (
+                {safeSummary.members.map((member) => (
                   <div key={member.id} className="flex items-center justify-between rounded-lg border border-[#2A2A2A] bg-[#111111] px-4 py-3">
                     <div>
                       <p className="text-white text-sm">{roleLabel(member.role)}</p>
-                      <p className="text-[#606060] text-xs">User {member.user_id.slice(0, 8)}{member.subdivision_name ? ` · ${member.subdivision_name}` : ''}</p>
+                      <p className="text-[#606060] text-xs">User {shortId(member.user_id)}{member.subdivision_name ? ` · ${member.subdivision_name}` : ''}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {member.free_lifetime && member.role !== 'contractor' && <Badge color="#22c55e">Free</Badge>}
@@ -100,6 +107,9 @@ export function EnterpriseOverviewPage() {
                     </div>
                   </div>
                 ))}
+                {!loading && safeSummary.members.length === 0 && (
+                  <p className="text-[#808080] text-sm">No hierarchy members found.</p>
+                )}
               </div>
             </Card>
 
@@ -112,16 +122,19 @@ export function EnterpriseOverviewPage() {
                 </div>
               </div>
               <div className="space-y-3">
-                {(summary?.projects || []).slice(0, 8).map((project, index) => {
+                {safeSummary.projects.slice(0, 8).map((project, index) => {
                   const risk = index % 3 === 0 ? 'high' : index % 3 === 1 ? 'medium' : 'normal';
                   const color = risk === 'high' ? '#ef4444' : risk === 'medium' ? '#F59E0B' : '#22c55e';
                   return (
                     <div key={project.id} className="flex items-center justify-between">
-                      <span className="text-[#D0D0D0] text-sm">Project {project.project_id.slice(0, 8)}</span>
+                      <span className="text-[#D0D0D0] text-sm">Project {shortId(project.project_id)}</span>
                       <Badge color={color}>{risk}</Badge>
                     </div>
                   );
                 })}
+                {!loading && safeSummary.projects.length === 0 && (
+                  <p className="text-[#808080] text-sm">No project risk rows found.</p>
+                )}
               </div>
             </Card>
           </div>
@@ -135,17 +148,20 @@ export function EnterpriseOverviewPage() {
               </div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {(summary?.projects || []).map((project) => (
+              {safeSummary.projects.map((project) => (
                 <div key={project.id} className="rounded-lg bg-[#111111] border border-[#2A2A2A] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-white text-sm">Project {project.project_id.slice(0, 8)}</p>
-                      <p className="text-[#606060] text-xs">Contractor {project.contractor_id?.slice(0, 8) || 'not assigned'}</p>
+                      <p className="text-white text-sm">Project {shortId(project.project_id)}</p>
+                      <p className="text-[#606060] text-xs">Contractor {shortId(project.contractor_id, 'not assigned')}</p>
                     </div>
-                    <StatusBadge status={project.access_status} />
+                    <StatusBadge status={project.access_status || 'unknown'} />
                   </div>
                 </div>
               ))}
+              {!loading && safeSummary.projects.length === 0 && (
+                <p className="text-[#808080] text-sm">No project isolation rows found.</p>
+              )}
             </div>
           </Card>
         </>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Building2, LockKeyhole } from 'lucide-react';
 import { featureFlags } from '../../lib/featureFlags';
-import { getMyWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { getMyWorkspaceSummary, normalizeWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
 import { getPilotWorkspaceSummary } from '../../services/pilotSeedData';
 
 export function WorkspaceBadge() {
@@ -16,13 +16,13 @@ export function WorkspaceBadge() {
       .then((data) => {
         if (cancelled) return;
         if (data.workspace) {
-          setSummary(data);
+          setSummary(normalizeWorkspaceSummary(data));
           setSource('live');
         } else if (featureFlags.pilotMode) {
           setSummary(getPilotWorkspaceSummary());
           setSource('pilot');
         } else {
-          setSummary(data);
+          setSummary(normalizeWorkspaceSummary(data));
           setSource('pending');
         }
       })

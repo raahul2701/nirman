@@ -13,12 +13,12 @@ export function Card({ children, className, glow, onClick }: CardProps) {
     <div
       onClick={onClick}
       className={cn(
-        'rounded-2xl p-5 transition-all duration-200',
-        glow && 'hover:shadow-lg hover:shadow-[#FF6B00]/5',
+        'rounded-lg p-5 transition-all duration-200 shadow-enterprise',
+        glow && 'hover:shadow-command',
         onClick && 'cursor-pointer',
         className
       )}
-      style={{ background: '#1A1A1A', border: '1px solid #232323' }}
+      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
     >
       {children}
     </div>
@@ -44,15 +44,15 @@ export const StatCard = memo(({
     <Card glow>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[#606060] text-xs font-medium mb-2">{label}</p>
+          <p className="text-[#6C7568] text-xs font-medium mb-2">{label}</p>
           {loading ? (
-            <div className="h-7 w-16 rounded-lg bg-[#2A2A2A] animate-pulse" />
+            <div className="h-7 w-16 rounded-lg bg-[#EFE8D4] animate-pulse" />
           ) : (
-            <p className="text-white text-2xl font-bold">{value}</p>
+            <p className="text-[#12332D] text-2xl font-bold">{value}</p>
           )}
           {trend && <p className="text-xs mt-1.5" style={{ color: trend.startsWith('+') ? '#22c55e' : '#ef4444' }}>{trend}</p>}
         </div>
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${color}15`, border: `1px solid ${color}20` }}>
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
           <span style={{ color }}>{icon}</span>
         </div>
       </div>

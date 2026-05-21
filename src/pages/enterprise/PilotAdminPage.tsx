@@ -27,11 +27,18 @@ export function PilotAdminPage() {
   const [demoStep, setDemoStep] = useState<DemoStep>('recommended');
   const [demoUsers, setDemoUsers] = useState(8);
 
+  const people = Array.isArray(pilotPeople) ? pilotPeople : [];
+  const projects = Array.isArray(pilotProjects) ? pilotProjects : [];
+  const licenses = Array.isArray(pilotLicenses) ? pilotLicenses : [];
+  const recommendations = Array.isArray(pilotRecommendations) ? pilotRecommendations : [];
+  const checklist = Array.isArray(pilotChecklistItems) ? pilotChecklistItems : [];
+  const primaryRecommendation = recommendations[0];
+
   const totals = useMemo(() => ({
-    monthlyAmount: pilotLicenses.reduce((total, license) => total + Number(license.monthly_amount || 0), 0),
-    actualUsers: pilotLicenses.reduce((total, license) => total + license.contractor_user_count, 0),
-    billableUsers: pilotLicenses.reduce((total, license) => total + license.billable_users, 0),
-  }), []);
+    monthlyAmount: licenses.reduce((total, license) => total + Number(license.monthly_amount || 0), 0),
+    actualUsers: licenses.reduce((total, license) => total + Number(license.contractor_user_count || 0), 0),
+    billableUsers: licenses.reduce((total, license) => total + Number(license.billable_users || 0), 0),
+  }), [licenses]);
 
   const demoBilling = calculateContractorMonthlyAmount(demoUsers);
   const completedChecks = Object.values(checkedItems).filter(Boolean).length;
@@ -43,8 +50,8 @@ export function PilotAdminPage() {
   return (
     <AppLayout title="Pilot Admin" subtitle="2-3 engineer pilot readiness, demo seed data, and manual verification">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Pilot Projects" value={pilotProjects.length} icon={<FolderTree size={18} />} color="#00D4AA" />
-        <StatCard label="Contractors" value={pilotLicenses.length} icon={<ShieldCheck size={18} />} color="#3B82F6" />
+        <StatCard label="Pilot Projects" value={projects.length} icon={<FolderTree size={18} />} color="#00D4AA" />
+        <StatCard label="Contractors" value={licenses.length} icon={<ShieldCheck size={18} />} color="#3B82F6" />
         <StatCard label="Billable Users" value={totals.billableUsers} icon={<IndianRupee size={18} />} color="#F59E0B" />
         <StatCard label="Monthly Billing" value={`₹${totals.monthlyAmount.toLocaleString('en-IN')}`} icon={<IndianRupee size={18} />} color="#FF6B00" />
       </div>
@@ -60,7 +67,7 @@ export function PilotAdminPage() {
           </div>
 
           <div className="space-y-3">
-            {pilotPeople.filter((person) => person.role !== 'Contractor').map((person) => (
+            {people.filter((person) => person.role !== 'Contractor').map((person) => (
               <div key={person.id} className="rounded-lg border border-[#2A2A2A] bg-[#111111] px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -107,8 +114,8 @@ export function PilotAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {pilotLicenses.map((license) => {
-                const assigned = pilotProjects.filter((project) => project.contractorId === license.contractor_id);
+              {licenses.map((license) => {
+                const assigned = projects.filter((project) => project.contractorId === license.contractor_id);
                 return (
                   <tr key={license.id} className="border-b border-[#232323] text-[#D0D0D0]">
                     <td className="py-3 pr-4 text-white">{license.contractor_company_name}</td>
@@ -135,7 +142,7 @@ export function PilotAdminPage() {
             </div>
           </div>
           <div className="space-y-3">
-            {pilotProjects.map((project) => (
+            {projects.map((project) => (
               <div key={project.id} className="rounded-lg border border-[#2A2A2A] bg-[#111111] p-3">
                 <p className="text-white text-sm">{project.name}</p>
                 <p className="text-[#808080] text-xs mt-1 break-all">{project.driveFolderPath}</p>
@@ -154,11 +161,17 @@ export function PilotAdminPage() {
           </div>
 
           <div className="rounded-lg border border-[#2A2A2A] bg-[#111111] p-4 mb-4">
-            <p className="text-white text-sm">{pilotRecommendations[0].contractor_company_name}</p>
-            <div className="mt-2 flex items-center gap-2 text-[#808080] text-xs">
-              <Link size={12} />
-              <span>{pilotRecommendations[0].onboarding_token}</span>
-            </div>
+            {primaryRecommendation ? (
+              <>
+                <p className="text-white text-sm">{primaryRecommendation.contractor_company_name || primaryRecommendation.contractor_name}</p>
+                <div className="mt-2 flex items-center gap-2 text-[#808080] text-xs">
+                  <Link size={12} />
+                  <span>{primaryRecommendation.onboarding_token || 'No token generated'}</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-[#808080] text-sm">No pilot recommendation is available.</p>
+            )}
           </div>
 
           <label className="block text-xs text-[#808080] mb-2" htmlFor="demoContractorUsers">Demo contractor users</label>
@@ -197,11 +210,11 @@ export function PilotAdminPage() {
               <p className="text-[#606060] text-xs">Pilot operator can tick these during the engineer demo.</p>
             </div>
           </div>
-          <Badge color="#00D4AA">{completedChecks}/{pilotChecklistItems.length} checked</Badge>
+          <Badge color="#00D4AA">{completedChecks}/{checklist.length} checked</Badge>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {pilotChecklistItems.map((item) => (
+          {checklist.map((item) => (
             <label key={item.id} className="flex cursor-pointer gap-3 rounded-lg border border-[#2A2A2A] bg-[#111111] p-4">
               <input
                 type="checkbox"

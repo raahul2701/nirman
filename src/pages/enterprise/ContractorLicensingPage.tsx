@@ -3,7 +3,7 @@ import { AlertTriangle, Calendar, IndianRupee, ShieldCheck } from 'lucide-react'
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Card, StatCard } from '../../components/ui/Card';
-import { calculateContractorMonthlyAmount, getMyWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { EMPTY_WORKSPACE_SUMMARY, calculateContractorMonthlyAmount, getMyWorkspaceSummary, normalizeWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
 
 export function ContractorLicensingPage() {
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
@@ -15,7 +15,7 @@ export function ContractorLicensingPage() {
     let cancelled = false;
     getMyWorkspaceSummary()
       .then((data) => {
-        if (!cancelled) setSummary(data);
+        if (!cancelled) setSummary(normalizeWorkspaceSummary(data));
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load licences');
@@ -29,7 +29,7 @@ export function ContractorLicensingPage() {
   }, []);
 
   const totals = useMemo(() => {
-    const licenses = summary?.licenses || [];
+    const licenses = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY).licenses;
     return {
       actualUsers: licenses.reduce((total, license) => total + Number(license.contractor_user_count || 0), 0),
       billableUsers: licenses.reduce((total, license) => total + Number(license.billable_users || 0), 0),
@@ -39,6 +39,7 @@ export function ContractorLicensingPage() {
   }, [summary]);
 
   const demoBilling = calculateContractorMonthlyAmount(demoUsers);
+  const licenses = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY).licenses;
 
   return (
     <AppLayout title="Contractor Licensing" subtitle="Contractors pay. Government users remain free.">
@@ -81,17 +82,17 @@ export function ContractorLicensingPage() {
                 </tr>
               </thead>
               <tbody>
-                {(summary?.licenses || []).map((license) => (
+                {licenses.map((license) => (
                   <tr key={license.id} className="border-b border-[#232323] text-[#D0D0D0]">
-                    <td className="py-3 pr-4 text-white">{license.contractor_company_name}</td>
-                    <td className="py-3 pr-4">{license.contractor_user_count}</td>
-                    <td className="py-3 pr-4">{license.billable_users}</td>
-                    <td className="py-3 pr-4">₹{Number(license.monthly_amount).toLocaleString('en-IN')}</td>
-                    <td className="py-3 pr-4"><StatusBadge status={license.license_status} /></td>
+                    <td className="py-3 pr-4 text-white">{license.contractor_company_name || 'Unnamed contractor'}</td>
+                    <td className="py-3 pr-4">{Number(license.contractor_user_count || 0)}</td>
+                    <td className="py-3 pr-4">{Number(license.billable_users || 0)}</td>
+                    <td className="py-3 pr-4">₹{Number(license.monthly_amount || 0).toLocaleString('en-IN')}</td>
+                    <td className="py-3 pr-4"><StatusBadge status={license.license_status || 'unknown'} /></td>
                     <td className="py-3 pr-4">{license.expires_at ? new Date(license.expires_at).toLocaleDateString('en-IN') : 'Manual'}</td>
                   </tr>
                 ))}
-                {!loading && !summary?.licenses.length && (
+                {!loading && licenses.length === 0 && (
                   <tr>
                     <td className="py-6 text-[#808080]" colSpan={6}>No contractor licences found for this workspace.</td>
                   </tr>

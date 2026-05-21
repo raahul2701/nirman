@@ -5,7 +5,7 @@ import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/useAuth';
-import { getMyWorkspaceSummary, recommendContractor, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { EMPTY_WORKSPACE_SUMMARY, getMyWorkspaceSummary, normalizeWorkspaceSummary, recommendContractor, WorkspaceSummary } from '../../services/businessHierarchyService';
 
 export function ContractorOnboardingPage() {
   const { user } = useAuth();
@@ -20,7 +20,7 @@ export function ContractorOnboardingPage() {
 
   async function load() {
     const data = await getMyWorkspaceSummary();
-    setSummary(data);
+    setSummary(normalizeWorkspaceSummary(data));
   }
 
   useEffect(() => {
@@ -53,6 +53,9 @@ export function ContractorOnboardingPage() {
       setSaving(false);
     }
   }
+
+  const safeSummary = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY);
+  const recommendations = safeSummary.recommendations;
 
   return (
     <AppLayout title="Contractor Onboarding" subtitle="EE recommends, contractor registers, contractor pays">
@@ -100,7 +103,7 @@ export function ContractorOnboardingPage() {
               <label className="block text-xs text-[#808080] mb-2" htmlFor="contractorPhone">Phone</label>
               <input id="contractorPhone" value={contractorPhone} onChange={(event) => setContractorPhone(event.target.value)} className="w-full rounded-lg border border-[#2A2A2A] bg-[#111111] px-3 py-2 text-white outline-none focus:border-[#FF6B00]" />
             </div>
-            <Button type="submit" variant="primary" loading={saving} icon={<Send size={14} />}>Create Recommendation</Button>
+            <Button type="submit" variant="primary" loading={saving} disabled={!safeSummary.workspace || !user} icon={<Send size={14} />}>Create Recommendation</Button>
           </form>
         </Card>
 
@@ -113,7 +116,7 @@ export function ContractorOnboardingPage() {
             <Badge color="#22c55e">EE never billed</Badge>
           </div>
           <div className="space-y-3">
-            {(summary?.recommendations || []).map((recommendation) => (
+            {recommendations.map((recommendation) => (
               <div key={recommendation.id} className="rounded-lg border border-[#2A2A2A] bg-[#111111] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -124,11 +127,11 @@ export function ContractorOnboardingPage() {
                       <span>{recommendation.onboarding_token}</span>
                     </div>
                   </div>
-                  <StatusBadge status={recommendation.status} />
+                  <StatusBadge status={recommendation.status || 'unknown'} />
                 </div>
               </div>
             ))}
-            {!summary?.recommendations.length && (
+            {recommendations.length === 0 && (
               <p className="text-[#808080] text-sm">No contractor recommendations found.</p>
             )}
           </div>

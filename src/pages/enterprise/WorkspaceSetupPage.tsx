@@ -4,7 +4,7 @@ import { AppLayout } from '../../components/layout/AppLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { getDriveProjectFolderPath, getMyWorkspaceSummary, upsertWorkspaceGoogleConnection, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { EMPTY_WORKSPACE_SUMMARY, getDriveProjectFolderPath, getMyWorkspaceSummary, normalizeWorkspaceSummary, upsertWorkspaceGoogleConnection, WorkspaceSummary } from '../../services/businessHierarchyService';
 
 export function WorkspaceSetupPage() {
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
@@ -16,9 +16,10 @@ export function WorkspaceSetupPage() {
 
   async function load() {
     const data = await getMyWorkspaceSummary();
-    setSummary(data);
-    setGoogleProjectId(data.googleConnection?.google_project_id || '');
-    setDriveRootFolderId(data.googleConnection?.drive_root_folder_id || data.workspace?.drive_root_folder_id || '');
+    const safeData = normalizeWorkspaceSummary(data);
+    setSummary(safeData);
+    setGoogleProjectId(safeData.googleConnection?.google_project_id || '');
+    setDriveRootFolderId(safeData.googleConnection?.drive_root_folder_id || safeData.workspace?.drive_root_folder_id || '');
   }
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export function WorkspaceSetupPage() {
   }
 
   const samplePath = getDriveProjectFolderPath(summary?.workspace?.workspace_name || 'EE_ID', 'Sample_Project');
+  const safeSummary = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY);
 
   return (
     <AppLayout title="Workspace Setup" subtitle="Per-EE Google ownership and project namespace">
@@ -77,6 +79,11 @@ export function WorkspaceSetupPage() {
               <p className="text-[#606060] text-xs">Pilot supports manual Drive folder and Gemini/Maps project references per EE workspace.</p>
             </div>
           </div>
+          {!safeSummary.workspace && (
+            <p className="mb-4 rounded-lg border border-[#CDBD82] bg-[#C89B3C]/10 px-3 py-2 text-sm text-[#6B5A1E]">
+              No workspace is assigned yet. Setup fields can be reviewed, but saving is disabled until an EE workspace exists.
+            </p>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div>
@@ -102,7 +109,7 @@ export function WorkspaceSetupPage() {
           </div>
 
           <div className="mt-5 flex items-center gap-3">
-            <Button variant="primary" loading={saving} onClick={saveConnection}>Save Setup</Button>
+            <Button variant="primary" loading={saving} disabled={!safeSummary.workspace} onClick={saveConnection}>Save Setup</Button>
             <Badge color="#F59E0B">OAuth for writes remains disabled until provider is configured</Badge>
           </div>
         </Card>

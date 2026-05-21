@@ -10,6 +10,7 @@ import {
 } from '../../lib/icons';
 import { useAuth } from '../../contexts/useAuth';
 import { featureFlags } from '../../lib/featureFlags';
+import { BRANDING } from '../../constants/branding';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -83,17 +84,17 @@ function SidebarComponent() {
       className={`fixed left-0 top-0 h-screen z-40 flex flex-col transition-all duration-300 ${
         collapsed ? 'w-16' : 'w-60'
       }`}
-      style={{ background: 'linear-gradient(180deg, #111118 0%, #0D0D0D 100%)', borderRight: '1px solid #1F1F2E' }}
+      style={{ background: 'linear-gradient(180deg, var(--sidebar) 0%, #041D17 100%)', borderRight: '1px solid rgba(216,177,90,0.24)' }}
     >
       {/* Logo */}
-      <div className={`flex items-center h-16 px-4 border-b border-[#1F1F2E] ${collapsed ? 'justify-center' : 'gap-3'}`}>
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #FF6B00, #FF8C00)' }}>
-          <HardHat size={16} className="text-white" />
+      <div className={`flex items-center h-16 px-4 border-b border-[#D8B15A]/20 ${collapsed ? 'justify-center' : 'gap-3'}`}>
+        <div className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-white p-1" style={{ border: '1px solid rgba(216,177,90,0.5)' }}>
+          <img src={BRANDING.LOGO_MARK_PATH} alt="ARSPL" className="h-full w-full object-contain" />
         </div>
         {!collapsed && (
           <div>
             <p className="text-white font-black text-sm tracking-wide">NIRMAN AI</p>
-            <p className="text-[8px] tracking-[0.15em] font-semibold text-white/70">by ARSPL</p>
+            <p className="text-[8px] tracking-[0.15em] font-semibold text-[#D8B15A]">by ARSPL</p>
           </div>
         )}
       </div>
@@ -107,8 +108,8 @@ function SidebarComponent() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
                 isActive
-                  ? 'bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/20'
-                  : 'text-[#808080] hover:text-white hover:bg-white/5'
+                  ? 'bg-[#C89B3C]/15 text-[#F6D878] border border-[#C89B3C]/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/7'
               } ${collapsed ? 'justify-center px-2' : ''}`
             }
             title={collapsed ? label : undefined}
@@ -121,11 +122,11 @@ function SidebarComponent() {
         {/* GovTrack Pro Section */}
         {!collapsed && (
           <div className="mt-4 mb-2 mx-4 flex items-center gap-1.5">
-            <Landmark size={10} style={{ color: '#00D4AA' }} />
-            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#00D4AA' }}>GOVTRACK PRO</span>
+            <Landmark size={10} style={{ color: '#D8B15A' }} />
+            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#D8B15A' }}>GOVTRACK PRO</span>
           </div>
         )}
-        {collapsed && <div className="my-2 mx-2 h-px bg-[#1F1F2E]" />}
+        {collapsed && <div className="my-2 mx-2 h-px bg-[#D8B15A]/20" />}
         {govTrackItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -133,8 +134,8 @@ function SidebarComponent() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
                 isActive
-                  ? 'bg-[#00D4AA]/10 text-[#00D4AA] border border-[#00D4AA]/20'
-                  : 'text-[#808080] hover:text-white hover:bg-white/5'
+                  ? 'bg-[#D8B15A]/14 text-[#F6D878] border border-[#D8B15A]/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/7'
               } ${collapsed ? 'justify-center px-2' : ''}`
             }
             title={collapsed ? label : undefined}
@@ -147,11 +148,11 @@ function SidebarComponent() {
         {/* Advanced Features Section */}
         {!collapsed && (
           <div className="mt-4 mb-2 mx-4 flex items-center gap-1.5">
-            <Zap size={10} style={{ color: '#FF6B00' }} />
-            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#FF6B00' }}>ADVANCED FEATURES</span>
+            <Zap size={10} style={{ color: '#D8B15A' }} />
+            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#D8B15A' }}>ADVANCED FEATURES</span>
           </div>
         )}
-        {collapsed && <div className="my-2 mx-2 h-px bg-[#1F1F2E]" />}
+        {collapsed && <div className="my-2 mx-2 h-px bg-[#D8B15A]/20" />}
         {advancedItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -159,8 +160,8 @@ function SidebarComponent() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
                 isActive
-                  ? 'bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/20'
-                  : 'text-[#808080] hover:text-white hover:bg-white/5'
+                  ? 'bg-[#C89B3C]/15 text-[#F6D878] border border-[#C89B3C]/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/7'
               } ${collapsed ? 'justify-center px-2' : ''}`
             }
             title={collapsed ? label : undefined}
@@ -172,8 +173,8 @@ function SidebarComponent() {
 
         {!collapsed && (
           <div className="mt-4 mb-2 mx-4 flex items-center gap-1.5">
-            <HardHat size={10} style={{ color: '#FF6B00' }} />
-            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#FF6B00' }}>FIELD OPS</span>
+            <HardHat size={10} style={{ color: '#D8B15A' }} />
+            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#D8B15A' }}>FIELD OPS</span>
           </div>
         )}
         {contractorItems.map(({ to, icon: Icon, label }) => (
@@ -183,8 +184,8 @@ function SidebarComponent() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
                 isActive
-                  ? 'bg-[#FF6B00]/15 text-[#FF6B00] border border-[#FF6B00]/20'
-                  : 'text-[#808080] hover:text-white hover:bg-white/5'
+                  ? 'bg-[#C89B3C]/15 text-[#F6D878] border border-[#C89B3C]/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/7'
               } ${collapsed ? 'justify-center px-2' : ''}`
             }
             title={collapsed ? label : undefined}
@@ -196,11 +197,11 @@ function SidebarComponent() {
 
         {enterpriseItems.length > 0 && !collapsed && (
           <div className="mt-4 mb-2 mx-4 flex items-center gap-1.5">
-            <Landmark size={10} style={{ color: '#00D4AA' }} />
-            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#00D4AA' }}>ENTERPRISE</span>
+            <Landmark size={10} style={{ color: '#D8B15A' }} />
+            <span className="text-[9px] tracking-[0.15em] font-bold" style={{ color: '#D8B15A' }}>ENTERPRISE</span>
           </div>
         )}
-        {enterpriseItems.length > 0 && collapsed && <div className="my-2 mx-2 h-px bg-[#1F1F2E]" />}
+        {enterpriseItems.length > 0 && collapsed && <div className="my-2 mx-2 h-px bg-[#D8B15A]/20" />}
         {enterpriseItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -208,8 +209,8 @@ function SidebarComponent() {
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
                 isActive
-                  ? 'bg-[#00D4AA]/10 text-[#00D4AA] border border-[#00D4AA]/20'
-                  : 'text-[#808080] hover:text-white hover:bg-white/5'
+                  ? 'bg-[#D8B15A]/14 text-[#F6D878] border border-[#D8B15A]/30'
+                  : 'text-white/60 hover:text-white hover:bg-white/7'
               } ${collapsed ? 'justify-center px-2' : ''}`
             }
             title={collapsed ? label : undefined}
@@ -221,28 +222,28 @@ function SidebarComponent() {
       </nav>
 
       {/* User + Collapse */}
-      <div className="border-t border-[#1F1F2E] p-3">
+      <div className="border-t border-[#D8B15A]/20 p-3">
         {!collapsed && (
           <div className="flex items-center gap-2 mb-3 px-1">
-            <div className="w-7 h-7 rounded-full bg-[#FF6B00]/20 flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-[#C89B3C]/20 flex items-center justify-center flex-shrink-0">
               {profile?.avatar_url ? (
                 <img src={profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
               ) : (
-                <span className="text-[#FF6B00] text-xs font-bold">
+                <span className="text-[#F6D878] text-xs font-bold">
                   {profile?.full_name?.charAt(0) || 'U'}
                 </span>
               )}
             </div>
             <div className="min-w-0">
               <p className="text-white text-xs font-medium truncate">{profile?.full_name || 'User'}</p>
-              <p className="text-[#808080] text-[10px] truncate capitalize">{profile?.role?.replace('_', ' ')}</p>
+              <p className="text-white/55 text-[10px] truncate capitalize">{profile?.role?.replace('_', ' ')}</p>
             </div>
           </div>
         )}
         <div className="flex items-center gap-1">
           <button
             onClick={handleSignOut}
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[#808080] hover:text-red-400 hover:bg-red-400/10 transition-all text-sm ${collapsed ? 'justify-center w-full' : 'flex-1'}`}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-white/60 hover:text-red-300 hover:bg-red-400/10 transition-all text-sm ${collapsed ? 'justify-center w-full' : 'flex-1'}`}
             title="Sign out"
           >
             <LogOut size={15} />
@@ -250,7 +251,7 @@ function SidebarComponent() {
           </button>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-2 rounded-lg text-[#808080] hover:text-white hover:bg-white/5 transition-all"
+            className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/7 transition-all"
           >
             {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
           </button>
@@ -260,9 +261,9 @@ function SidebarComponent() {
       {/* AI badge */}
       {!collapsed && (
         <div className="px-3 pb-3">
-          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.15)' }}>
-            <Zap size={10} style={{ color: '#00D4AA' }} />
-            <span className="text-[9px] font-medium" style={{ color: '#00D4AA' }}>Building India</span>
+          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(200,155,60,0.12)', border: '1px solid rgba(216,177,90,0.24)' }}>
+            <Zap size={10} style={{ color: '#D8B15A' }} />
+            <span className="text-[9px] font-medium" style={{ color: '#F6D878' }}>ARSPL Command</span>
           </div>
         </div>
       )}
