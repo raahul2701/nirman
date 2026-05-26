@@ -22,6 +22,7 @@ const navItems = [
   { to: '/inventory', icon: Package, label: 'Inventory' },
   { to: '/projects', icon: FolderOpen, label: 'Projects' },
   { to: '/reports', icon: BarChart2, label: 'Reports' },
+  { to: '/about/nirman-ai', icon: Landmark, label: 'About NIRMAN AI' },
   { to: '/help/user-manual', icon: FileText, label: 'Help / User Manual' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];

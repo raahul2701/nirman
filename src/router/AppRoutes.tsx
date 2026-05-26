@@ -54,6 +54,7 @@ const AuditLogsPage = lazyWithRetry(() => import('../pages/admin/AuditLogsPage')
 const ActivityLogsPage = lazyWithRetry(() => import('../pages/admin/ActivityLogsPage').then((mod) => ({ default: mod.ActivityLogsPage })));
 const OperationsCenterPage = lazyWithRetry(() => import('../pages/OperationsCenterPage').then((mod) => ({ default: mod.OperationsCenterPage })));
 const UserManualPage = lazyWithRetry(() => import('../pages/help/UserManualPage').then((mod) => ({ default: mod.UserManualPage })));
+const NirmanAiValuePage = lazyWithRetry(() => import('../pages/about/NirmanAiValuePage').then((mod) => ({ default: mod.NirmanAiValuePage })));
 const EnterpriseOverviewPage = lazyWithRetry(() => import('../pages/enterprise/EnterpriseOverviewPage').then((mod) => ({ default: mod.EnterpriseOverviewPage })));
 const WorkspaceSetupPage = lazyWithRetry(() => import('../pages/enterprise/WorkspaceSetupPage').then((mod) => ({ default: mod.WorkspaceSetupPage })));
 const ContractorLicensingPage = lazyWithRetry(() => import('../pages/enterprise/ContractorLicensingPage').then((mod) => ({ default: mod.ContractorLicensingPage })));
@@ -174,6 +175,13 @@ const routes: RouteObject[] = [
     element: protectedTree,
     children: [
       { path: 'user-manual', element: <UserManualPage /> },
+    ],
+  },
+  {
+    path: 'about',
+    element: protectedTree,
+    children: [
+      { path: 'nirman-ai', element: <NirmanAiValuePage /> },
     ],
   },
   {
