@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
 import { logger } from '../lib/logger';
 import { AuthContext } from './authContextCore';
+import { logLoginSuccess, logLogout } from '../services/activityLogger';
 
 const SESSION_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const SESSION_REFRESH_LEAD = 60 * 1000; // refresh 1 minute before expiry
@@ -130,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (user?.id) {
         void logAudit('logout', undefined, user.id);
+        logLogout(user, profile?.email || user.email);
       }
       await supabase.auth.signOut();
       if (mountedRef.current) {
@@ -141,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       logger.error('Sign out error', { error });
     }
-  }, [logAudit, user]);
+  }, [logAudit, profile?.email, user]);
 
   const refreshSession = useCallback(async () => {
     const now = Date.now();
@@ -182,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         await supabase.from('audit_logs').insert({
           action: 'failed_login',
@@ -194,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error as Error };
       }
       void logAudit('login', { table_name: 'auth' });
+      logLoginSuccess(data.user, data.user?.email || email);
       updateActivity();
       return { error: null };
     } catch (error) {
@@ -267,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchProfile(initialSession.user.id);
           void trackDeviceSession(initialSession.user.id);
           void logAudit('session_init', { table_name: 'auth' }, initialSession.user.id);
+          logLoginSuccess(initialSession.user, initialSession.user.email);
           logger.info('Initial auth session loaded', { userId: initialSession.user.id });
         }
       } catch (error) {
@@ -296,6 +300,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await fetchProfile(nextSession.user.id);
         void trackDeviceSession(nextSession.user.id);
         void logAudit(event, { table_name: 'auth' }, nextSession.user.id);
+        if (event === 'SIGNED_IN') {
+          logLoginSuccess(nextSession.user, nextSession.user.email);
+        }
         logger.info(`Auth state changed: ${event}`, { userId: nextSession.user.id });
       } else {
         setProfile(null);

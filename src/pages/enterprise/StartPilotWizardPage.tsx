@@ -9,6 +9,7 @@ import { Select } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/useAuth';
 import { featureFlags } from '../../lib/featureFlags';
 import { supabase } from '../../lib/supabase';
+import { logAssignmentCreated, logPilotStarted } from '../../services/activityLogger';
 
 type WorkspaceRow = {
   id: string;
@@ -289,6 +290,22 @@ export function StartPilotWizardPage() {
         : await supabase.from('project_assignments').insert(payload as any).select().maybeSingle();
 
       if (result.error) throw result.error;
+      logPilotStarted(user, profile?.email || user?.email, {
+        assignment_id: (result.data as AssignmentRow | null)?.id || existingAssignment?.id || null,
+        project_id: selectedProject.id,
+        project_table: selectedProject.table,
+        workspace_id: selectedWorkspace.id,
+        access_status: status,
+        action: existingAssignment ? 'updated_assignment' : 'created_assignment',
+      });
+      logAssignmentCreated(user, profile?.email || user?.email, {
+        assignment_id: (result.data as AssignmentRow | null)?.id || existingAssignment?.id || null,
+        project_id: selectedProject.id,
+        project_table: selectedProject.table,
+        workspace_id: selectedWorkspace.id,
+        action: existingAssignment ? 'updated' : 'created',
+        access_status: status,
+      }, '/enterprise/start-pilot');
       setSavedAssignmentId((result.data as AssignmentRow | null)?.id || existingAssignment?.id || null);
       await loadData(selectedWorkspace.id);
       setStep(4);
@@ -476,6 +493,21 @@ export function StartPilotWizardPage() {
         if (assignmentInsert.error) throw new Error(`project_assignments insert failed: ${assignmentInsert.error.message}`);
         assignmentId = assignmentInsert.data?.id;
         results.push('Demo pilot assignment created.');
+        logPilotStarted(user, profile?.email || user.email, {
+          assignment_id: assignmentId || null,
+          project_id: project.id,
+          project_table: project.table,
+          workspace_id: workspace.id,
+          action: 'created_demo_data',
+        });
+        logAssignmentCreated(user, profile?.email || user.email, {
+          assignment_id: assignmentId || null,
+          project_id: project.id,
+          project_table: project.table,
+          workspace_id: workspace.id,
+          action: 'created_demo',
+          access_status: 'pilot',
+        }, '/enterprise/start-pilot');
       }
 
       results.push('Demo AE/JE/Contractor users are placeholders only. Invite real users before role-based team selection testing.');

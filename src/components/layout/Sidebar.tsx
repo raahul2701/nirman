@@ -58,6 +58,7 @@ const contractorItems = [
   { to: '/recovery/dashboard', icon: ClipboardCheck, label: 'Recovery' },
   { to: '/maintenance', icon: HardHat, label: 'Maintenance' },
   { to: '/admin/audit-logs', icon: Shield, label: 'Audit Logs' },
+  { to: '/admin/activity', icon: Activity, label: 'Activity Logs' },
 ];
 
 const enterpriseItems = [

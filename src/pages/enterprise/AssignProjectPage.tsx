@@ -6,6 +6,8 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Select } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
+import { logAssignmentCreated } from '../../services/activityLogger';
+import { useAuth } from '../../contexts/useAuth';
 
 type WorkspaceRow = {
   id: string;
@@ -93,6 +95,7 @@ function selectValue(value: string | null | undefined) {
 }
 
 export function AssignProjectPage() {
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([]);
@@ -330,6 +333,14 @@ export function AssignProjectPage() {
       if (result.error) throw result.error;
 
       setSuccess('Project assignment saved.');
+      logAssignmentCreated(user, profile?.email || user?.email, {
+        assignment_id: (result.data as AssignmentRow | null)?.id || targetId || null,
+        project_id: selectedProject.id,
+        project_table: selectedProject.table,
+        workspace_id: selectedWorkspace.id,
+        action: targetId ? 'updated' : 'created',
+        access_status: status,
+      }, '/enterprise/assign-project');
       setEditingId(null);
       await loadData(selectedWorkspace.id);
     } catch (err) {

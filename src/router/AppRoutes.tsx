@@ -51,6 +51,7 @@ const DepartmentFollowups = lazyWithRetry(() => import('../pages/recovery/Depart
 const BreakdownReports = lazyWithRetry(() => import('../pages/maintenance/BreakdownReports').then((mod) => ({ default: mod.BreakdownReports })));
 const AdminSystemPage = lazyWithRetry(() => import('../pages/AdminSystemPage').then((mod) => ({ default: mod.AdminSystemPage })));
 const AuditLogsPage = lazyWithRetry(() => import('../pages/admin/AuditLogsPage').then((mod) => ({ default: mod.AuditLogsPage })));
+const ActivityLogsPage = lazyWithRetry(() => import('../pages/admin/ActivityLogsPage').then((mod) => ({ default: mod.ActivityLogsPage })));
 const OperationsCenterPage = lazyWithRetry(() => import('../pages/OperationsCenterPage').then((mod) => ({ default: mod.OperationsCenterPage })));
 const EnterpriseOverviewPage = lazyWithRetry(() => import('../pages/enterprise/EnterpriseOverviewPage').then((mod) => ({ default: mod.EnterpriseOverviewPage })));
 const WorkspaceSetupPage = lazyWithRetry(() => import('../pages/enterprise/WorkspaceSetupPage').then((mod) => ({ default: mod.WorkspaceSetupPage })));
@@ -163,6 +164,7 @@ const routes: RouteObject[] = [
     element: protectedTree,
     children: [
       { path: 'audit-logs', element: <AuditLogsPage /> },
+      { path: 'activity', element: <ActivityLogsPage /> },
       { path: 'system', element: <AdminSystemPage /> },
     ],
   },

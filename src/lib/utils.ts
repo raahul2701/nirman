@@ -47,6 +47,11 @@ export const STATUS_COLORS: Record<string, string> = {
   locked: '#808080',
   completed: '#00D4AA',
   archived: '#606060',
+  login_success: '#22c55e',
+  page_visit: '#3B82F6',
+  logout: '#808080',
+  pilot_started: '#F59E0B',
+  assignment_created: '#00D4AA',
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {

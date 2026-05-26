@@ -6,6 +6,7 @@ import { ToastProvider } from './components/ui/Toast';
 import { LoadingFallback } from './components/ui/LoadingFallback';
 import { AppRoutes } from './router/AppRoutes';
 import { initializeDataServices } from './services/data/dataInitializer';
+import { ActivityRouteTracker } from './components/ActivityRouteTracker';
 
 // Wrapper to initialize data services
 function AppContent() {
@@ -19,6 +20,7 @@ function AppContent() {
 
   return (
     <Suspense fallback={<LoadingFallback />}>
+      <ActivityRouteTracker />
       <AppRoutes />
     </Suspense>
   );
