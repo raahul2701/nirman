@@ -1,5 +1,5 @@
 import { useEffect, useState, ReactNode, useCallback, useMemo, useRef } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { AuthChangeEvent, User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
 import { logger } from '../lib/logger';
@@ -11,6 +11,23 @@ const SESSION_REFRESH_LEAD = 60 * 1000; // refresh 1 minute before expiry
 const ACTIVITY_THROTTLE_MS = 1000;
 const REFRESH_FAILURE_COOLDOWN = 30 * 1000;
 const DEVICE_SESSION_KEY = 'nirman-device-id';
+type AuditLogInsert = {
+  user_id?: string;
+  action: string;
+  ip_address: string | null;
+  user_agent: string;
+  table_name?: string;
+  record_id?: string;
+  old_values?: Record<string, unknown>;
+  new_values?: Record<string, unknown>;
+};
+
+type DeviceSessionUpsert = {
+  user_id: string;
+  device_id: string;
+  user_agent: string;
+  last_seen_at: string;
+};
 
 function areSessionsEqual(a: Session | null, b: Session | null) {
   if (a === b) return true;
@@ -102,13 +119,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auditUserId) return;
 
     try {
-      await supabase.from('audit_logs').insert({
+      const auditLog: AuditLogInsert = {
         user_id: auditUserId,
         action,
         ip_address: null,
         user_agent: navigator.userAgent,
         ...details,
-      } as any);
+      };
+      await supabase.from('audit_logs').insert(auditLog);
     } catch (error) {
       logger.error('Failed to log audit event', { error, action, userId: auditUserId });
     }
@@ -116,12 +134,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const trackDeviceSession = useCallback(async (nextUserId: string) => {
     try {
-      await supabase.from('device_sessions').upsert({
+      const deviceSession: DeviceSessionUpsert = {
         user_id: nextUserId,
         device_id: getDeviceId(),
         user_agent: navigator.userAgent,
         last_seen_at: new Date().toISOString(),
-      } as any, { onConflict: 'user_id,device_id' });
+      };
+      await supabase.from('device_sessions').upsert(deviceSession, { onConflict: 'user_id,device_id' });
     } catch (error) {
       logger.warn('Failed to update device session', { error, userId: nextUserId });
     }
@@ -284,7 +303,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, nextSession: any) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, nextSession: Session | null) => {
       if (!mountedRef.current || cancelled) return;
 
       const isSameSession = areSessionsEqual(nextSession, currentSessionRef.current);

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Package, Plus, X, Search, AlertTriangle, TrendingDown,
-  TrendingUp, ArrowUp, ArrowDown, Filter
+  Package, Plus, X, Search, AlertTriangle,
+  ArrowUp, ArrowDown
 } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
@@ -35,6 +35,7 @@ const categoryColors: Record<string, string> = {
 
 export function InventoryPage() {
   const { user } = useAuth();
+  const userId = user?.id;
   const toast = useToast();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,21 +48,23 @@ export function InventoryPage() {
   const [txNotes, setTxNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (user) loadMaterials();
-  }, [user]);
-
-  async function loadMaterials() {
-    const { data } = await supabase.from('materials').select('*').eq('owner_id', user!.id).order('name');
+  const loadMaterials = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase.from('materials').select('*').eq('owner_id', userId).order('name');
     if (data) setMaterials(data as Material[]);
     setLoading(false);
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) loadMaterials();
+  }, [loadMaterials, userId]);
 
   async function addMaterial() {
+    if (!userId) return;
     if (!form.name) { toast('Material name required', 'warning'); return; }
     setSubmitting(true);
     const { data, error } = await supabase.from('materials').insert({
-      owner_id: user!.id,
+      owner_id: userId,
       ...form,
       current_qty: parseFloat(form.current_qty) || 0,
       threshold_qty: parseFloat(form.threshold_qty) || 0,
@@ -76,6 +79,7 @@ export function InventoryPage() {
   }
 
   async function doTransaction() {
+    if (!userId) return;
     if (!showTransaction || !txQty) { toast('Enter quantity', 'warning'); return; }
     const { material, type } = showTransaction;
     const qty = parseFloat(txQty);
@@ -86,10 +90,10 @@ export function InventoryPage() {
 
     await supabase.from('stock_transactions').insert({
       material_id: material.id,
-      owner_id: user!.id,
+      owner_id: userId,
       type,
       quantity: qty,
-      done_by: user!.id,
+      done_by: userId,
       notes: txNotes,
     });
     await supabase.from('materials').update({ current_qty: newQty, updated_at: new Date().toISOString() }).eq('id', material.id);

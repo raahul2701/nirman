@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Brain, Plus, X, Zap, FileText, Download, Clock,
+  Brain, Plus, X, Zap,
   Home, Building2, Factory, Layers, DollarSign, MapPin,
   CheckCircle, Loader2
 } from 'lucide-react';
@@ -41,6 +41,7 @@ const typeIcons: Record<string, typeof Home> = {
 
 export function DesignPage() {
   const { user } = useAuth();
+  const userId = user?.id;
   const toast = useToast();
   const [designs, setDesigns] = useState<Design[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,23 +59,25 @@ export function DesignPage() {
     requirements: '',
   });
 
-  useEffect(() => {
-    if (user) loadDesigns();
-  }, [user]);
-
-  async function loadDesigns() {
-    const { data } = await supabase.from('designs').select('*').eq('user_id', user!.id).order('created_at', { ascending: false });
+  const loadDesigns = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase.from('designs').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     if (data) setDesigns(data as Design[]);
     setLoading(false);
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) loadDesigns();
+  }, [loadDesigns, userId]);
 
   async function generateDesign() {
+    if (!userId) return;
     if (!form.area_sqft) { toast('Please enter the area in sq ft', 'warning'); return; }
     setGenerating(true);
 
     const title = `${form.floors}-floor ${form.project_type} — ${form.area_sqft} sq ft`;
     const { data, error } = await supabase.from('designs').insert({
-      user_id: user!.id,
+      user_id: userId,
       project_type: form.project_type,
       area_sqft: parseFloat(form.area_sqft),
       budget_min: parseFloat(form.budget_min) || 0,
@@ -117,7 +120,7 @@ export function DesignPage() {
 
     setGenerating(false);
     setShowForm(false);
-    loadDesigns();
+    await loadDesigns();
   }
 
   return (

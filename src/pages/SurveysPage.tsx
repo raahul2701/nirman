@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Plane, Plus, Upload, X, Loader2, CheckCircle, Clock,
-  FileText, BarChart2, Zap, AlertCircle, TrendingUp
+  Plane, Plus, Upload, X, Loader2, CheckCircle,
+  BarChart2, Zap, AlertCircle, TrendingUp
 } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
@@ -21,6 +21,7 @@ const surveyTypes = [
 
 export function SurveysPage() {
   const { user } = useAuth();
+  const userId = user?.id;
   const toast = useToast();
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,20 +34,22 @@ export function SurveysPage() {
     notes: '',
   });
 
-  useEffect(() => {
-    if (user) loadSurveys();
-  }, [user]);
-
-  async function loadSurveys() {
-    const { data } = await supabase.from('surveys').select('*').eq('owner_id', user!.id).order('created_at', { ascending: false });
+  const loadSurveys = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase.from('surveys').select('*').eq('owner_id', userId).order('created_at', { ascending: false });
     if (data) setSurveys(data as Survey[]);
     setLoading(false);
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) loadSurveys();
+  }, [loadSurveys, userId]);
 
   async function createSurvey() {
+    if (!userId) return;
     setAiLoading(true);
     const { data, error } = await supabase.from('surveys').insert({
-      owner_id: user!.id,
+      owner_id: userId,
       conducted_by: form.conducted_by || 'Site Engineer',
       survey_date: form.survey_date,
       survey_type: form.survey_type,
@@ -82,7 +85,7 @@ export function SurveysPage() {
     }
     setAiLoading(false);
     setShowForm(false);
-    loadSurveys();
+    await loadSurveys();
   }
 
   const statusIcon = (s: string) => {

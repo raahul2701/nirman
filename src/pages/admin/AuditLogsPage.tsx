@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { supabase } from '../../lib/supabase';
-import { Badge } from '../../components/ui/Badge';
 
 interface AuditLogRecord {
   id: string;
@@ -16,16 +15,20 @@ interface AuditLogRecord {
   old_data: Record<string, unknown> | null;
 }
 
+type AuditLogFilters = {
+  module_name: string;
+  action_type: string;
+  user_id: string;
+};
+
+const filterFields: Array<keyof AuditLogFilters> = ['module_name', 'action_type', 'user_id'];
+
 export function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ module_name: '', action_type: '', user_id: '' });
+  const [filters, setFilters] = useState<AuditLogFilters>({ module_name: '', action_type: '', user_id: '' });
 
-  useEffect(() => {
-    loadAuditLogs();
-  }, []);
-
-  async function loadAuditLogs() {
+  const loadAuditLogs = useCallback(async () => {
     setLoading(true);
     let query = supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(100);
     if (filters.module_name) query = query.ilike('module_name', `%${filters.module_name}%`);
@@ -40,16 +43,20 @@ export function AuditLogsPage() {
     }
     setLogs((data ?? []) as AuditLogRecord[]);
     setLoading(false);
-  }
+  }, [filters.action_type, filters.module_name, filters.user_id]);
+
+  useEffect(() => {
+    loadAuditLogs();
+  }, [loadAuditLogs]);
 
   return (
     <AppLayout title="Audit Logs" subtitle="Inspect all sensitive actions recorded across the platform">
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 mb-6">
-        {['module_name', 'action_type', 'user_id'].map((field) => (
+        {filterFields.map((field) => (
           <label key={field} className="block text-slate-300">
             <span className="text-xs uppercase text-slate-500">{field.replace('_', ' ')}</span>
             <input
-              value={(filters as any)[field]}
+              value={filters[field]}
               onChange={(e) => setFilters((prev) => ({ ...prev, [field]: e.target.value }))}
               className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none"
               placeholder={`Filter by ${field.replace('_', ' ')}`}

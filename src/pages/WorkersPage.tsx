@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Users, Plus, Search, X, Phone, Star, Calendar,
-  Briefcase, DollarSign, QrCode, CheckCircle, XCircle
+  Users, Plus, Search, X, Phone, Star,
+  DollarSign, QrCode, CheckCircle, XCircle
 } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
 import { Badge } from '../components/ui/Badge';
@@ -40,6 +40,7 @@ interface WorkerForm {
 
 export function WorkersPage() {
   const { user } = useAuth();
+  const userId = user?.id;
   const toast = useToast();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,21 +50,23 @@ export function WorkersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<WorkerForm>({ name: '', phone: '', skill: 'general', daily_wage: '', aadhaar: '' });
 
-  useEffect(() => {
-    if (user) loadWorkers();
-  }, [user]);
-
-  async function loadWorkers() {
-    const { data } = await supabase.from('workers').select('*').eq('owner_id', user!.id).order('created_at', { ascending: false });
+  const loadWorkers = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase.from('workers').select('*').eq('owner_id', userId).order('created_at', { ascending: false });
     if (data) setWorkers(data as Worker[]);
     setLoading(false);
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) loadWorkers();
+  }, [loadWorkers, userId]);
 
   async function addWorker() {
+    if (!userId) return;
     if (!form.name) { toast('Worker name is required', 'warning'); return; }
     setSubmitting(true);
     const { data, error } = await supabase.from('workers').insert({
-      owner_id: user!.id,
+      owner_id: userId,
       name: form.name,
       phone: form.phone,
       skill: form.skill,

@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  BarChart2, TrendingUp, AlertTriangle, Users, Package,
-  Calendar, Download, RefreshCw
+  TrendingUp, AlertTriangle, Users, Package,
+  Download
 } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
-
-const CHART_COLORS = ['#FF6B00', '#00D4AA', '#3B82F6', '#F59E0B', '#8B5CF6', '#EC4899'];
 
 const weeklyData = [
   { day: 'Mon', problems: 3, resolved: 2, workers: 18 },
@@ -38,19 +36,17 @@ const severityData = [
 
 export function ReportsPage() {
   const { user } = useAuth();
+  const userId = user?.id;
   const [stats, setStats] = useState({ totalProblems: 0, resolvedProblems: 0, totalWorkers: 0, activeMaterials: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) loadStats();
-  }, [user]);
-
-  async function loadStats() {
+  const loadStats = useCallback(async () => {
+    if (!userId) return;
     const [problems, resolved, workers, materials] = await Promise.all([
-      supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', user!.id),
-      supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', user!.id).eq('status', 'resolved'),
-      supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', user!.id),
-      supabase.from('materials').select('id', { count: 'exact' }).eq('owner_id', user!.id),
+      supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', userId),
+      supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', userId).eq('status', 'resolved'),
+      supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', userId),
+      supabase.from('materials').select('id', { count: 'exact' }).eq('owner_id', userId),
     ]);
     setStats({
       totalProblems: problems.count || 0,
@@ -59,7 +55,11 @@ export function ReportsPage() {
       activeMaterials: materials.count || 0,
     });
     setLoading(false);
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) loadStats();
+  }, [loadStats, userId]);
 
   const resolutionRate = stats.totalProblems > 0 ? Math.round((stats.resolvedProblems / stats.totalProblems) * 100) : 0;
 

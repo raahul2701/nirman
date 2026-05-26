@@ -58,7 +58,7 @@ export function MaterialTestsPageEnhanced({ projectId = 'project-1' }: MaterialT
         ) : reports.length === 0 ? (
           <p className="text-gray-500">No reports yet</p>
         ) : (
-          reports.map((r: any) => (
+          reports.map((r) => (
             <div key={r.id} className="p-3 border rounded bg-gray-50">
               <p className="font-medium">{r.report?.text || 'Report'}</p>
               <p className="text-sm text-gray-600">Severity: {r.severity}</p>

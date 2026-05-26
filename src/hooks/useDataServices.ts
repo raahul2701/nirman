@@ -4,9 +4,15 @@ import { offlineSyncService } from '../services/offline/offlineSyncService';
 import { materialReportsService } from '../services/data/materialReportsService';
 import { gisPinsService } from '../services/data/gisPinsService';
 import { budgetSessionsService } from '../services/data/budgetSessionsService';
-import { tpaReviewsService } from '../services/data/tpaReviewsService';
 import { hindranceService } from '../services/data/hindranceService';
 import { dieselLogsService } from '../services/data/dieselLogsService';
+import type {
+  BudgetAnalyticsSession,
+  DieselIssueLog,
+  GisSitePin,
+  HindranceEntry,
+  MaterialAIReport,
+} from '../types/persistence';
 
 // Hook to sync status
 export function useSyncStatus() {
@@ -29,7 +35,7 @@ export function useSyncStatus() {
 
 // Hook to material reports
 export function useMaterialReports(projectId: string) {
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<MaterialAIReport[]>([]);
   const [loading, setLoading] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
@@ -60,7 +66,7 @@ export function useMaterialReports(projectId: string) {
 
 // Hook to GIS pins
 export function useGisPins(projectId: string) {
-  const [pins, setPins] = useState<any[]>([]);
+  const [pins, setPins] = useState<GisSitePin[]>([]);
   const [loading, setLoading] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
@@ -91,7 +97,7 @@ export function useGisPins(projectId: string) {
 
 // Hook to budget sessions
 export function useBudgetSessions(projectId: string) {
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<BudgetAnalyticsSession[]>([]);
   const [loading, setLoading] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
@@ -122,7 +128,7 @@ export function useBudgetSessions(projectId: string) {
 
 // Hook to hindrance entries
 export function useHindranceEntries(projectId: string) {
-  const [entries, setEntries] = useState<any[]>([]);
+  const [entries, setEntries] = useState<HindranceEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
@@ -153,7 +159,7 @@ export function useHindranceEntries(projectId: string) {
 
 // Hook to diesel logs
 export function useDieselLogs(projectId: string) {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<DieselIssueLog[]>([]);
   const [loading, setLoading] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 

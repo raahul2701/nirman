@@ -5,7 +5,7 @@ import { AlertCircle, CheckCircle, Clock, WifiOff } from 'lucide-react';
 
 export function OfflineSyncIndicator() {
   const status = useSyncStatus();
-  const { pending, syncing, synced, failed } = status;
+  const { pending, syncing, failed } = status;
 
   if (pending === 0 && syncing === 0 && failed === 0) {
     return (

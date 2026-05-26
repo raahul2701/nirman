@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Edit3, FolderTree, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
-import { Badge, StatusBadge } from '../../components/ui/Badge';
+import { StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Select } from '../../components/ui/Input';
@@ -51,6 +51,19 @@ type ContractorLicenseRow = {
   license_status?: string | null;
 };
 
+type LegacyProjectRow = {
+  id: string;
+  name?: string | null;
+  contractor_id?: string | null;
+};
+
+type GovProjectRow = {
+  id: string;
+  project_name?: string | null;
+  project_code?: string | null;
+  contractor_name?: string | null;
+};
+
 type AssignmentRow = {
   id: string;
   workspace_id: string;
@@ -65,6 +78,18 @@ type AssignmentRow = {
 };
 
 type AssignmentStatus = 'active' | 'pilot' | 'paused' | 'locked' | 'completed' | 'archived';
+
+type AssignmentPayload = {
+  workspace_id: string;
+  project_id: string;
+  project_table: 'gov_projects' | 'projects';
+  executive_engineer_id: string;
+  assistant_engineer_id: string | null;
+  junior_engineer_id: string | null;
+  contractor_id: string | null;
+  contractor_company_name: string | null;
+  access_status: AssignmentStatus;
+};
 
 const EMPTY_VALUE = '__none__';
 
@@ -115,7 +140,7 @@ export function AssignProjectPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
-  async function loadData(preferredWorkspaceId?: string) {
+  const loadData = useCallback(async (preferredWorkspaceId?: string) => {
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -130,8 +155,8 @@ export function AssignProjectPage() {
       const loadedWorkspaces = (workspaceResult.data || []) as WorkspaceRow[];
       setWorkspaces(loadedWorkspaces);
 
-      const nextWorkspaceId = preferredWorkspaceId || workspaceId || loadedWorkspaces[0]?.id || '';
-      setWorkspaceId(nextWorkspaceId);
+      const nextWorkspaceId = preferredWorkspaceId || loadedWorkspaces[0]?.id || '';
+      setWorkspaceId((current) => preferredWorkspaceId || current || loadedWorkspaces[0]?.id || '');
 
       let loadedProjects: ProjectOption[] = [];
       const govProjectsResult = await supabase
@@ -148,7 +173,7 @@ export function AssignProjectPage() {
         if (legacyResult.error) {
           nextWarnings.push(`projects fallback unavailable: ${legacyResult.error.message}`);
         } else {
-          loadedProjects = (legacyResult.data || []).map((project: any) => ({
+          loadedProjects = ((legacyResult.data || []) as LegacyProjectRow[]).map((project) => ({
             id: project.id,
             table: 'projects',
             label: project.name || project.id,
@@ -157,7 +182,7 @@ export function AssignProjectPage() {
           }));
         }
       } else {
-        loadedProjects = (govProjectsResult.data || []).map((project: any) => ({
+        loadedProjects = ((govProjectsResult.data || []) as GovProjectRow[]).map((project) => ({
           id: project.id,
           table: 'gov_projects',
           label: project.project_name || project.project_code || project.id,
@@ -235,16 +260,16 @@ export function AssignProjectPage() {
       setWarnings(nextWarnings);
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     if (!workspaceId || loading) return;
     loadData(workspaceId);
-  }, [workspaceId]);
+  }, [loadData, loading, workspaceId]);
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
   const selectedProject = projects.find((project) => `${project.table}:${project.id}` === projectKey);
@@ -307,7 +332,7 @@ export function AssignProjectPage() {
     setSaving(true);
     try {
       const contractor = contractorOptions.find((option) => option.id === contractorId);
-      const payload = {
+      const payload: AssignmentPayload = {
         workspace_id: selectedWorkspace.id,
         project_id: selectedProject.id,
         project_table: selectedProject.table,
@@ -327,8 +352,8 @@ export function AssignProjectPage() {
 
       const targetId = editingId || existing?.id;
       const result = targetId
-        ? await supabase.from('project_assignments').update(payload as any).eq('id', targetId).select().maybeSingle()
-        : await supabase.from('project_assignments').insert(payload as any).select().maybeSingle();
+        ? await supabase.from('project_assignments').update(payload).eq('id', targetId).select().maybeSingle()
+        : await supabase.from('project_assignments').insert(payload).select().maybeSingle();
 
       if (result.error) throw result.error;
 

@@ -60,7 +60,7 @@ const dailyReportSchema = z.object({
 
 type DailyReportFormData = z.infer<typeof dailyReportSchema>;
 
-const checklistItems: Array<{ key: keyof DailyReportFormData['checklist']; label: string }> = [
+const defaultChecklistItems: Array<{ key: keyof DailyReportFormData['checklist']; label: string }> = [
   { key: 'site_clean', label: 'Site clean' },
   { key: 'safety_measures', label: 'Safety measures' },
   { key: 'quality_checks', label: 'Quality checks' },
@@ -209,18 +209,6 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
       setIsSubmitting(false);
     }
   };
-
-  const checklistItems = [
-    { key: 'site_clean', label: 'Site is clean and organized' },
-    { key: 'safety_measures', label: 'Safety measures implemented' },
-    { key: 'quality_checks', label: 'Quality checks performed' },
-    { key: 'material_stacked', label: 'Materials properly stacked' },
-    { key: 'equipment_maintained', label: 'Equipment well maintained' },
-    { key: 'workers_protected', label: 'Workers using protective gear' },
-    { key: 'documentation_complete', label: 'Documentation complete' },
-    { key: 'measurements_recorded', label: 'Measurements recorded' },
-    { key: 'supervisor_present', label: 'Supervisor present on site' }
-  ];
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -552,7 +540,7 @@ export const DailyReportForm: React.FC<DailyReportFormProps> = ({
           <h3 className="text-lg font-semibold mb-4">Site Checklist (9 Steps)</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {checklistItems.map((item) => (
+            {defaultChecklistItems.map((item) => (
               <label key={item.key} className="flex items-center space-x-3">
                 <input
                   type="checkbox"

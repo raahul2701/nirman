@@ -9,7 +9,7 @@ export function ActivityRouteTracker() {
 
   useEffect(() => {
     logPageVisit(location.pathname, user, profile?.email || user?.email);
-  }, [location.pathname, profile?.email, user?.email, user?.id]);
+  }, [location.pathname, profile, user]);
 
   return null;
 }

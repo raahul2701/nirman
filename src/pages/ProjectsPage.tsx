@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   FolderOpen, Plus, X, Calendar, MapPin, DollarSign,
   TrendingUp, CheckCircle, Clock, PauseCircle, XCircle
@@ -29,6 +29,7 @@ const statusIcons: Record<string, typeof CheckCircle> = {
 
 export function ProjectsPage() {
   const { user } = useAuth();
+  const userId = user?.id;
   const toast = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,21 +40,23 @@ export function ProjectsPage() {
     start_date: '', end_date: '', budget: '', location: '',
   });
 
-  useEffect(() => {
-    if (user) loadProjects();
-  }, [user]);
-
-  async function loadProjects() {
-    const { data } = await supabase.from('projects').select('*').eq('owner_id', user!.id).order('created_at', { ascending: false });
+  const loadProjects = useCallback(async () => {
+    if (!userId) return;
+    const { data } = await supabase.from('projects').select('*').eq('owner_id', userId).order('created_at', { ascending: false });
     if (data) setProjects(data as Project[]);
     setLoading(false);
-  }
+  }, [userId]);
+
+  useEffect(() => {
+    if (userId) loadProjects();
+  }, [loadProjects, userId]);
 
   async function addProject() {
+    if (!userId) return;
     if (!form.name) { toast('Project name required', 'warning'); return; }
     setSubmitting(true);
     const { data, error } = await supabase.from('projects').insert({
-      owner_id: user!.id,
+      owner_id: userId,
       company: '',
       name: form.name,
       description: form.description,

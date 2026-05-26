@@ -4,6 +4,10 @@ import { Notification } from '../types';
 import { useAuth } from './useAuth';
 import { NotificationContext } from './notificationContextCore';
 
+type NotificationInsertPayload = {
+  new: Record<string, unknown>;
+};
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id;
@@ -37,8 +41,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           schema: 'public',
           table: 'notifications',
           filter: `user_id=eq.${userId}`,
-        }, (payload: any) => {
-          setNotifications(prev => [payload.new as Notification, ...prev]);
+        }, (payload: NotificationInsertPayload) => {
+          setNotifications(prev => [payload.new as unknown as Notification, ...prev]);
         })
         .subscribe();
 
