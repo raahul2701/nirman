@@ -53,6 +53,7 @@ const AdminSystemPage = lazyWithRetry(() => import('../pages/AdminSystemPage').t
 const AuditLogsPage = lazyWithRetry(() => import('../pages/admin/AuditLogsPage').then((mod) => ({ default: mod.AuditLogsPage })));
 const ActivityLogsPage = lazyWithRetry(() => import('../pages/admin/ActivityLogsPage').then((mod) => ({ default: mod.ActivityLogsPage })));
 const OperationsCenterPage = lazyWithRetry(() => import('../pages/OperationsCenterPage').then((mod) => ({ default: mod.OperationsCenterPage })));
+const UserManualPage = lazyWithRetry(() => import('../pages/help/UserManualPage').then((mod) => ({ default: mod.UserManualPage })));
 const EnterpriseOverviewPage = lazyWithRetry(() => import('../pages/enterprise/EnterpriseOverviewPage').then((mod) => ({ default: mod.EnterpriseOverviewPage })));
 const WorkspaceSetupPage = lazyWithRetry(() => import('../pages/enterprise/WorkspaceSetupPage').then((mod) => ({ default: mod.WorkspaceSetupPage })));
 const ContractorLicensingPage = lazyWithRetry(() => import('../pages/enterprise/ContractorLicensingPage').then((mod) => ({ default: mod.ContractorLicensingPage })));
@@ -166,6 +167,13 @@ const routes: RouteObject[] = [
       { path: 'audit-logs', element: <AuditLogsPage /> },
       { path: 'activity', element: <ActivityLogsPage /> },
       { path: 'system', element: <AdminSystemPage /> },
+    ],
+  },
+  {
+    path: 'help',
+    element: protectedTree,
+    children: [
+      { path: 'user-manual', element: <UserManualPage /> },
     ],
   },
   {
