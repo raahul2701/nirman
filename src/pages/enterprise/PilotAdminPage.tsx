@@ -31,7 +31,7 @@ export function PilotAdminPage() {
 
   const people = Array.isArray(pilotPeople) ? pilotPeople : [];
   const projects = Array.isArray(pilotProjects) ? pilotProjects : [];
-  const licenses = Array.isArray(pilotLicenses) ? pilotLicenses : [];
+  const licenses = useMemo(() => Array.isArray(pilotLicenses) ? pilotLicenses : [], []);
   const recommendations = Array.isArray(pilotRecommendations) ? pilotRecommendations : [];
   const checklist = Array.isArray(pilotChecklistItems) ? pilotChecklistItems : [];
   const primaryRecommendation = recommendations[0];

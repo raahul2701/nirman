@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Landmark, FolderOpen, IndianRupee, AlertTriangle, Clock,
-  TrendingUp, ChevronRight, Zap, Shield, BarChart2
+  TrendingUp, ChevronRight, Shield, BarChart2
 } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppLayout } from '../../components/layout/AppLayout';
@@ -12,9 +12,6 @@ import { Badge } from '../../components/ui/Badge';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
 import { GovProject, PaymentRequest } from '../../types';
-import { formatCurrency, formatDistanceToNow } from '../../lib/utils';
-
-const CHART_COLORS = ['#FF6B00', '#00D4AA', '#3B82F6', '#F59E0B', '#8B5CF6'];
 
 const paymentTimeline = [
   { month: 'Jan', amount: 24 }, { month: 'Feb', amount: 18 },
@@ -29,37 +26,32 @@ const riskDistribution = [
   { name: 'High', value: 2, color: '#ef4444' },
 ];
 
-const RISK_COLORS: Record<string, string> = {
-  high: '#ef4444', medium: '#f97316', low: '#eab308', safe: '#22c55e',
-};
-
 export function GovDashboardPage() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<GovProject[]>([]);
   const [pendingPayments, setPendingPayments] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) loadData();
-  }, [user]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!user) return;
     const [projRes, payRes] = await Promise.all([
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user!.id},contractor_id.eq.${user!.id},engineer_id.eq.${user!.id}`).order('created_at', { ascending: false }),
+      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`).order('created_at', { ascending: false }),
       supabase.from('payment_requests').select('*').eq('final_status', 'pending').order('created_at', { ascending: false }),
     ]);
     if (projRes.data) setProjects(projRes.data as GovProject[]);
     if (payRes.data) setPendingPayments(payRes.data as PaymentRequest[]);
     setLoading(false);
-  }
+  }, [user]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const activeProjects = projects.filter(p => p.status === 'active');
   const totalContractValue = projects.reduce((s, p) => s + p.total_contract_value, 0);
   const pendingAmount = pendingPayments.reduce((s, p) => s + p.claimed_amount, 0);
   const delayedProjects = projects.filter(p => p.end_date && new Date(p.end_date) < new Date() && p.status === 'active');
-
-  const isEngineer = profile?.role === 'site_engineer' || profile?.role === 'project_manager' || profile?.role === 'super_admin';
 
   const alerts = [
     { type: 'critical', message: `${pendingPayments.length} payment request${pendingPayments.length !== 1 ? 's' : ''} pending approval`, time: 'Just now' },

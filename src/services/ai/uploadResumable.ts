@@ -38,9 +38,11 @@ export function uploadResumable(options: ResumableUploadOptions) {
       request.onerror = () => reject(new Error('Upload failed'));
       request.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
       request.onload = () => {
-        request.status >= 200 && request.status < 300
-          ? resolve(request.responseText)
-          : reject(new Error(`Upload failed with status ${request.status}`));
+        if (request.status >= 200 && request.status < 300) {
+          resolve(request.responseText);
+          return;
+        }
+        reject(new Error(`Upload failed with status ${request.status}`));
       };
 
       request.open('POST', options.endpoint);

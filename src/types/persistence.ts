@@ -5,8 +5,8 @@ export interface MaterialAIReport {
   id?: string;
   project_id: string;
   material_id?: string;
-  report: any;
-  structured_output?: any;
+  report: Record<string, unknown>;
+  structured_output?: unknown;
   confidence?: number;
   severity?: Severity;
   created_by?: string;
@@ -19,7 +19,7 @@ export interface GisSitePin {
   project_id: string;
   latitude: number;
   longitude: number;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
   created_by?: string;
   created_at?: string;
   updated_at?: string;
@@ -33,14 +33,14 @@ export interface UploadMetadata {
   storage_path: string;
   uploaded_by?: string;
   uploaded_at?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface BudgetAnalyticsSession {
   id?: string;
   project_id: string;
-  session_data?: Record<string, any>;
-  results?: Record<string, any>;
+  session_data?: Record<string, unknown>;
+  results?: Record<string, unknown>;
   created_by?: string;
   created_at?: string;
   updated_at?: string;
@@ -49,7 +49,7 @@ export interface BudgetAnalyticsSession {
 export interface TpaUploadReview {
   id?: string;
   upload_id?: string;
-  review?: Record<string, any>;
+  review?: Record<string, unknown>;
   reviewer_id?: string;
   status?: 'pending' | 'approved' | 'rejected' | string;
   created_at?: string;
@@ -60,7 +60,7 @@ export interface HindranceEntry {
   id?: string;
   project_id: string;
   description?: string;
-  location?: Record<string, any>;
+  location?: Record<string, unknown>;
   severity?: Severity;
   status?: string;
   created_by?: string;
@@ -72,7 +72,7 @@ export interface DieselIssueLog {
   id?: string;
   project_id: string;
   vehicle_id?: string;
-  log?: Record<string, any>;
+  log?: Record<string, unknown>;
   consumption?: number;
   created_by?: string;
   created_at?: string;

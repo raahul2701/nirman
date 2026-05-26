@@ -8,11 +8,10 @@ import { dieselLogsService } from '../../services/data/dieselLogsService';
 import { OfflineSyncIndicator } from '../../components/offline/OfflineSyncIndicator';
 
 const DEFAULT_PROJECT_ID = 'project-1';
+type DieselFormTextField = Exclude<keyof ReturnType<typeof createEmptyDieselForm>, 'bill_photo' | 'operator_photo' | 'receiver_photo' | 'vehicle_photo'>;
 
-export function DieselIssue() {
-  const { user } = useAuth();
-  const toast = useToast();
-  const [form, setForm] = useState({
+function createEmptyDieselForm() {
+  return {
     machine_name: '',
     machine_type: '',
     machine_id: '',
@@ -29,7 +28,13 @@ export function DieselIssue() {
     receiver_photo: null as File | null,
     vehicle_photo: null as File | null,
     remarks: '',
-  });
+  };
+}
+
+export function DieselIssue() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const [form, setForm] = useState(createEmptyDieselForm);
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -132,24 +137,7 @@ export function DieselIssue() {
 
     setSubmitting(false);
 
-    setForm({
-      machine_name: '',
-      machine_type: '',
-      machine_id: '',
-      operator_name: '',
-      opening_diesel: '',
-      diesel_received: '',
-      diesel_used: '',
-      closing_diesel: '',
-      running_hours: '',
-      expected_consumption: '',
-      actual_consumption: '',
-      bill_photo: null,
-      operator_photo: null,
-      receiver_photo: null,
-      vehicle_photo: null,
-      remarks: '',
-    });
+    setForm(createEmptyDieselForm());
     toast(navigator.onLine ? 'Diesel entry recorded successfully' : 'Offline: diesel entry queued for sync.', 'success');
   }
 
@@ -172,18 +160,20 @@ export function DieselIssue() {
             { label: 'Running Hours', name: 'running_hours', type: 'number' },
             { label: 'Expected Consumption', name: 'expected_consumption', type: 'number' },
             { label: 'Actual Consumption', name: 'actual_consumption', type: 'number' },
-          ].map((field) => (
+          ].map((field) => {
+            const fieldName = field.name as DieselFormTextField;
+            return (
             <label key={field.name} className="block text-sm text-slate-300">
               {field.label}
               <input
                 type={field.type}
-                value={(form as any)[field.name]}
-                onChange={(e) => setForm((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                value={form[fieldName]}
+                onChange={(e) => setForm((prev) => ({ ...prev, [fieldName]: e.target.value }))}
                 className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-white outline-none"
                 placeholder={field.label}
               />
             </label>
-          ))}
+          )})}
           <label className="block text-sm text-slate-300">
             Diesel Bill / Issue Photo
             <input

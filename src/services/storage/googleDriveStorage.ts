@@ -244,7 +244,7 @@ export async function uploadFileToDrive(
   try {
     const dup = await findDriveFileByNameOrMd5(file.name, fileHash, categoryFolder.id, accessToken);
     if (dup) return dup; // Return existing file reference instead of re-uploading
-  } catch (err) {
+  } catch {
     // ignore lookup failures
   }
 
@@ -255,11 +255,17 @@ export async function uploadFileToDrive(
       if (thumb) {
         // Store thumbnail metadata entry but do not block main upload
         void (async () => {
-          try { /* placeholder for thumbnail upload hook */ } catch { /* ignore */ }
+          try {
+            await Promise.resolve();
+          } catch {
+            // Thumbnail persistence is best effort.
+          }
         })();
       }
     }
-  } catch {}
+  } catch {
+    // Thumbnail generation is best effort.
+  }
 
   const uploadSessionUrl = await createResumableDriveUploadSession(categoryFolder.id, file, accessToken);
   const uploaded = await uploadDriveFileChunk(uploadSessionUrl, file, onProgress, signal);
@@ -273,7 +279,7 @@ export async function uploadFileToDrive(
       uploaded_by: undefined,
       uploaded_at: new Date().toISOString(),
       metadata: { bucket, path, driveId: uploaded.id, parents: uploaded.parents, sha256: fileHash },
-    } as any);
+    });
   } catch {
     // metadata persistence is best effort; do not fail the upload for analytics storage.
   }

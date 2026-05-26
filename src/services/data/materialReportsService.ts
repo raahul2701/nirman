@@ -13,7 +13,7 @@ export const materialReportsService = {
     const opt = optimisticMgr.create(report);
 
     // Enqueue sync
-    const queueId = await offlineSyncService.enqueue(
+    await offlineSyncService.enqueue(
       'material_ai_reports',
       'CREATE',
       report

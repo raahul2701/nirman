@@ -18,14 +18,9 @@ export interface AiRequest {
 }
 
 const defaultModel = (import.meta.env.VITE_GEMINI_MODEL as string | undefined) || 'gemini-2.5-flash';
-const fallbackModels = Array.from(new Set([
-  (import.meta.env.VITE_GEMINI_FALLBACK_MODEL as string | undefined) || 'gemini-2.1',
-  'gemini-2.0',
-]));
 const imageModel = (import.meta.env.VITE_GEMINI_IMAGE_MODEL as string | undefined) || defaultModel;
 const defaultTimeoutMs = Number(import.meta.env.VITE_AI_TIMEOUT_MS || 30000);
 const proxyEnabled = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
-const geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function safeLogMessage(message: string) {
   const googleKeyPrefix = ['AI', 'za', 'Sy'].join('');
@@ -142,12 +137,14 @@ function normalizeAiError(error: unknown, fallbackMessage = 'AI service unavaila
 }
 
 async function requestGeminiRaw({
-  payload: _payload,
-  signal: _signal,
+  payload,
+  signal,
 }: {
   payload: ReturnType<typeof buildGeminiPayload>;
   signal: AbortSignal;
 }) {
+  void payload;
+  void signal;
   throw new AiRequestError('Direct browser Gemini calls are disabled; use the AI proxy.', {
     status: 503,
     retryable: true,
@@ -274,7 +271,7 @@ function tryParseJsonSafe(text: string) {
   if (!text || typeof text !== 'string') return null;
   try {
     return JSON.parse(text);
-  } catch (_) {
+  } catch {
     // Attempt to extract JSON-like substring
     const jsonMatch = text.match(/({[\s\S]*}|\[[\s\S]*\])/);
     const candidate = jsonMatch ? jsonMatch[0] : text;
@@ -287,7 +284,7 @@ function tryParseJsonSafe(text: string) {
 
     try {
       return JSON.parse(cleaned);
-    } catch (e) {
+    } catch {
       // Last resort: return null
       return null;
     }
@@ -303,7 +300,7 @@ export async function runAiCompletionStructured(opts: AiRequest) {
   try {
     const parsed = tryParseJsonSafe(String(raw));
     if (parsed !== null) return parsed;
-  } catch (err) {
+  } catch {
     // swallow parse errors and return raw
   }
   return String(raw);

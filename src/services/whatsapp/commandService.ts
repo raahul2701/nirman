@@ -14,7 +14,7 @@ export interface WhatsAppCommandResponse {
 }
 
 export async function sendWhatsAppCommand(payload: WhatsAppCommandPayload): Promise<WhatsAppCommandResponse> {
-  const { data, error } = await (supabase.functions.invoke as any)('whatsapp-command', {
+  const { data, error } = await supabase.functions.invoke<WhatsAppCommandResponse>('whatsapp-command', {
     body: payload,
   });
   if (error) {

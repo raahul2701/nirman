@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FolderOpen, Plus, Search, Landmark, MapPin, Calendar,
@@ -56,17 +56,18 @@ export function GovProjectsPage() {
     end_date: '', location: '', project_type: 'highway',
   });
 
-  useEffect(() => {
-    if (user) loadProjects();
-  }, [user]);
-
-  async function loadProjects() {
+  const loadProjects = useCallback(async () => {
+    if (!user) return;
     const { data } = await supabase.from('gov_projects').select('*')
-      .or(`owner_id.eq.${user!.id},contractor_id.eq.${user!.id},engineer_id.eq.${user!.id}`)
+      .or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`)
       .order('created_at', { ascending: false });
     if (data) setProjects(data as GovProject[]);
     setLoading(false);
-  }
+  }, [user]);
+
+  useEffect(() => {
+    void loadProjects();
+  }, [loadProjects]);
 
   async function createProject() {
     if (!form.project_name || !form.project_code) {

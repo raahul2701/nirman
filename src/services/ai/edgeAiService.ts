@@ -16,7 +16,6 @@ export interface AiInvokeOptions {
 
 const AI_CACHE_PREFIX = 'nirman:ai-cache:';
 const AI_QUOTA_PREFIX = 'nirman:ai-quota:';
-const AI_DEFAULT_TIMEOUT_MS = 15000;
 const AI_DEFAULT_RETRIES = 2;
 const AI_DEFAULT_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -60,6 +59,7 @@ function getDailyQuotaKey(quotaKey: string): string {
 }
 
 function getCachedAiResponse<T>(key: string, ttlMs: number): T | null {
+  void ttlMs;
   const cache = loadJsonFromStorage<{ expiresAt: number; value: T }>(key);
   if (!cache || cache.expiresAt < Date.now()) {
     const storage = safeStorage();
@@ -70,6 +70,7 @@ function getCachedAiResponse<T>(key: string, ttlMs: number): T | null {
 }
 
 function setCachedAiResponse<T>(key: string, value: T, ttlMs: number): void {
+  void ttlMs;
   storeJsonToStorage(key, { expiresAt: Date.now() + ttlMs, value });
 }
 

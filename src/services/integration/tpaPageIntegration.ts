@@ -17,7 +17,7 @@ export function useTpaReviewPersistence() {
       if (!user) throw new Error('Not authenticated');
 
       // Save file metadata first
-      const fileMetadata = await Promise.all(
+      await Promise.all(
         reviewData.files.map(file =>
           uploadMetadataRepository.create({
             file_name: file.name,

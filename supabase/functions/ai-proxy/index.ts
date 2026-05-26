@@ -133,15 +133,20 @@ function buildGeminiPayload(payload: Record<string, unknown>) {
   };
 }
 
-function normalizeGeminiResponse(result: any) {
-  const parts = result?.candidates?.[0]?.content?.parts;
+function normalizeGeminiResponse(result: unknown) {
+  const record = result as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    text?: string;
+    output?: string;
+  };
+  const parts = record.candidates?.[0]?.content?.parts;
   if (Array.isArray(parts)) {
     return parts.map((part) => typeof part?.text === 'string' ? part.text : '').filter(Boolean).join('\n').trim();
   }
-  return String(result?.text || result?.output || '').trim();
+  return String(record.text || record.output || '').trim();
 }
 
-async function validateRequestSignature(req: Request, body: AiProxyRequest, rawBody: string) {
+async function validateRequestSignature(req: Request, body: AiProxyRequest) {
   const now = Date.now();
   if (!body.timestamp || Math.abs(now - body.timestamp) > 5 * 60 * 1000 || !body.nonce) {
     throw new Response(JSON.stringify({ error: 'Missing or stale AI request signature metadata' }), {
@@ -150,9 +155,9 @@ async function validateRequestSignature(req: Request, body: AiProxyRequest, rawB
     });
   }
 
-  const { bodyHash: _bodyHash, ...unsignedBody } = body;
+  const { bodyHash, ...unsignedBody } = body;
   const expectedBodyHash = await sha256Hex(JSON.stringify(unsignedBody));
-  if (body.bodyHash && !timingSafeEqual(body.bodyHash, expectedBodyHash)) {
+  if (bodyHash && !timingSafeEqual(bodyHash, expectedBodyHash)) {
     throw new Response(JSON.stringify({ error: 'Invalid AI request body hash' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -162,7 +167,7 @@ async function validateRequestSignature(req: Request, body: AiProxyRequest, rawB
   const secret = Deno.env.get('AI_PROXY_SIGNING_SECRET');
   const signature = req.headers.get('x-nirman-signature');
   if (secret && signature) {
-    const expected = await hmacHex(secret, `${body.timestamp}.${body.nonce}.${body.bodyHash || expectedBodyHash}`);
+    const expected = await hmacHex(secret, `${body.timestamp}.${body.nonce}.${bodyHash || expectedBodyHash}`);
     if (!timingSafeEqual(signature, expected)) {
       throw new Response(JSON.stringify({ error: 'Invalid AI request signature' }), {
         status: 401,
@@ -246,7 +251,7 @@ Deno.serve(async (req: Request) => {
     const rawBody = await req.text();
     const body = JSON.parse(rawBody) as AiProxyRequest;
     workflow = body.workflow || workflow;
-    await validateRequestSignature(req, body, rawBody);
+    await validateRequestSignature(req, body);
 
     if (!Array.isArray(body.messages) || body.messages.length === 0) {
       return json({ error: 'AI messages are required' }, 400);

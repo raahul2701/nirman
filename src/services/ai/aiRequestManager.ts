@@ -22,7 +22,7 @@ export class AiRequestError extends Error {
   }
 }
 
-type QueueTask<T> = {
+type QueueTask = {
   execute: () => void;
   reject: (error: unknown) => void;
   signal?: AbortSignal;
@@ -65,7 +65,7 @@ function createLinkedController(externalSignal?: AbortSignal) {
 
 class AiRequestManager {
   private activeCount = 0;
-  private queue: QueueTask<unknown>[] = [];
+  private queue: QueueTask[] = [];
 
   enqueue<T>(request: AiManagedRequest<T>): Promise<T> {
     if (isOffline()) {
@@ -73,7 +73,7 @@ class AiRequestManager {
     }
 
     return new Promise<T>((resolve, reject) => {
-      const task: QueueTask<T> = {
+      const task: QueueTask = {
         signal: request.signal,
         reject,
         execute: () => {
@@ -90,10 +90,10 @@ class AiRequestManager {
         return;
       }
 
-      this.queue.push(task as QueueTask<unknown>);
+      this.queue.push(task);
       if (request.signal) {
         const cancelQueuedRequest = () => {
-          const index = this.queue.indexOf(task as QueueTask<unknown>);
+          const index = this.queue.indexOf(task);
           if (index >= 0) {
             this.queue.splice(index, 1);
             reject(new DOMException('AI request cancelled', 'AbortError'));

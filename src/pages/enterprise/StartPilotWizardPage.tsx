@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, RefreshCw, Save } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
@@ -46,6 +46,18 @@ type ContractorOption = {
   status?: string | null;
 };
 
+type LegacyProjectRow = {
+  id: string;
+  name?: string | null;
+};
+
+type GovProjectRow = {
+  id: string;
+  project_name?: string | null;
+  project_code?: string | null;
+  contractor_name?: string | null;
+};
+
 type AssignmentRow = {
   id: string;
   workspace_id: string;
@@ -59,6 +71,28 @@ type AssignmentRow = {
 };
 
 type AssignmentStatus = 'pilot' | 'active' | 'paused';
+type AssignmentPayload = Omit<AssignmentRow, 'id'>;
+type WorkspaceInsertPayload = {
+  workspace_name: string;
+  department: string;
+  district: string;
+  division_code: string;
+  status: string;
+  executive_engineer_id: string;
+  storage_namespace: string;
+};
+type WorkspaceUserUpsertPayload = {
+  workspace_id: string;
+  user_id: string;
+  role: WorkspaceRole;
+  parent_user_id: string | null;
+  subdivision_name: string | null;
+  free_lifetime: boolean;
+  active: boolean;
+};
+type WorkspaceRole = 'executive_engineer' | 'assistant_engineer' | 'junior_engineer' | 'contractor';
+type LegacyProjectInsertPayload = Record<string, string | number>;
+type GovProjectInsertPayload = Record<string, string | number>;
 
 const EMPTY_VALUE = '__none__';
 const steps = ['Workspace', 'Project', 'Team', 'Assignment', 'Verification'];
@@ -110,7 +144,7 @@ export function StartPilotWizardPage() {
     && (assignment.project_table || 'gov_projects') === selectedProject?.table
   ));
 
-  async function loadData(nextWorkspaceId?: string) {
+  const loadData = useCallback(async (nextWorkspaceId?: string) => {
     setLoading(true);
     setError(null);
     const nextWarnings: string[] = [];
@@ -140,14 +174,14 @@ export function StartPilotWizardPage() {
         if (legacyResult.error) {
           nextWarnings.push(`projects fallback unavailable: ${legacyResult.error.message}`);
         } else {
-          loadedProjects = (legacyResult.data || []).map((project: any) => ({
+          loadedProjects = ((legacyResult.data || []) as LegacyProjectRow[]).map((project) => ({
             id: project.id,
             table: 'projects',
             label: project.name || project.id,
           }));
         }
       } else {
-        loadedProjects = (govResult.data || []).map((project: any) => ({
+        loadedProjects = ((govResult.data || []) as GovProjectRow[]).map((project) => ({
           id: project.id,
           table: 'gov_projects',
           label: project.project_name || project.project_code || project.id,
@@ -232,18 +266,18 @@ export function StartPilotWizardPage() {
       setWarnings(nextWarnings);
       setLoading(false);
     }
-  }
+  }, [workspaceId]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    void loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (workspaceId && !loading) {
-      loadData(workspaceId);
+      void loadData(workspaceId);
       setAllowUpdate(false);
     }
-  }, [workspaceId]);
+  }, [loadData, loading, workspaceId]);
 
   useEffect(() => {
     setAllowUpdate(false);
@@ -286,8 +320,8 @@ export function StartPilotWizardPage() {
       };
 
       const result = existingAssignment
-        ? await supabase.from('project_assignments').update(payload as any).eq('id', existingAssignment.id).select().maybeSingle()
-        : await supabase.from('project_assignments').insert(payload as any).select().maybeSingle();
+        ? await supabase.from('project_assignments').update(payload as AssignmentPayload).eq('id', existingAssignment.id).select().maybeSingle()
+        : await supabase.from('project_assignments').insert(payload as AssignmentPayload).select().maybeSingle();
 
       if (result.error) throw result.error;
       logPilotStarted(user, profile?.email || user?.email, {
@@ -354,7 +388,7 @@ export function StartPilotWizardPage() {
             status: 'active',
             executive_engineer_id: user.id,
             storage_namespace: `demo_${user.id.replace(/-/g, '').slice(0, 16)}`,
-          } as any)
+          } as WorkspaceInsertPayload)
           .select('id, executive_engineer_id, workspace_name, division_code')
           .maybeSingle();
         if (workspaceInsert.error) throw new Error(`executive_engineer_workspaces insert failed: ${workspaceInsert.error.message}`);
@@ -374,7 +408,7 @@ export function StartPilotWizardPage() {
           subdivision_name: null,
           free_lifetime: true,
           active: true,
-        } as any, { onConflict: 'workspace_id,user_id' })
+        } as WorkspaceUserUpsertPayload, { onConflict: 'workspace_id,user_id' })
         .select('id')
         .maybeSingle();
       if (eeMembership.error) {
@@ -415,7 +449,7 @@ export function StartPilotWizardPage() {
               budget: 2500000,
               location: 'Demo District',
               progress_percent: 0,
-            } as any)
+            } as LegacyProjectInsertPayload)
             .select('id, name')
             .maybeSingle();
           if (legacyInsert.error) throw new Error(`projects fallback insert failed: ${legacyInsert.error.message}`);
@@ -446,7 +480,7 @@ export function StartPilotWizardPage() {
             project_type: 'highway',
             status: 'active',
             progress_percent: 0,
-          } as any)
+            } as GovProjectInsertPayload)
           .select('id, project_name, project_code, contractor_name')
           .maybeSingle();
         if (govProjectInsert.error) throw new Error(`gov_projects insert failed: ${govProjectInsert.error.message}`);
@@ -487,7 +521,7 @@ export function StartPilotWizardPage() {
             contractor_id: null,
             contractor_company_name: contractorCompany,
             access_status: 'pilot',
-          } as any)
+          } as AssignmentPayload)
           .select('id')
           .maybeSingle();
         if (assignmentInsert.error) throw new Error(`project_assignments insert failed: ${assignmentInsert.error.message}`);
@@ -533,7 +567,7 @@ export function StartPilotWizardPage() {
     try {
       const result = await supabase
         .from('project_assignments')
-        .update({ access_status: 'paused' } as any)
+        .update({ access_status: 'paused' } as Pick<AssignmentPayload, 'access_status'>)
         .eq('id', demoAssignmentId);
       if (result.error) throw new Error(`project_assignments pause update failed: ${result.error.message}`);
       setDemoResults((current) => [...current, 'Demo assignment paused. No records were deleted.']);

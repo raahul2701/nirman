@@ -15,7 +15,8 @@ Deno.serve(async (req: Request) => {
   try {
     const supabase = createSupabaseClient();
     const checks: Record<string, unknown> = {
-    aiProxyConfigured: Boolean(Deno.env.get('GEMINI_API_KEY')),
+      aiProxyConfigured: Boolean(Deno.env.get('GEMINI_API_KEY')),
+    };
 
     const { error } = await supabase.from('ai_request_logs').select('id').limit(1);
     checks.database = error ? `warning:${error.code || error.message}` : 'ok';
@@ -30,4 +31,3 @@ Deno.serve(async (req: Request) => {
     }, 503);
   }
 });
-

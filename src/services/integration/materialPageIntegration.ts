@@ -14,7 +14,7 @@ export function useMaterialTestPersistence(projectId: string) {
       sample_id: string;
       test_date: string;
       tested_by: string;
-      test_results?: Record<string, any>;
+      test_results?: Record<string, unknown>;
       status: string;
       remarks?: string;
     }) => {

@@ -14,6 +14,14 @@ const PAGE_VISIT_THROTTLE_MS = 60_000;
 const LOGIN_SESSION_KEY = 'nirman:last-login-activity-user';
 let lastPageVisitKey = '';
 let lastPageVisitAt = 0;
+type ActivityLogInsert = {
+  user_id: string;
+  email: string | null;
+  event_type: ActivityEventType;
+  page_path: string | null;
+  user_agent: string | null;
+  metadata: Record<string, unknown>;
+};
 
 function warnActivity(error: unknown) {
   if (import.meta.env.DEV) {
@@ -41,7 +49,7 @@ export async function logActivity(eventType: ActivityEventType, options: Activit
       page_path: options.pagePath ?? currentPath(),
       user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
       metadata: options.metadata || {},
-    } as any);
+    } as ActivityLogInsert);
   } catch (error) {
     warnActivity(error);
   }

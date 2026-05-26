@@ -1,5 +1,4 @@
 import { invokeEdgeFunction, invokeAiAnalyze } from './aiService';
-import { supabase } from '../../lib/supabase';
 
 export interface DisputeAnalysis {
   contractAnalysis: string;
@@ -66,6 +65,7 @@ RESPONSE FORMAT: Return JSON with this exact structure:
 }
 
 Respond ONLY with valid JSON.`;
+      void prompt;
 
       // Call analyze-dispute edge function
       const response = await invokeEdgeFunction<{ response: string }>('analyze-dispute', {

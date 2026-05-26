@@ -22,6 +22,20 @@ const bucketPaths = {
 const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB || 25);
 const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'application/pdf', 'text/csv'];
 const activeStorageProvider = (import.meta.env.VITE_STORAGE_PROVIDER as 'supabase' | 'googleDrive' | 'local' | undefined) || 'supabase';
+type DriveUploadResult = {
+  path: string;
+  data: Awaited<ReturnType<typeof uploadFileToDrive>>;
+};
+type UploadMetadataUpsert = {
+  user_id?: string;
+  bucket: string;
+  path: string;
+  file_hash: string;
+  size_bytes: number;
+  mime_type: string;
+  status: string;
+  updated_at: string;
+};
 
 export function isGoogleDriveStorageActive() {
   return activeStorageProvider === 'googleDrive' && isGoogleDriveAvailable();
@@ -66,7 +80,7 @@ export async function uploadFile(
         trackUploadDiagnostic('drive-upload-progress', { bucket, path, percent });
       });
       trackUploadDiagnostic('drive-upload-completed', { bucket, path, fileId: driveResult.id, size: file.size });
-      return { path: `drive://${driveResult.id}`, data: driveResult } as any;
+      return { path: `drive://${driveResult.id}`, data: driveResult } as DriveUploadResult;
     } catch (driveError) {
       trackUploadDiagnostic('drive-upload-failed', {
         bucket,
@@ -119,7 +133,7 @@ export async function recordUploadMetadata(bucket: string, path: string, file: F
       mime_type: file.type,
       status,
       updated_at: new Date().toISOString(),
-    } as any, { onConflict: 'bucket,path' });
+    } as UploadMetadataUpsert, { onConflict: 'bucket,path' });
   } catch (error) {
     trackUploadDiagnostic('metadata-write-failed', { bucket, path, message: error instanceof Error ? error.message : 'unknown' });
   }

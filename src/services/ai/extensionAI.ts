@@ -12,6 +12,33 @@ export interface ExtensionAnalysis {
   approvalConfidence: number;
 }
 
+type ExtensionRequestData = {
+  daysRequested: number;
+  supportingFacts: {
+    rainDays: number;
+    floodDays: number;
+    otherHindranceDays: number;
+    totalHindranceDays: number;
+  };
+  weatherReportUrl?: string;
+  hindranceRegisterUrl?: string;
+  supportingDocs?: unknown[];
+};
+
+type ExtensionApplicationRow = {
+  id: string;
+  application_date?: string;
+  [key: string]: unknown;
+};
+
+type ExtensionUpdateData = {
+  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'partial';
+  approved_days?: number;
+  authority_response?: string;
+  updated_at: string;
+  new_completion_date?: string;
+};
+
 export class ExtensionAI {
   static async analyzeExtensionRequest(
     projectId: string,
@@ -112,7 +139,7 @@ Respond ONLY with valid JSON.`;
   static async generateExtensionLetter(
     projectId: string,
     analysis: ExtensionAnalysis,
-    requestData: any
+    requestData: ExtensionRequestData
   ): Promise<string> {
     try {
       const letterPrompt = `Generate a formal extension of time letter based on the following analysis:
@@ -133,6 +160,7 @@ Generate a professional letter that includes:
 7. Formal closing
 
 Format as a proper business letter suitable for official records.`;
+      void letterPrompt;
 
       const response = await invokeEdgeFunction<{ letter: string }>('generate-extension-letter', {
         projectId,
@@ -155,7 +183,7 @@ Format as a proper business letter suitable for official records.`;
 
   static async saveExtensionApplication(
     projectId: string,
-    requestData: any,
+    requestData: ExtensionRequestData,
     analysis: ExtensionAnalysis,
     generatedLetter: string
   ): Promise<string> {
@@ -204,7 +232,7 @@ Format as a proper business letter suitable for official records.`;
 
   static async getExtensionHistory(
     projectId: string
-  ): Promise<any[]> {
+  ): Promise<ExtensionApplicationRow[]> {
     try {
       const { data, error } = await supabase
         .from('extension_applications')
@@ -214,7 +242,7 @@ Format as a proper business letter suitable for official records.`;
 
       if (error) throw error;
 
-      return data || [];
+      return (data || []) as ExtensionApplicationRow[];
     } catch (error) {
       console.error('Get extension history error:', error);
       return [];
@@ -228,7 +256,7 @@ Format as a proper business letter suitable for official records.`;
     authorityResponse?: string
   ): Promise<void> {
     try {
-      const updateData: any = {
+      const updateData: ExtensionUpdateData = {
         status,
         approved_days: approvedDays,
         authority_response: authorityResponse,

@@ -39,11 +39,12 @@ class OfflineSyncService {
   }
 
   // Enqueue new operation (with dedup protection)
-  async enqueue(table: string, action: string, payload: any): Promise<string> {
+  async enqueue(table: string, action: string, payload: object): Promise<string> {
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const payloadRecord = payload as Record<string, unknown>;
     
     const existing = await getPendingSyncItems();
-    const payloadKey = String(payload?.id || payload?.clientId || '');
+    const payloadKey = String(payloadRecord.id || payloadRecord.clientId || '');
     const duplicate = payloadKey
       ? existing.find(e =>
           e.table === table &&
@@ -62,7 +63,7 @@ class OfflineSyncService {
       id,
       action,
       table,
-      payload,
+      payload: payloadRecord,
       createdAt: new Date().toISOString(),
       retryCount: 0,
     };

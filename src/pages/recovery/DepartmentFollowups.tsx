@@ -1,6 +1,5 @@
 import { AppLayout } from '../../components/layout/AppLayout';
 import { usePaymentRecovery } from '../../hooks/usePaymentRecovery';
-import { Badge } from '../../components/ui/Badge';
 
 export function DepartmentFollowups() {
   const { visits, loading } = usePaymentRecovery();

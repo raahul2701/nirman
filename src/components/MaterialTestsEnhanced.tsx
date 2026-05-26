@@ -60,7 +60,7 @@ export function MaterialTestsPageEnhanced({ projectId = 'project-1' }: MaterialT
         ) : (
           reports.map((r) => (
             <div key={r.id} className="p-3 border rounded bg-gray-50">
-              <p className="font-medium">{r.report?.text || 'Report'}</p>
+              <p className="font-medium">{String(r.report?.text || 'Report')}</p>
               <p className="text-sm text-gray-600">Severity: {r.severity}</p>
               <p className="text-xs text-gray-500">Confidence: {r.confidence}</p>
             </div>

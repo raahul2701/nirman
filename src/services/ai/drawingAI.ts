@@ -17,6 +17,17 @@ export interface DrawingComparison {
   confidenceScore: number;
 }
 
+type DrawingComparisonInput = {
+  drawingUrl: string;
+  sitePhotoUrl: string;
+  drawingType: string;
+  elementType: string;
+  drawingSpec: string;
+  siteObservation: string;
+};
+
+type DrawingComparisonRecord = Record<string, unknown>;
+
 export class DrawingAI {
   static async compareDrawingToReality(
     projectId: string,
@@ -68,6 +79,7 @@ RESPONSE FORMAT: Return JSON with this exact structure:
 }
 
 Consider construction tolerances and industry standards. Respond ONLY with valid JSON.`;
+      void prompt;
 
       // Call analyze-drawing edge function
       const response = await invokeEdgeFunction<{ response: string }>('analyze-drawing', {
@@ -108,7 +120,7 @@ Consider construction tolerances and industry standards. Respond ONLY with valid
 
   private static async saveComparison(
     projectId: string,
-    inputData: any,
+    inputData: DrawingComparisonInput,
     analysis: DrawingComparison
   ): Promise<void> {
     try {
@@ -145,7 +157,7 @@ Consider construction tolerances and industry standards. Respond ONLY with valid
   static async getComparisonHistory(
     projectId: string,
     limit: number = 50
-  ): Promise<any[]> {
+  ): Promise<DrawingComparisonRecord[]> {
     try {
       const { data, error } = await supabase
         .from('drawing_comparisons')
@@ -156,7 +168,7 @@ Consider construction tolerances and industry standards. Respond ONLY with valid
 
       if (error) throw error;
 
-      return data || [];
+      return (data || []) as DrawingComparisonRecord[];
     } catch (error) {
       console.error('Get comparison history error:', error);
       return [];

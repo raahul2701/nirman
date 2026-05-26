@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   IndianRupee, Plus, X, Zap, CheckCircle, Clock,
-  AlertTriangle, ChevronRight, Loader2, Shield, FileText
+  ChevronRight
 } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui/Button';
@@ -30,7 +30,6 @@ const STATUS_LABELS: Record<string, string> = {
 export function PaymentsPage() {
   const { user } = useAuth();
   const toast = useToast();
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedMilestone = searchParams.get('milestone');
 
@@ -49,32 +48,34 @@ export function PaymentsPage() {
     project_id: '', milestone_id: preselectedMilestone || '', claimed_amount: '',
   });
 
-  useEffect(() => {
-    if (user) loadData();
+  const loadData = useCallback(async () => {
+    if (!user) return;
+    const [payRes, projRes] = await Promise.all([
+      supabase.from('payment_requests').select('*').or(`requested_by.eq.${user.id},project_id.in.(select id from gov_projects where owner_id.eq.${user.id} or engineer_id.eq.${user.id})`).order('created_at', { ascending: false }),
+      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`),
+    ]);
+    if (payRes.data) setPayments(payRes.data as PaymentRequest[]);
+    if (projRes.data) setProjects(projRes.data as GovProject[]);
+    setLoading(false);
   }, [user]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (preselectedMilestone) setShowForm(true);
   }, [preselectedMilestone]);
 
-  async function loadData() {
-    const [payRes, projRes] = await Promise.all([
-      supabase.from('payment_requests').select('*').or(`requested_by.eq.${user!.id},project_id.in.(select id from gov_projects where owner_id.eq.${user!.id} or engineer_id.eq.${user!.id})`).order('created_at', { ascending: false }),
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user!.id},contractor_id.eq.${user!.id},engineer_id.eq.${user!.id}`),
-    ]);
-    if (payRes.data) setPayments(payRes.data as PaymentRequest[]);
-    if (projRes.data) setProjects(projRes.data as GovProject[]);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    if (form.project_id) loadMilestones();
-  }, [form.project_id]);
-
-  async function loadMilestones() {
+  const loadMilestones = useCallback(async () => {
+    if (!form.project_id) return;
     const { data } = await supabase.from('payment_milestones').select('*').eq('project_id', form.project_id).eq('status', 'active').order('milestone_number');
     if (data) setMilestones(data as PaymentMilestone[]);
-  }
+  }, [form.project_id]);
+
+  useEffect(() => {
+    void loadMilestones();
+  }, [loadMilestones]);
 
   async function createRequest() {
     if (!form.project_id || !form.claimed_amount) { toast('Project and amount required', 'warning'); return; }
@@ -261,7 +262,7 @@ export function PaymentsPage() {
             <div className="mb-4">
               <p className="text-[#606060] text-xs font-medium mb-2">Approval Chain</p>
               <div className="flex items-center gap-2">
-                {['JE', 'EE', 'SE'].map((role, i) => {
+                {['JE', 'EE', 'SE'].map((role) => {
                   const approved = selectedPayment[`${role.toLowerCase()}_approved_at` as keyof PaymentRequest];
                   return (
                     <div key={role} className="flex-1 rounded-xl p-2.5 text-center" style={{ background: approved ? 'rgba(34,197,94,0.08)' : '#111111', border: `1px solid ${approved ? 'rgba(34,197,94,0.2)' : '#2A2A2A'}` }}>

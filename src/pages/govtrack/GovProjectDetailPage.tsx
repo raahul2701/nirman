@@ -1,20 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Landmark, Plus, ChevronRight, Calendar, MapPin, IndianRupee,
-  Building2, User, X, Zap, AlertTriangle, CheckCircle, Clock,
+  Landmark, Plus, Calendar, MapPin, IndianRupee,
+  Building2, User, X, Zap, CheckCircle, Clock,
   Lock, Unlock, Loader2
 } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { Input, Select, Textarea } from '../../components/ui/Input';
+import { Input, Textarea } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
 import { invokeAiAnalyze } from '../../services/ai/aiService';
 import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { GovProject, PaymentMilestone, AIRiskLevel } from '../../types';
-import { formatCurrency, formatDistanceToNow } from '../../lib/utils';
+import { formatCurrency } from '../../lib/utils';
 
 const RISK_COLORS: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#eab308', safe: '#22c55e' };
 const MILESTONE_STATUS_COLORS: Record<string, string> = { locked: '#606060', active: '#FF6B00', submitted: '#3B82F6', approved: '#00D4AA', paid: '#22c55e' };
@@ -31,11 +31,8 @@ export function GovProjectDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [mForm, setMForm] = useState({ milestone_name: '', description: '', payment_amount: '', payment_percentage: '', due_date: '' });
 
-  useEffect(() => {
-    if (user && id) loadData();
-  }, [user, id]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!user || !id) return;
     const [projRes, mileRes] = await Promise.all([
       supabase.from('gov_projects').select('*').eq('id', id).maybeSingle(),
       supabase.from('payment_milestones').select('*').eq('project_id', id).order('milestone_number'),
@@ -43,7 +40,11 @@ export function GovProjectDetailPage() {
     if (projRes.data) setProject(projRes.data as GovProject);
     if (mileRes.data) setMilestones(mileRes.data as PaymentMilestone[]);
     setLoading(false);
-  }
+  }, [id, user]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   async function addMilestone() {
     if (!mForm.milestone_name) { toast('Milestone name required', 'warning'); return; }

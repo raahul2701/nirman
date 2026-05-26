@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   FileBarChart, TrendingUp, IndianRupee, Shield,
   CheckCircle, AlertTriangle, Clock, Download
 } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
-import { formatCurrency } from '../../lib/utils';
 
 const monthlyPayments = [
   { month: 'Jan', released: 18, pending: 5 },
@@ -39,16 +38,13 @@ export function GovReportsPage() {
   const [stats, setStats] = useState({ totalProjects: 0, totalPayments: 0, totalInspections: 0, totalUploads: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) loadStats();
-  }, [user]);
-
-  async function loadStats() {
+  const loadStats = useCallback(async () => {
+    if (!user) return;
     const [proj, pay, insp, uploads] = await Promise.all([
-      supabase.from('gov_projects').select('id', { count: 'exact' }).or(`owner_id.eq.${user!.id},contractor_id.eq.${user!.id},engineer_id.eq.${user!.id}`),
+      supabase.from('gov_projects').select('id', { count: 'exact' }).or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`),
       supabase.from('payment_requests').select('id', { count: 'exact' }),
-      supabase.from('inspection_reports').select('id', { count: 'exact' }).eq('inspected_by', user!.id),
-      supabase.from('work_uploads').select('id', { count: 'exact' }).eq('uploaded_by', user!.id),
+      supabase.from('inspection_reports').select('id', { count: 'exact' }).eq('inspected_by', user.id),
+      supabase.from('work_uploads').select('id', { count: 'exact' }).eq('uploaded_by', user.id),
     ]);
     setStats({
       totalProjects: proj.count || 0,
@@ -57,7 +53,11 @@ export function GovReportsPage() {
       totalUploads: uploads.count || 0,
     });
     setLoading(false);
-  }
+  }, [user]);
+
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
 
   return (
     <AppLayout title="GovTrack Reports — NIRMAN AI" subtitle="Auto-generated analytics and compliance reports by ARSPL">

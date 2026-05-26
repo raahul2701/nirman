@@ -1,10 +1,9 @@
 import { useMemo } from 'react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { useMaterialVariance } from '../../hooks/useMaterialVariance';
-import { Badge } from '../../components/ui/Badge';
 
 export function MaterialReconciliation() {
-  const { reconciliations, alerts, totalVariance, activeAlerts, loading } = useMaterialVariance();
+  const { reconciliations, totalVariance, activeAlerts, loading } = useMaterialVariance();
 
   const summary = useMemo(() => ({
     count: reconciliations.length,

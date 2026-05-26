@@ -9,7 +9,7 @@ import { OfflineSyncIndicator } from '../../components/offline/OfflineSyncIndica
 const DEFAULT_PROJECT_ID = 'project-1';
 
 export function DieselDashboard() {
-  const { entries, alerts, loading, totalDieselReceived, totalDieselUsed, openAlerts, recentAlerts } = useDieselTracking();
+  const { entries, loading, totalDieselReceived, totalDieselUsed, openAlerts, recentAlerts } = useDieselTracking();
   const { logs } = useDieselLogs(DEFAULT_PROJECT_ID);
 
   const serviceEntries = useMemo(() => logs.map((item) => ({

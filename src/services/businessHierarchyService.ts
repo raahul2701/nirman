@@ -112,6 +112,38 @@ type WorkspaceSummaryInput = {
   recommendations?: ContractorRecommendation[] | null;
   googleConnection?: WorkspaceGoogleConnection | null;
 };
+type WorkspaceMembershipRow = {
+  workspace_id?: string;
+};
+type WorkspaceGoogleConnectionUpsert = Partial<WorkspaceGoogleConnection> & {
+  workspace_id: string;
+  updated_at: string;
+};
+type ContractorRecommendationInsert = {
+  workspace_id: string;
+  recommended_by_executive_engineer_id: string;
+  contractor_name: string;
+  contractor_email: string | null;
+  contractor_phone: string | null;
+  contractor_company_name: string | null;
+  project_ids: string[];
+  status: string;
+};
+type ContractorLicenseUpsert = {
+  workspace_id: string;
+  contractor_id: string;
+  contractor_company_name: string;
+  contractor_user_count: number;
+  minimum_billable_users: number;
+  price_per_user_month: number;
+  license_status: LicenseStatus;
+  billing_owner: 'contractor';
+  recommended_by_executive_engineer_id: string | null;
+  approved_by_executive_engineer_id: string | null;
+  starts_at: string;
+  expires_at: string | null;
+  updated_at: string;
+};
 
 export function normalizeWorkspaceSummary(summary?: WorkspaceSummaryInput | null): WorkspaceSummary {
   return {
@@ -153,7 +185,7 @@ export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
       .limit(1);
     if (memberError) throw memberError;
 
-    const workspaceId = (memberships?.[0] as any)?.workspace_id as string | undefined;
+    const workspaceId = (memberships?.[0] as WorkspaceMembershipRow | undefined)?.workspace_id;
     if (!workspaceId) return EMPTY_WORKSPACE_SUMMARY;
 
     const [
@@ -205,7 +237,7 @@ export async function upsertWorkspaceGoogleConnection(workspaceId: string, value
       drive_api_status: values.drive_api_status || 'not_configured',
       setup_status: values.setup_status || 'manual_pending',
       updated_at: new Date().toISOString(),
-    } as any, { onConflict: 'workspace_id' })
+    } as WorkspaceGoogleConnectionUpsert, { onConflict: 'workspace_id' })
     .select()
     .single();
   if (error) throw error;
@@ -232,7 +264,7 @@ export async function recommendContractor(input: {
       contractor_company_name: input.contractorCompanyName || null,
       project_ids: input.projectIds || [],
       status: 'recommended',
-    } as any)
+    } as ContractorRecommendationInsert)
     .select()
     .single();
   if (error) throw error;
@@ -264,7 +296,7 @@ export async function activateContractorLicense(input: {
       starts_at: new Date().toISOString(),
       expires_at: input.expiresAt || null,
       updated_at: new Date().toISOString(),
-    } as any, { onConflict: 'workspace_id,contractor_id' })
+    } as ContractorLicenseUpsert, { onConflict: 'workspace_id,contractor_id' })
     .select()
     .single();
   if (error) throw error;

@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
-  AlertTriangle, Plus, Search, Filter, Upload, Loader2, X,
-  MapPin, Clock, CheckCircle2, ChevronDown, Brain, Camera,
+  AlertTriangle, Plus, Search, X,
+  MapPin, Clock, Brain, Camera,
   FileText, Zap
 } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
-import { Card } from '../components/ui/Card';
 import { SeverityBadge, StatusBadge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input, Select, Textarea } from '../components/ui/Input';

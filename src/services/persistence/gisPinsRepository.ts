@@ -24,10 +24,10 @@ export const gisPinsRepository = {
     return data as GisSitePin;
   },
 
-  subscribe(projectId: string, cb: (p: any) => void) {
+  subscribe(projectId: string, cb: (p: unknown) => void) {
     return supabase
       .from(`gis_site_pins:project_id=eq.${projectId}`)
-      .on('*', (payload: any) => cb(payload))
+      .on('*', (payload: unknown) => cb(payload))
       .subscribe();
   },
 };

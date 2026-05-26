@@ -137,11 +137,13 @@ Respond ONLY with valid JSON, no additional text.`
 
     // Save extracted BOQ to database
     // First ensure project_boq exists
-    let { data: boqData, error: boqError } = await supabase
+    const boqResult = await supabase
       .from('project_boq')
       .select('id')
       .eq('project_id', project_id)
       .single()
+    let boqData = boqResult.data
+    const boqError = boqResult.error
 
     if (boqError && boqError.code === 'PGRST116') {
       // Create project_boq if it doesn't exist
@@ -158,7 +160,7 @@ Respond ONLY with valid JSON, no additional text.`
     }
 
     // Prepare BOQ items for insertion
-    const boqItems = extractionResult.items.map((item: any) => ({
+    const boqItems = extractionResult.items.map((item: Record<string, unknown>) => ({
       boq_id: boqData.id,
       item_code: item.item_code,
       description: item.description,

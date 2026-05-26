@@ -13,7 +13,7 @@ export function useGisPinPersistence(projectId: string) {
       type: string;
       lat: number;
       lng: number;
-      properties?: Record<string, any>;
+      properties?: Record<string, unknown>;
     }) => {
       if (!user) throw new Error('Not authenticated');
 

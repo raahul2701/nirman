@@ -11,6 +11,17 @@ export interface MaterialTestAnalysis {
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
 }
 
+type MaterialTestTrendRow = {
+  test_date?: string;
+  result?: string;
+  ai_quality_assessment?: string;
+  ai_compliance_status?: string;
+  achieved_value?: string | number;
+  required_value?: string | number;
+};
+
+type PendingMaterialVerification = Record<string, unknown>;
+
 export class MaterialAI {
   static async verifyMaterialTest(
     testId: string,
@@ -59,6 +70,7 @@ RESPONSE FORMAT: Return JSON with this exact structure:
 }
 
 Respond ONLY with valid JSON.`;
+      void prompt;
 
       // Call verify-material-test edge function
       const response = await invokeEdgeFunction<{ response: string }>('verify-material-test', {
@@ -162,7 +174,7 @@ Respond ONLY with valid JSON.`;
       const prompt = `Analyze material test trends for ${materialType} over ${days} days with ${tests.length} test records.
 
 TEST DATA SUMMARY:
-${tests.map((test: any, index: number) => `
+${(tests as MaterialTestTrendRow[]).map((test, index) => `
 Test ${index + 1}:
 - Date: ${test.test_date}
 - Result: ${test.result}
@@ -206,7 +218,7 @@ Provide trend analysis in JSON format:
     }
   }
 
-  static async getPendingVerifications(projectId: string): Promise<any[]> {
+  static async getPendingVerifications(projectId: string): Promise<PendingMaterialVerification[]> {
     try {
       const { data, error } = await supabase
         .from('material_tests')
@@ -217,7 +229,7 @@ Provide trend analysis in JSON format:
 
       if (error) throw error;
 
-      return data || [];
+      return (data || []) as PendingMaterialVerification[];
     } catch (error) {
       console.error('Get pending verifications error:', error);
       return [];

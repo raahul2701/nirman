@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  Camera, Upload, X, MapPin, Loader2, CheckCircle,
-  AlertTriangle, Zap, Image, FileText
+  Camera, Upload, X, MapPin,
+  Zap
 } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui/Button';
@@ -50,28 +50,30 @@ export function UploadWorkPage() {
     description: '', gps_latitude: '', gps_longitude: '',
   });
 
-  useEffect(() => {
-    if (user) loadData();
-  }, [user]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!user) return;
     const [projRes, uploadRes] = await Promise.all([
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user!.id},contractor_id.eq.${user!.id}`).order('created_at', { ascending: false }),
-      supabase.from('work_uploads').select('*').eq('uploaded_by', user!.id).order('upload_timestamp', { ascending: false }).limit(20),
+      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},contractor_id.eq.${user.id}`).order('created_at', { ascending: false }),
+      supabase.from('work_uploads').select('*').eq('uploaded_by', user.id).order('upload_timestamp', { ascending: false }).limit(20),
     ]);
     if (projRes.data) setProjects(projRes.data as GovProject[]);
     if (uploadRes.data) setUploads(uploadRes.data as WorkUpload[]);
     setLoading(false);
-  }
+  }, [user]);
 
   useEffect(() => {
-    if (form.project_id) loadMilestones();
-  }, [form.project_id]);
+    void loadData();
+  }, [loadData]);
 
-  async function loadMilestones() {
+  const loadMilestones = useCallback(async () => {
+    if (!form.project_id) return;
     const { data } = await supabase.from('payment_milestones').select('*').eq('project_id', form.project_id).neq('status', 'locked').order('milestone_number');
     if (data) setMilestones(data as PaymentMilestone[]);
-  }
+  }, [form.project_id]);
+
+  useEffect(() => {
+    void loadMilestones();
+  }, [loadMilestones]);
 
   async function submitUpload() {
     if (!form.project_id || !form.description) {
@@ -110,7 +112,7 @@ export function UploadWorkPage() {
         ai_quality_score: aiData.quality_score || 75,
         issues_found: aiData.issues || [],
       }).eq('id', data!.id);
-      if (data) setUploads(prev => [{ ...(data as WorkUpload), ai_analysis: (aiData as any)?.analysis, ai_quality_score: (aiData as any)?.quality_score || 75 }, ...prev]);
+      if (data) setUploads(prev => [{ ...(data as WorkUpload), ai_analysis: aiData.analysis || 'Quality check complete.', ai_quality_score: aiData.quality_score || 75 }, ...prev]);
       toast('Work uploaded and AI analyzed!', 'success');
     } catch {
       if (data) setUploads(prev => [data as WorkUpload, ...prev]);

@@ -26,10 +26,10 @@ export const materialReportsRepository = {
   },
 
   // Subscription helper (returns realtime subscription object)
-  subscribe(projectId: string, callback: (r: any) => void) {
+  subscribe(projectId: string, callback: (r: unknown) => void) {
     return supabase
       .from(`material_ai_reports:project_id=eq.${projectId}`)
-      .on('*', (payload: any) => callback(payload))
+      .on('*', (payload: unknown) => callback(payload))
       .subscribe();
   },
 };

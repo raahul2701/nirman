@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  ClipboardCheck, Plus, X, Zap, CheckCircle, AlertTriangle,
-  Shield, Calendar, Star, Loader2, Camera
+  ClipboardCheck, Plus, X, Zap,
+  Shield, Star
 } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui/Button';
@@ -39,19 +39,20 @@ export function InspectionsPage() {
     inspection_type: 'routine', notes: '',
   });
 
-  useEffect(() => {
-    if (user) loadData();
-  }, [user]);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!user) return;
     const [inspRes, projRes] = await Promise.all([
-      supabase.from('inspection_reports').select('*').eq('inspected_by', user!.id).order('created_at', { ascending: false }),
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user!.id},engineer_id.eq.${user!.id}`),
+      supabase.from('inspection_reports').select('*').eq('inspected_by', user.id).order('created_at', { ascending: false }),
+      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},engineer_id.eq.${user.id}`),
     ]);
     if (inspRes.data) setInspections(inspRes.data as InspectionReport[]);
     if (projRes.data) setProjects(projRes.data as GovProject[]);
     setLoading(false);
-  }
+  }, [user]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   async function createInspection() {
     if (!form.project_id) { toast('Select a project', 'warning'); return; }
