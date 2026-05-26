@@ -310,7 +310,7 @@ const code = generateEEInviteCode("Rahul Sharma");
 // Output: NIRMAN-EE-RAHU-7834
 
 const link = generateInviteLink(code);
-// Output: https://nirmanai.com/join?ee=NIRMAN-EE-RAHU-7834
+// Output: https://nirman.apostolicredeem.com/join?ee=NIRMAN-EE-RAHU-7834
 ```
 
 ### Call Claude API

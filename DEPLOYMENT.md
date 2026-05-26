@@ -137,7 +137,7 @@ VERCEL_PROJECT_ID=prj_xxxx
 #### Application Config
 ```
 VITE_APP_NAME=NIRMAN AI
-VITE_APP_URL=https://nirmanai.com
+VITE_APP_URL=https://nirman.apostolicredeem.com
 VITE_COMPANY_NAME=Apostolic Redeem Services Pvt Ltd
 ```
 
@@ -221,7 +221,7 @@ feature/* → Pull request validation only
 Configure custom domain in Vercel:
 
 1. Go to Vercel project settings
-2. Add domain: `nirmanai.com`
+2. Add domain: `nirman.apostolicredeem.com`
 3. Update DNS records as instructed
 4. Update `VITE_APP_URL` environment variable
 

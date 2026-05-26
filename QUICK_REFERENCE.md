@@ -81,7 +81,7 @@ const code = generateEEInviteCode("Rahul Sharma");
 import { generateInviteLink } from '@/lib/utils';
 
 const link = generateInviteLink("NIRMAN-EE-RAHU-7834");
-// Returns: "https://yourapp.com/join?ee=NIRMAN-EE-RAHU-7834"
+// Returns: "https://nirman.apostolicredeem.com/join?ee=NIRMAN-EE-RAHU-7834"
 ```
 
 ### Generate Report Code

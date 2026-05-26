@@ -262,7 +262,7 @@ git push origin main
 ### Step 5: Post-Deployment Verification
 ```bash
 # Check website status
-curl https://your-domain.com/health
+curl https://nirman.apostolicredeem.com/health
 
 # Verify service worker
 # Verify cron jobs

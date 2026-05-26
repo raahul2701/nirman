@@ -189,7 +189,7 @@ const pilotInvitation = `NIRMAN AI invites selected departments and project team
 
 The pilot can begin with one workspace, one project, assigned EE/AE/JE/Contractor users, mobile field uploads, GIS tagging, QC/TPA review, dashboard monitoring, and activity tracking. Feedback from engineers and contractors will be used to improve the workflow before wider adoption.
 
-For pilot support, contact Rahul Narayan, Founder - NIRMAN AI, Apostolic Redeem Services Pvt Ltd (ARSPL). WhatsApp: +91 74880 82696. Website: www.apostolicredeem.in`;
+For pilot support, contact Rahul Narayan, Founder - NIRMAN AI, Apostolic Redeem Services Pvt Ltd (ARSPL). WhatsApp: +91 74880 82696. App: https://nirman.apostolicredeem.com`;
 
 function Section({ id, title, icon, children }: { id: string; title: string; icon: ReactNode; children: ReactNode }) {
   return (
@@ -239,7 +239,7 @@ function CopyButton({ label, copiedLabel, text }: { label: string; copiedLabel: 
 
 export function NirmanAiValuePage() {
   const contactLine = useMemo(
-    () => 'Rahul Narayan | Founder - NIRMAN AI | Apostolic Redeem Services Pvt Ltd (ARSPL) | WhatsApp: +91 74880 82696 | Website: www.apostolicredeem.in',
+    () => 'Rahul Narayan | Founder - NIRMAN AI | Apostolic Redeem Services Pvt Ltd (ARSPL) | WhatsApp: +91 74880 82696 | App: https://nirman.apostolicredeem.com',
     []
   );
 
@@ -421,7 +421,7 @@ export function NirmanAiValuePage() {
           <p>Founder - NIRMAN AI</p>
           <p>Apostolic Redeem Services Pvt Ltd (ARSPL)</p>
           <p>WhatsApp: +91 74880 82696</p>
-          <p>Website: www.apostolicredeem.in</p>
+          <p>App: https://nirman.apostolicredeem.com</p>
         </div>
         <div className="mt-4">
           <CopyButton label="Copy Contact" copiedLabel="Contact Copied" text={contactLine} />
