@@ -42,6 +42,11 @@ type ProblemRowProps = {
   onOpen: () => void;
 };
 
+type MaterialStockRow = {
+  current_qty?: number | null;
+  threshold_qty?: number | null;
+};
+
 const ProblemRow = memo(function ProblemRow({ problem, onOpen }: ProblemRowProps) {
   return (
     <div
@@ -110,7 +115,9 @@ export function DashboardPage() {
 
       if (!isActive) return;
 
-      const lowStock = (materials.data || []).filter((m: any) => m.current_qty <= m.threshold_qty).length;
+      const lowStock = ((materials.data || []) as MaterialStockRow[]).filter(
+        (m) => Number(m.current_qty || 0) <= Number(m.threshold_qty || 0)
+      ).length;
       setStats({
         activeProjects: proj.count || 0,
         openIssues: probs.count || 0,

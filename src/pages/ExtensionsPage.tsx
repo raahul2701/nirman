@@ -8,7 +8,7 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { MessageSquare, FileText, Clock, CheckCircle, AlertTriangle, Calendar } from 'lucide-react';
+import { MessageSquare, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
 import { ExtensionAI } from '../services/ai/extensionAI';
 
 const extensionSchema = z.object({
@@ -25,11 +25,37 @@ const extensionSchema = z.object({
 
 type ExtensionFormData = z.infer<typeof extensionSchema>;
 
+interface ExtensionAnalysis {
+  isEligible?: boolean;
+  recommendedDays?: number;
+  confidence?: number;
+  keyFactors?: string[];
+  recommendation?: string;
+  letterContent?: string;
+  reasonAccepted?: boolean;
+}
+
+interface ExtensionRow {
+  id: string;
+  project_id: string;
+  requested_days: number;
+  extension_reason: string;
+  original_completion_date: string;
+  requested_date: string;
+  status: string;
+  projects?: {
+    project_name?: string | null;
+  } | null;
+  contracts?: {
+    contract_number?: string | null;
+  } | null;
+  ai_analysis?: ExtensionAnalysis | null;
+}
+
 export const ExtensionsPage: React.FC = () => {
-  const [extensions, setExtensions] = useState<any[]>([]);
+  const [extensions, setExtensions] = useState<ExtensionRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedExtension, setSelectedExtension] = useState<any>(null);
   const [analyzingExtension, setAnalyzingExtension] = useState<string | null>(null);
 
   const {
@@ -60,7 +86,7 @@ export const ExtensionsPage: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setExtensions(data || []);
+      setExtensions((data || []) as ExtensionRow[]);
     } catch (error) {
       console.error('Error loading extensions:', error);
       toast.error('Failed to load time extensions');
@@ -340,7 +366,7 @@ export const ExtensionsPage: React.FC = () => {
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-400">Eligibility:</span>
-                        <span className={getEligibilityColor(extension.ai_analysis.isEligible)}>
+                        <span className={getEligibilityColor(Boolean(extension.ai_analysis.isEligible))}>
                           {extension.ai_analysis.isEligible ? 'Eligible' : 'Not Eligible'}
                         </span>
                       </div>

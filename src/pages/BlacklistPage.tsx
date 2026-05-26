@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useForm, SubmitHandler, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '../components/ui/Button';
@@ -27,9 +27,32 @@ const blacklistSchema = z.object({
 
 type BlacklistFormData = z.infer<typeof blacklistSchema>;
 
+interface BlacklistedContractorRow {
+  id: string;
+  contractor_name: string;
+  contractor_company?: string | null;
+  phone?: string | null;
+  aadhaar?: string | null;
+  pan_number?: string | null;
+  reason: string;
+  fraud_type?: string | null;
+  severity: string;
+  status: string;
+  created_at: string;
+}
+
+interface BlacklistAlertRow {
+  id: string;
+  alert_reason: string;
+  created_at: string;
+  blacklist?: {
+    contractor_name?: string | null;
+  } | null;
+}
+
 export const BlacklistPage: React.FC = () => {
-  const [contractors, setContractors] = useState<any[]>([]);
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [contractors, setContractors] = useState<BlacklistedContractorRow[]>([]);
+  const [alerts, setAlerts] = useState<BlacklistAlertRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,7 +63,7 @@ export const BlacklistPage: React.FC = () => {
     reset,
     formState: { errors }
   } = useForm<BlacklistFormData>({
-    resolver: zodResolver(blacklistSchema) as any
+    resolver: zodResolver(blacklistSchema) as Resolver<BlacklistFormData>
   });
 
   useEffect(() => {
@@ -69,8 +92,8 @@ export const BlacklistPage: React.FC = () => {
 
       if (alertsError) throw alertsError;
 
-      setContractors(contractorsData || []);
-      setAlerts(alertsData || []);
+      setContractors((contractorsData || []) as BlacklistedContractorRow[]);
+      setAlerts((alertsData || []) as BlacklistAlertRow[]);
     } catch (error) {
       console.error('Load blacklist data error:', error);
       toast.error('Failed to load blacklist data');
@@ -126,16 +149,6 @@ export const BlacklistPage: React.FC = () => {
     contractor.pan_number?.includes(searchTerm) ||
     contractor.aadhaar?.includes(searchTerm)
   );
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'critical': return 'bg-red-500';
-      case 'high': return 'bg-orange-500';
-      case 'medium': return 'bg-yellow-500';
-      case 'low': return 'bg-green-500';
-      default: return 'bg-gray-500';
-    }
-  };
 
   const getSeverityBadge = (severity: string) => {
     const colors = {

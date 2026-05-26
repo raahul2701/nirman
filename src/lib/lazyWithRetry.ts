@@ -24,7 +24,7 @@ function reloadOnceForStaleChunk(): void {
   window.location.reload();
 }
 
-export function lazyWithRetry<T extends ComponentType<any>>(
+export function lazyWithRetry<T extends ComponentType<object>>(
   factory: () => Promise<{ default: T }>
 ): LazyExoticComponent<T> {
   return lazy(async () => {
@@ -47,7 +47,7 @@ export function lazyWithRetry<T extends ComponentType<any>>(
   });
 }
 
-export function createLazyComponent<T extends ComponentType<any>, TModule extends Record<string, unknown>>(
+export function createLazyComponent<T extends ComponentType<object>, TModule extends Record<string, unknown>>(
   factory: () => Promise<TModule>,
   exportName: keyof TModule
 ): LazyExoticComponent<T> {

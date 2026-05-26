@@ -30,7 +30,13 @@ interface RecentActivity {
   action: string;
   user_id: string;
   created_at: string;
-  details?: any;
+  details?: Record<string, unknown>;
+}
+
+interface StorageListFile {
+  metadata?: {
+    size?: number | string | null;
+  } | null;
 }
 
 export function AdminSystemPage() {
@@ -77,7 +83,7 @@ export function AdminSystemPage() {
         activeUsers: activeUsers || 0,
         onlineUsers: onlineUsers || 0,
         aiUsageToday: aiUsage?.length || 0,
-        storageUsed: storage?.reduce((acc: number, file: any) => acc + (file.metadata?.size || 0), 0) || 0,
+        storageUsed: ((storage || []) as StorageListFile[]).reduce((acc, file) => acc + Number(file.metadata?.size || 0), 0),
         storageLimit: 100 * 1024 * 1024 * 1024, // 100GB
         failedJobs: failedJobs || 0,
         bgAlertsToday: bgAlertsToday || 0,

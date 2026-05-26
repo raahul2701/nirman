@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useForm, SubmitHandler } from 'react-hook-form';
+import { useForm, SubmitHandler, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '../components/ui/Button';
@@ -28,8 +28,24 @@ const bankGuaranteeSchema = z.object({
 
 type BankGuaranteeFormData = z.infer<typeof bankGuaranteeSchema>;
 
+interface BankGuaranteeRow {
+  id: string;
+  bg_number: string;
+  status: string;
+  expiry_date: string;
+  amount?: number | null;
+  issuing_bank?: string | null;
+  contractors?: {
+    contractor_name?: string | null;
+    company_name?: string | null;
+  } | null;
+  projects?: {
+    project_name?: string | null;
+  } | null;
+}
+
 export const BankGuaranteesPage: React.FC = () => {
-  const [guarantees, setGuarantees] = useState<any[]>([]);
+  const [guarantees, setGuarantees] = useState<BankGuaranteeRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -40,7 +56,7 @@ export const BankGuaranteesPage: React.FC = () => {
     reset,
     formState: { errors }
   } = useForm<BankGuaranteeFormData>({
-    resolver: zodResolver(bankGuaranteeSchema) as any
+    resolver: zodResolver(bankGuaranteeSchema) as Resolver<BankGuaranteeFormData>
   });
 
   useEffect(() => {
@@ -59,7 +75,7 @@ export const BankGuaranteesPage: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setGuarantees(data || []);
+      setGuarantees((data || []) as BankGuaranteeRow[]);
     } catch (error) {
       console.error('Error loading bank guarantees:', error);
       toast.error('Failed to load bank guarantees');

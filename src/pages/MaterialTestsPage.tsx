@@ -8,7 +8,7 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { Beaker, Upload, AlertTriangle, CheckCircle, TrendingUp, FileText, Camera, Video, X } from 'lucide-react';
+import { Beaker, Upload, CheckCircle, TrendingUp, Camera, Video, X } from 'lucide-react';
 import { MaterialAI } from '../services/ai/materialAI';
 import { analyzeMaterialInspection } from '../services/ai/constructionAI';
 import { compressImage } from '../services/ai/imageCompression';
@@ -23,7 +23,7 @@ const materialTestSchema = z.object({
   sample_id: z.string().min(1, 'Sample ID is required'),
   test_date: z.string().min(1, 'Test date is required'),
   tested_by: z.string().min(1, 'Tester name is required'),
-  test_results: z.record(z.string(), z.any()).optional(),
+  test_results: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(['pending', 'completed', 'failed']),
   remarks: z.string().optional()
 });
@@ -31,6 +31,33 @@ const materialTestSchema = z.object({
 type MaterialTestFormData = z.infer<typeof materialTestSchema>;
 const OFFLINE_INSPECTION_QUEUE_KEY = 'nirman:material-inspection-queue';
 const DEFAULT_PROJECT_ID = 'project-1';
+
+interface MaterialTestAnalysis {
+  confidence?: number;
+  isAuthentic?: boolean;
+  qualityScore?: number;
+  complianceStatus?: string;
+  keyParameters?: Array<{
+    name?: string;
+    value?: string | number;
+    unit?: string;
+  }>;
+  recommendations?: string;
+}
+
+interface MaterialTestRow {
+  id: string;
+  project_id?: string | null;
+  sample_id: string;
+  material_type?: string | null;
+  test_type?: string | null;
+  test_date: string;
+  status: string;
+  test_results?: MaterialTestAnalysis | null;
+  projects?: {
+    project_name?: string | null;
+  } | null;
+}
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -43,10 +70,10 @@ function readFileAsDataUrl(file: File) {
 
 export const MaterialTestsPage: React.FC = () => {
   const { user } = useAuth();
-  const [tests, setTests] = useState<any[]>([]);
+  const [tests, setTests] = useState<MaterialTestRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedTest, setSelectedTest] = useState<any>(null);
+  const [selectedTest] = useState<MaterialTestRow | null>(null);
   const [uploadedReport, setUploadedReport] = useState<File | null>(null);
   const [inspectionFiles, setInspectionFiles] = useState<File[]>([]);
   const [inspectionNotes, setInspectionNotes] = useState('');
@@ -99,7 +126,7 @@ export const MaterialTestsPage: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTests(data || []);
+      setTests((data || []) as MaterialTestRow[]);
     } catch (error) {
       console.error('Error loading material tests:', error);
       toast.error('Failed to load material tests');
@@ -199,7 +226,7 @@ export const MaterialTestsPage: React.FC = () => {
             reportUrl: urlData.publicUrl,
           },
           structured_output: analysis,
-          confidence: Number((analysis as any).confidence || 0.85),
+          confidence: Number((analysis as unknown as MaterialTestAnalysis).confidence || 0.85),
           severity: analysis.authenticityVerified ? 'low' : 'high',
           created_by: user?.id,
         });
@@ -253,8 +280,8 @@ export const MaterialTestsPage: React.FC = () => {
       if (controller.signal.aborted) return;
 
       const result = await analyzeMaterialInspection({
-        materialType: selectedTest?.material_type,
-        testType: selectedTest?.test_type,
+        materialType: selectedTest?.material_type || undefined,
+        testType: selectedTest?.test_type || undefined,
         remarks: `${inspectionNotes}\n\nRequired report format: Observation | IS/MORTH Reference | Severity | Suggested Action | AI Confidence.`,
         mediaDataUrls: imageDataUrls,
         signal: controller.signal,
@@ -304,7 +331,7 @@ export const MaterialTestsPage: React.FC = () => {
     doc.save(`material-inspection-${Date.now()}.pdf`);
   };
 
-  const getStatusBadge = (status: string, analysis?: any) => {
+  const getStatusBadge = (status: string, analysis?: MaterialTestAnalysis | null) => {
     const statusConfig = {
       pending: { color: 'bg-yellow-500', label: 'Pending' },
       completed: { color: 'bg-green-500', label: 'Completed' },
@@ -615,7 +642,7 @@ export const MaterialTestsPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 {test.test_results?.qualityScore && (
-                  <div className={`text-sm font-semibold ${getQualityScoreColor(test.test_results.qualityScore)}`}>
+                    <div className={`text-sm font-semibold ${getQualityScoreColor(test.test_results.qualityScore || 0)}`}>
                     Quality: {test.test_results.qualityScore}%
                   </div>
                 )}
@@ -659,7 +686,7 @@ export const MaterialTestsPage: React.FC = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-400">Quality Score:</span>
-                        <span className={getQualityScoreColor(test.test_results.qualityScore)}>
+                        <span className={getQualityScoreColor(test.test_results.qualityScore || 0)}>
                           {test.test_results.qualityScore}%
                         </span>
                       </div>
@@ -678,7 +705,7 @@ export const MaterialTestsPage: React.FC = () => {
                       Key Parameters
                     </h4>
                     <div className="space-y-1 text-sm">
-                      {test.test_results.keyParameters?.map((param: any, index: number) => (
+                      {test.test_results.keyParameters?.map((param, index) => (
                         <div key={index} className="flex justify-between">
                           <span className="text-gray-400">{param.name}:</span>
                           <span className="text-white">{param.value} {param.unit}</span>

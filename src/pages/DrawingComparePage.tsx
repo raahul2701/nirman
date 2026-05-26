@@ -4,12 +4,32 @@ import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { ScanLine, Upload, Camera, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
+import { ScanLine, Upload, Camera, AlertTriangle, CheckCircle } from 'lucide-react';
 import { DrawingAI } from '../services/ai/drawingAI';
+
+interface DrawingDeviation {
+  element?: string;
+  severity: string;
+  description?: string;
+  expectedValue?: string;
+  actualValue?: string;
+  deviation?: number;
+  recommendations?: string;
+}
+
+interface DrawingComparisonResult {
+  overallCompliance: number;
+  deviationsFound: number;
+  compliantElements: number;
+  minorDeviations: number;
+  majorDeviations: number;
+  deviations?: DrawingDeviation[];
+  recommendations?: string[];
+}
 
 export const DrawingComparePage: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [comparisonResult, setComparisonResult] = useState<any>(null);
+  const [comparisonResult, setComparisonResult] = useState<DrawingComparisonResult | null>(null);
   const [uploadedDrawing, setUploadedDrawing] = useState<File | null>(null);
   const [uploadedPhoto, setUploadedPhoto] = useState<File | null>(null);
   const drawingInputRef = useRef<HTMLInputElement>(null);
@@ -64,7 +84,7 @@ export const DrawingComparePage: React.FC = () => {
         siteObservation: 'Current site photo shows actual installation status'
       });
 
-      setComparisonResult(result);
+      setComparisonResult(result as unknown as DrawingComparisonResult);
       toast.success('Analysis completed successfully');
     } catch (error) {
       console.error('Analysis error:', error);
@@ -267,7 +287,7 @@ export const DrawingComparePage: React.FC = () => {
                 Identified Deviations
               </h3>
               <div className="space-y-3">
-                {comparisonResult.deviations.map((deviation: any, index: number) => (
+                {comparisonResult.deviations.map((deviation, index) => (
                   <div key={index} className="border border-[#333] rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-semibold text-white">{deviation.element}</h4>

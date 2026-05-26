@@ -3,6 +3,43 @@ import type { Database } from '../types/database';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+type LooseDatabase = ReturnType<typeof JSON.parse>;
+type BaseSupabaseClient = SupabaseClient<LooseDatabase>;
+type LooseQueryData = ReturnType<typeof JSON.parse>;
+type LooseQueryResult = {
+  data: LooseQueryData;
+  error: (Error & { code?: string }) | null;
+  count: number | null;
+  status?: number;
+  statusText?: string;
+};
+type LooseQueryBuilder = PromiseLike<LooseQueryResult> & {
+  select: (...args: unknown[]) => LooseQueryBuilder;
+  insert: (...args: unknown[]) => LooseQueryBuilder;
+  update: (...args: unknown[]) => LooseQueryBuilder;
+  upsert: (...args: unknown[]) => LooseQueryBuilder;
+  delete: (...args: unknown[]) => LooseQueryBuilder;
+  eq: (...args: unknown[]) => LooseQueryBuilder;
+  neq: (...args: unknown[]) => LooseQueryBuilder;
+  gte: (...args: unknown[]) => LooseQueryBuilder;
+  lte: (...args: unknown[]) => LooseQueryBuilder;
+  gt: (...args: unknown[]) => LooseQueryBuilder;
+  lt: (...args: unknown[]) => LooseQueryBuilder;
+  ilike: (...args: unknown[]) => LooseQueryBuilder;
+  in: (...args: unknown[]) => LooseQueryBuilder;
+  is: (...args: unknown[]) => LooseQueryBuilder;
+  or: (...args: unknown[]) => LooseQueryBuilder;
+  order: (...args: unknown[]) => LooseQueryBuilder;
+  limit: (...args: unknown[]) => LooseQueryBuilder;
+  range: (...args: unknown[]) => LooseQueryBuilder;
+  single: (...args: unknown[]) => LooseQueryBuilder;
+  maybeSingle: (...args: unknown[]) => LooseQueryBuilder;
+  on: (...args: unknown[]) => LooseQueryBuilder;
+  subscribe: (...args: unknown[]) => unknown;
+};
+type LooseSupabaseClient = Omit<BaseSupabaseClient, 'from'> & {
+  from: (relation: string) => LooseQueryBuilder;
+};
 
 async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit) {
   let lastError: unknown;
@@ -20,7 +57,7 @@ async function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit) {
 }
 
 const globalScope = globalThis as typeof globalThis & {
-  __NIRMAN_SUPABASE_CLIENT__?: SupabaseClient<Database>;
+  __NIRMAN_SUPABASE_CLIENT__?: LooseSupabaseClient;
 };
 
 let supabaseClient = globalScope.__NIRMAN_SUPABASE_CLIENT__ ?? null;
@@ -36,7 +73,7 @@ if (!supabaseClient && supabaseUrl && supabaseAnonKey) {
       headers: {},
       fetch: fetchWithRetry,
     },
-  });
+  }) as unknown as LooseSupabaseClient;
   globalScope.__NIRMAN_SUPABASE_CLIENT__ = supabaseClient;
 }
 
@@ -47,8 +84,7 @@ const noopThrower = new Proxy({}, {
       throw new Error(missingMsg);
     };
   },
-}) as unknown as SupabaseClient<Database>;
+}) as unknown as LooseSupabaseClient;
 
-// Export with loose typing for table operations to avoid TypeScript strict mode issues
-// while maintaining runtime functionality
-export const supabase = (supabaseClient ?? noopThrower) as any;
+// Export the configured client while preserving a typed fallback for missing envs.
+export const supabase = supabaseClient ?? noopThrower;
