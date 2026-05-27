@@ -14,9 +14,8 @@ class PwaManager {
     if (typeof window === 'undefined') return;
 
     window.addEventListener('beforeinstallprompt', (event) => {
-      event.preventDefault();
-      this.installPrompt = event as BeforeInstallPromptEvent;
-      trackEvent({ name: 'pwa:install-prompt-ready' });
+      this.installPrompt = null;
+      trackEvent({ name: 'pwa:install-prompt-available', properties: { defaultPrevented: event.defaultPrevented } });
     });
 
     window.addEventListener('online', () => this.emitNetworkState());

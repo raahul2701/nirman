@@ -16,6 +16,10 @@ const DEFAULT_CONFIG: SyncConfig = {
   cleanupInterval: 60000, // 1 min
 };
 
+const debugLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.debug(...args);
+};
+
 class OfflineSyncService {
   private config: SyncConfig;
   private syncInProgress = new Map<string, Promise<void>>();
@@ -30,7 +34,7 @@ class OfflineSyncService {
   async init(): Promise<void> {
     // Load existing items and try to sync
     this.startCleanupTimer();
-    console.debug('[Sync] Initialized');
+    debugLog('[Sync] Initialized');
   }
 
   // Register handler for each entity type (table)
@@ -55,7 +59,7 @@ class OfflineSyncService {
       : undefined;
     
     if (duplicate) {
-      console.debug(`[Sync] Dedup prevented: ${table}:${action}`);
+      debugLog(`[Sync] Dedup prevented: ${table}:${action}`);
       return duplicate.id;
     }
 
@@ -69,7 +73,7 @@ class OfflineSyncService {
     };
 
     await addToSyncQueue(item);
-    console.debug(`[Sync] Enqueued: ${id}`, item);
+    debugLog(`[Sync] Enqueued: ${id}`, item);
 
     // Trigger sync for this item
     void this.syncItem(id);
@@ -109,7 +113,7 @@ class OfflineSyncService {
     try {
       await handler(item);
       await deleteSyncItem(itemId);
-      console.debug(`[Sync] Synced: ${itemId}`);
+      debugLog(`[Sync] Synced: ${itemId}`);
     } catch (error) {
       const nextRetry = item.retryCount + 1;
       const lastError = error instanceof Error ? error.message : String(error);
@@ -118,7 +122,7 @@ class OfflineSyncService {
         console.error(`[Sync] Max retries exceeded: ${itemId}`, lastError);
       } else {
         const backoff = this.calculateBackoff(nextRetry, this.config);
-        console.debug(`[Sync] Retry scheduled: ${itemId} in ${backoff}ms`);
+        debugLog(`[Sync] Retry scheduled: ${itemId} in ${backoff}ms`);
         
         // Schedule retry
         const timer = setTimeout(() => {
@@ -188,7 +192,7 @@ class OfflineSyncService {
         const itemTime = new Date(item.createdAt).getTime();
         if (item.retryCount > (this.config.maxRetries || 5) && now.getTime() - itemTime > dayMs) {
           await deleteSyncItem(item.id);
-          console.debug(`[Sync] Cleaned up: ${item.id}`);
+          debugLog(`[Sync] Cleaned up: ${item.id}`);
         }
       }
     } catch (error) {

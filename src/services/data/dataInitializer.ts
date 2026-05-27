@@ -11,13 +11,17 @@ import { dieselLogsService } from './dieselLogsService';
 
 let initialized = false;
 
+const debugLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.debug(...args);
+};
+
 export async function initializeDataServices(): Promise<void> {
   if (initialized) return;
 
   try {
     // Init offline sync
     await offlineSyncService.init();
-    console.debug('[Data] Offline sync initialized');
+    debugLog('[Data] Offline sync initialized');
 
     // Register all handlers
     await Promise.all([
@@ -28,14 +32,14 @@ export async function initializeDataServices(): Promise<void> {
       hindranceService.setupSync(),
       dieselLogsService.setupSync(),
     ]);
-    console.debug('[Data] Sync handlers registered');
+    debugLog('[Data] Sync handlers registered');
 
     // Try sync pending items
     void offlineSyncService.syncAll().catch(e => console.error('[Data] Initial sync error:', e));
 
     // Start background sync worker
     await backgroundSyncWorker.start(30000); // Sync every 30s
-    console.debug('[Data] Background sync worker started');
+    debugLog('[Data] Background sync worker started');
 
     initialized = true;
   } catch (error) {

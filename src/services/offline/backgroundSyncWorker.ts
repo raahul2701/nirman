@@ -1,6 +1,10 @@
 // Background sync worker - manages offline queue periodically
 import { offlineSyncService } from '../offline/offlineSyncService';
 
+const debugLog = (...args: unknown[]) => {
+  if (import.meta.env.DEV) console.debug(...args);
+};
+
 export class BackgroundSyncWorker {
   private intervalId: number | null = null;
   private isRunning = false;
@@ -16,7 +20,7 @@ export class BackgroundSyncWorker {
 
     this.isRunning = true;
     this.intervalMs = intervalMs;
-    console.debug('[BackgroundSync] Worker started');
+    debugLog('[BackgroundSync] Worker started');
 
     // Initial sync
     void this.sync();
@@ -33,12 +37,12 @@ export class BackgroundSyncWorker {
   private async sync(): Promise<void> {
     if (this.syncPromise) return this.syncPromise;
     if (!navigator.onLine) {
-      console.debug('[BackgroundSync] Offline, skipping sync');
+      debugLog('[BackgroundSync] Offline, skipping sync');
       return;
     }
 
     this.syncPromise = (async () => {
-      console.debug('[BackgroundSync] Syncing queue...');
+      debugLog('[BackgroundSync] Syncing queue...');
       await offlineSyncService.syncAll();
     })();
 
@@ -52,7 +56,7 @@ export class BackgroundSyncWorker {
   }
 
   private pause(): void {
-    console.debug('[BackgroundSync] Paused (offline)');
+    debugLog('[BackgroundSync] Paused (offline)');
   }
 
   private restartTimer(): void {
@@ -73,7 +77,7 @@ export class BackgroundSyncWorker {
     window.removeEventListener('offline', this.handleOffline);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     this.isRunning = false;
-    console.debug('[BackgroundSync] Worker stopped');
+    debugLog('[BackgroundSync] Worker stopped');
   }
 }
 
