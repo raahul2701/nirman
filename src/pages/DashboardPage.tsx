@@ -24,6 +24,8 @@ import { Problem } from '../types';
 import { formatDistanceToNow, CATEGORY_LABELS } from '../lib/utils';
 import { DashboardSectionSkeleton } from '../components/dashboard/DashboardSectionSkeleton';
 import { BRANDING } from '../constants/branding';
+import { RoleBasedDashboard } from '../components/dashboard/RoleBasedDashboard';
+import { getDashboardRole } from '../services/executionDemoData';
 
 const ChartsSection = lazy(() => import('../components/dashboard/ChartsSection').then((mod) => ({ default: mod.ChartsSection })));
 const MaterialChart = lazy(() => import('../components/dashboard/MaterialChart').then((mod) => ({ default: mod.MaterialChart })));
@@ -85,6 +87,16 @@ export function DashboardPage() {
   const [stats, setStats] = useState({ activeProjects: 0, openIssues: 0, workersPresent: 0, lowStockAlerts: 0, surveysCompleted: 0 });
   const [recentProblems, setRecentProblems] = useState<Problem[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
+  const dashboardRole = getDashboardRole(profile?.role);
+  const dashboardTitle = dashboardRole === 'executive_engineer'
+    ? 'Executive Engineer Project Command Center'
+    : dashboardRole === 'assistant_engineer'
+      ? 'AE Monitoring Command Center'
+      : dashboardRole === 'junior_engineer'
+        ? 'JE Mobile Field Dashboard'
+        : dashboardRole === 'contractor'
+          ? 'Contractor Project & Billing Dashboard'
+          : 'National Infra Operations Command Center';
 
   const onViewProblems = useCallback(() => navigate('/problems'), [navigate]);
 
@@ -164,15 +176,15 @@ export function DashboardPage() {
   );
 
   return (
-    <AppLayout title="National Infra Operations Command Center" subtitle={`ARSPL executive command view for ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
+    <AppLayout title={dashboardTitle} subtitle={`ARSPL role-based command view for ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
       <div className="mb-6 rounded-lg p-5 shadow-command" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F7F5EF 100%)', border: '1px solid var(--border-strong)' }}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <img src={BRANDING.LOGO_MARK_PATH} alt="ARSPL" className="h-14 w-14 rounded-lg bg-white object-contain p-1" style={{ border: '1px solid var(--border)' }} />
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.24em]" style={{ color: '#6B5A1E' }}>{BRANDING.EXECUTIVE_LABEL}</p>
-              <h2 className="mt-1 text-2xl font-black text-[#12332D]">National Infra Operations Command Center</h2>
-              <p className="mt-1 text-sm text-[#6C7568]">Live project control, AI insight routing, and field operations readiness.</p>
+              <h2 className="mt-1 text-2xl font-black text-[#12332D]">{dashboardTitle}</h2>
+              <p className="mt-1 text-sm text-[#6C7568]">Role-aware project access, component progress, submissions, and billing readiness.</p>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -190,6 +202,10 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <RoleBasedDashboard role={profile?.role} />
+
+      <div className="my-6 h-px bg-[#EFE8D4]" />
 
       <div className="flex flex-wrap gap-2 mb-6">{actionButtons}</div>
 

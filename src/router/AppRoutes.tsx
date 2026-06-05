@@ -12,6 +12,7 @@ const SurveysPage = lazyWithRetry(() => import('../pages/SurveysPage').then((mod
 const DesignPage = lazyWithRetry(() => import('../pages/DesignPage').then((mod) => ({ default: mod.DesignPage })));
 const InventoryPage = lazyWithRetry(() => import('../pages/InventoryPage').then((mod) => ({ default: mod.InventoryPage })));
 const ProjectsPage = lazyWithRetry(() => import('../pages/ProjectsPage').then((mod) => ({ default: mod.ProjectsPage })));
+const AgreementBoqStudyPage = lazyWithRetry(() => import('../pages/projects/AgreementBoqStudyPage').then((mod) => ({ default: mod.AgreementBoqStudyPage })));
 const ReportsPage = lazyWithRetry(() => import('../pages/ReportsPage').then((mod) => ({ default: mod.ReportsPage })));
 const SettingsPage = lazyWithRetry(() => import('../pages/SettingsPage').then((mod) => ({ default: mod.SettingsPage })));
 const GovDashboardPage = lazyWithRetry(() => import('../pages/govtrack/GovDashboardPage').then((mod) => ({ default: mod.GovDashboardPage })));
@@ -34,6 +35,8 @@ const ExtensionsPage = lazyWithRetry(() => import('../pages/ExtensionsPage').the
 const WhatsAppBotPage = lazyWithRetry(() => import('../pages/WhatsAppBotPage').then((mod) => ({ default: mod.WhatsAppBotPage })));
 const GisMapPage = lazyWithRetry(() => import('../pages/GisMapPage').then((mod) => ({ default: mod.GisMapPage })));
 const BudgetProgressPage = lazyWithRetry(() => import('../pages/BudgetProgressPage').then((mod) => ({ default: mod.BudgetProgressPage })));
+const SurveyQuantityPage = lazyWithRetry(() => import('../pages/field/SurveyQuantityPage').then((mod) => ({ default: mod.SurveyQuantityPage })));
+const MaterialAdvancePage = lazyWithRetry(() => import('../pages/finance/MaterialAdvancePage').then((mod) => ({ default: mod.MaterialAdvancePage })));
 const TpaPortalPage = lazyWithRetry(() => import('../pages/TpaPortalPage').then((mod) => ({ default: mod.TpaPortalPage })));
 const HindranceRegisterPage = lazyWithRetry(() => import('../pages/HindranceRegisterPage').then((mod) => ({ default: mod.HindranceRegisterPage })));
 const DisputesPage = lazyWithRetry(() => import('../pages/DisputesPage').then((mod) => ({ default: mod.DisputesPage })));
@@ -84,6 +87,10 @@ const routes: RouteObject[] = [
   { path: 'design', element: <ProtectedRoute><OnboardingGuard><DesignPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'inventory', element: <ProtectedRoute><OnboardingGuard><InventoryPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'projects', element: <ProtectedRoute><OnboardingGuard><ProjectsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'projects/all', element: <ProtectedRoute><OnboardingGuard><ProjectsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'projects/agreement-boq', element: <ProtectedRoute><OnboardingGuard><AgreementBoqStudyPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'projects/details', element: <ProtectedRoute><OnboardingGuard><ProjectsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'projects/progress', element: <ProtectedRoute><OnboardingGuard><BudgetProgressPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'reports', element: <ProtectedRoute><OnboardingGuard><ReportsPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'settings', element: <ProtectedRoute><OnboardingGuard><SettingsPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'operations', element: <ProtectedRoute><OnboardingGuard><OperationsCenterPage /></OnboardingGuard></ProtectedRoute> },
@@ -122,6 +129,29 @@ const routes: RouteObject[] = [
   { path: 'whatsapp-bot', element: <ProtectedRoute><OnboardingGuard><WhatsAppBotPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'gis-map', element: <ProtectedRoute><OnboardingGuard><GisMapPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'budget-progress', element: <ProtectedRoute><OnboardingGuard><BudgetProgressPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'field/daily-progress', element: <ProtectedRoute><OnboardingGuard><UploadWorkPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'field/labour', element: <ProtectedRoute><OnboardingGuard><LabourPayments /></OnboardingGuard></ProtectedRoute> },
+  { path: 'field/materials', element: <ProtectedRoute><OnboardingGuard><MaterialReconciliation /></OnboardingGuard></ProtectedRoute> },
+  { path: 'field/equipment', element: <ProtectedRoute><OnboardingGuard><MaintenanceDashboard /></OnboardingGuard></ProtectedRoute> },
+  { path: 'field/survey-quantity', element: <ProtectedRoute><OnboardingGuard><SurveyQuantityPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'quality/inspections', element: <ProtectedRoute><OnboardingGuard><InspectionsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'quality/material-tests', element: <ProtectedRoute><OnboardingGuard><MaterialTestsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'quality/tpa', element: <ProtectedRoute><OnboardingGuard><TpaPortalPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'quality/drawing-compare', element: <ProtectedRoute><OnboardingGuard><DrawingComparePage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'finance/bg-tracker', element: <ProtectedRoute><OnboardingGuard><BankGuaranteesPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'finance/sd-tracker', element: <ProtectedRoute><OnboardingGuard><BankGuaranteesPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'finance/ra-bills', element: <ProtectedRoute><OnboardingGuard><PaymentRecovery /></OnboardingGuard></ProtectedRoute> },
+  { path: 'finance/payments', element: <ProtectedRoute><OnboardingGuard><PaymentsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'finance/material-advance', element: <ProtectedRoute><OnboardingGuard><MaterialAdvancePage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'delays/hindrance', element: <ProtectedRoute><OnboardingGuard><HindranceRegisterPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'delays/weather', element: <ProtectedRoute><OnboardingGuard><WeatherLoggerPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'delays/extensions', element: <ProtectedRoute><OnboardingGuard><ExtensionsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'delays/dlp', element: <ProtectedRoute><OnboardingGuard><DlpTrackerPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'monitoring/gis-map', element: <ProtectedRoute><OnboardingGuard><GisMapPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'monitoring/drone-surveys', element: <ProtectedRoute><OnboardingGuard><SurveysPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'reports/financial-progress', element: <ProtectedRoute><OnboardingGuard><BudgetProgressPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'reports/physical-progress', element: <ProtectedRoute><OnboardingGuard><ReportsPage /></OnboardingGuard></ProtectedRoute> },
+  { path: 'reports/analytics', element: <ProtectedRoute><OnboardingGuard><ReportsPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'tpa-portal', element: <ProtectedRoute><OnboardingGuard><TpaPortalPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'hindrance-register', element: <ProtectedRoute><OnboardingGuard><HindranceRegisterPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'disputes', element: <ProtectedRoute><OnboardingGuard><DisputesPage /></OnboardingGuard></ProtectedRoute> },
