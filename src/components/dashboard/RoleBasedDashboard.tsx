@@ -1,6 +1,6 @@
 import { AlertTriangle, ClipboardCheck, FileText, FolderOpen, IndianRupee, Package, Users } from '../../lib/icons';
 import { Card, StatCard } from '../ui/Card';
-import { executionProjects, getDashboardRole, materialAdvanceDemo } from '../../services/executionDemoData';
+import { executionProjects, getDashboardRole, getRoleProjects, materialAdvanceDemo, type DashboardIdentity } from '../../services/executionDemoData';
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -40,15 +40,9 @@ function ProjectCard({ project }: { project: (typeof executionProjects)[number] 
   );
 }
 
-export function RoleBasedDashboard({ role }: { role?: string | null }) {
+export function RoleBasedDashboard({ role, identity }: { role?: string | null; identity?: DashboardIdentity }) {
   const dashboardRole = getDashboardRole(role);
-  const assignedProjects = dashboardRole === 'assistant_engineer'
-    ? executionProjects.filter((project) => project.ae === 'Er. Nidhi Singh')
-    : dashboardRole === 'junior_engineer'
-      ? executionProjects.slice(0, 1)
-      : dashboardRole === 'contractor'
-        ? executionProjects.filter((project) => project.contractor === 'Mithila Infra Pvt Ltd')
-        : executionProjects;
+  const assignedProjects = getRoleProjects(role, identity);
 
   if (dashboardRole === 'contractor') {
     const totalSubmitted = materialAdvanceDemo.reduce((sum, item) => sum + item.submittedValue, 0);
@@ -68,7 +62,7 @@ export function RoleBasedDashboard({ role }: { role?: string | null }) {
               <div key={project.id} className="rounded-lg border border-[#EFE8D4] bg-[#F9F7EF] p-4">
                 <p className="text-sm font-bold text-[#12332D]">{project.name}</p>
                 <p className="mt-1 text-xs text-[#6C7568]">Agreement summary, BOQ reading, executed and remaining quantities linked.</p>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   <span>Executed: {project.progress}%</span>
                   <span>RA bill: under review</span>
                   <span>Milestone: WMM</span>

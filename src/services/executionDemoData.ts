@@ -14,8 +14,11 @@ export type ExecutionProject = {
   name: string;
   code: string;
   category: 'road' | 'building' | 'bridge' | 'irrigation' | 'phe';
+  aeId: string;
   ae: string;
+  jeId: string;
   je: string;
+  contractorId: string;
   contractor: string;
   progress: number;
   budget: number;
@@ -30,8 +33,11 @@ export const executionProjects: ExecutionProject[] = [
     name: 'Bihta Rural Road Upgrade',
     code: 'PWD-RD-01',
     category: 'road',
+    aeId: '10000000-0000-4000-8000-000000000021',
     ae: 'Er. Nidhi Singh',
+    jeId: '10000000-0000-4000-8000-000000000031',
     je: 'Er. Ravi Prakash',
+    contractorId: '10000000-0000-4000-8000-000000000041',
     contractor: 'Mithila Infra Pvt Ltd',
     progress: 68,
     budget: 12400000,
@@ -50,8 +56,11 @@ export const executionProjects: ExecutionProject[] = [
     name: 'Phulwariya School Block',
     code: 'BLD-EDU-03',
     category: 'building',
+    aeId: '10000000-0000-4000-8000-000000000022',
     ae: 'Er. Rakesh Kumar',
+    jeId: '10000000-0000-4000-8000-000000000033',
     je: 'Er. Faizan Alam',
+    contractorId: '10000000-0000-4000-8000-000000000042',
     contractor: 'Ganga Buildcon',
     progress: 54,
     budget: 18600000,
@@ -67,8 +76,11 @@ export const executionProjects: ExecutionProject[] = [
     name: 'Punpun Culvert Strengthening',
     code: 'BRG-04',
     category: 'bridge',
+    aeId: '10000000-0000-4000-8000-000000000022',
     ae: 'Er. Rakesh Kumar',
+    jeId: '10000000-0000-4000-8000-000000000034',
     je: 'Er. Priya Raj',
+    contractorId: '10000000-0000-4000-8000-000000000042',
     contractor: 'Ganga Buildcon',
     progress: 42,
     budget: 9200000,
@@ -84,8 +96,11 @@ export const executionProjects: ExecutionProject[] = [
     name: 'Danapur Drainage Repair',
     code: 'IRR-02',
     category: 'irrigation',
+    aeId: '10000000-0000-4000-8000-000000000021',
     ae: 'Er. Nidhi Singh',
+    jeId: '10000000-0000-4000-8000-000000000032',
     je: 'Er. Meena Kumari',
+    contractorId: '10000000-0000-4000-8000-000000000041',
     contractor: 'Mithila Infra Pvt Ltd',
     progress: 73,
     budget: 7400000,
@@ -177,4 +192,40 @@ export function getDashboardRole(role?: string | null): DashboardRole {
   if (role === 'contractor') return 'contractor';
   if (role === 'admin' || role === 'admin_viewer') return 'admin';
   return 'default';
+}
+
+export type DashboardIdentity = {
+  userId?: string | null;
+  fullName?: string | null;
+  company?: string | null;
+};
+
+function normalize(value?: string | null) {
+  return String(value || '').trim().toLowerCase();
+}
+
+export function getRoleProjects(role?: string | null, identity: DashboardIdentity = {}) {
+  const dashboardRole = getDashboardRole(role);
+  const name = normalize(identity.fullName);
+  const company = normalize(identity.company);
+  const userId = identity.userId || '';
+
+  if (dashboardRole === 'executive_engineer' || dashboardRole === 'admin' || dashboardRole === 'default') {
+    return executionProjects;
+  }
+
+  if (dashboardRole === 'assistant_engineer') {
+    const matched = executionProjects.filter((project) => project.aeId === userId || normalize(project.ae) === name);
+    return matched.length > 0 ? matched : executionProjects.filter((project) => project.aeId === '10000000-0000-4000-8000-000000000021');
+  }
+
+  if (dashboardRole === 'junior_engineer') {
+    const matched = executionProjects.filter((project) => project.jeId === userId || normalize(project.je) === name);
+    return matched.length > 0 ? matched : executionProjects.filter((project) => project.jeId === '10000000-0000-4000-8000-000000000031');
+  }
+
+  const matched = executionProjects.filter(
+    (project) => project.contractorId === userId || normalize(project.contractor) === company || normalize(project.contractor) === name
+  );
+  return matched.length > 0 ? matched : executionProjects.filter((project) => project.contractorId === '10000000-0000-4000-8000-000000000041');
 }

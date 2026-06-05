@@ -117,40 +117,44 @@ export function DashboardPage() {
     let isActive = true;
 
     async function loadDashboard() {
-      const [proj, probs, workers, materials, surveys] = await Promise.all([
-        supabase.from('projects').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
-        supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', currentUserId).eq('status', 'open'),
-        supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
-        supabase.from('materials').select('id, current_qty, threshold_qty').eq('owner_id', currentUserId),
-        supabase.from('surveys').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'complete'),
-      ]);
+      try {
+        const [proj, probs, workers, materials, surveys] = await Promise.all([
+          supabase.from('projects').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
+          supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', currentUserId).eq('status', 'open'),
+          supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
+          supabase.from('materials').select('id, current_qty, threshold_qty').eq('owner_id', currentUserId),
+          supabase.from('surveys').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'complete'),
+        ]);
 
-      if (!isActive) return;
+        if (!isActive) return;
 
-      const lowStock = ((materials.data || []) as MaterialStockRow[]).filter(
-        (m) => Number(m.current_qty || 0) <= Number(m.threshold_qty || 0)
-      ).length;
-      setStats({
-        activeProjects: proj.count || 0,
-        openIssues: probs.count || 0,
-        workersPresent: workers.count || 0,
-        lowStockAlerts: lowStock,
-        surveysCompleted: surveys.count || 0,
-      });
+        const lowStock = ((materials.data || []) as MaterialStockRow[]).filter(
+          (m) => Number(m.current_qty || 0) <= Number(m.threshold_qty || 0)
+        ).length;
+        setStats({
+          activeProjects: proj.error ? 0 : proj.count || 0,
+          openIssues: probs.error ? 0 : probs.count || 0,
+          workersPresent: workers.error ? 0 : workers.count || 0,
+          lowStockAlerts: materials.error ? 0 : lowStock,
+          surveysCompleted: surveys.error ? 0 : surveys.count || 0,
+        });
 
-      const { data: recentData } = await supabase
-        .from('problems')
-        .select('*')
-        .eq('reported_by', currentUserId)
-        .order('created_at', { ascending: false })
-        .limit(5);
+        const { data: recentData, error: recentError } = await supabase
+          .from('problems')
+          .select('*')
+          .eq('reported_by', currentUserId)
+          .order('created_at', { ascending: false })
+          .limit(5);
 
-      if (isActive && recentData) {
-        setRecentProblems(recentData as Problem[]);
-      }
-
-      if (isActive) {
-        setLoadingStats(false);
+        if (isActive && recentData && !recentError) {
+          setRecentProblems(recentData as Problem[]);
+        }
+      } catch (error) {
+        console.warn('[dashboard] legacy stats unavailable', error);
+      } finally {
+        if (isActive) {
+          setLoadingStats(false);
+        }
       }
     }
 
@@ -203,7 +207,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <RoleBasedDashboard role={profile?.role} />
+      <RoleBasedDashboard role={profile?.role} identity={{ userId: user?.id, fullName: profile?.full_name, company: profile?.company }} />
 
       <div className="my-6 h-px bg-[#EFE8D4]" />
 

@@ -83,21 +83,59 @@ create table if not exists public.ai_project_study (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.project_boq (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null,
+  total_estimated_value numeric not null default 0,
+  extraction_confidence numeric(5,2) not null default 0,
+  extracted_at timestamptz,
+  source_file_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.boq_items (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references public.executive_engineer_workspaces(id) on delete cascade,
-  project_id uuid not null,
+  project_id uuid,
+  boq_id uuid references public.project_boq(id) on delete cascade,
   agreement_document_id uuid references public.agreement_documents(id) on delete set null,
-  item_number text not null,
+  item_number text,
+  item_code text,
   description text not null,
+  category text,
+  work_type text,
   component_type text,
   unit text not null,
   quantity numeric not null default 0,
   rate numeric not null default 0,
-  amount numeric generated always as (quantity * rate) stored,
+  amount numeric not null default 0,
+  completed_quantity numeric not null default 0,
+  completion_percentage numeric not null default 0,
   technical_specification text,
+  notes text,
   created_at timestamptz not null default now()
 );
+
+alter table public.project_boq add column if not exists total_estimated_value numeric not null default 0;
+alter table public.project_boq add column if not exists extraction_confidence numeric(5,2) not null default 0;
+alter table public.project_boq add column if not exists extracted_at timestamptz;
+alter table public.project_boq add column if not exists source_file_url text;
+alter table public.project_boq add column if not exists updated_at timestamptz not null default now();
+
+alter table public.boq_items add column if not exists workspace_id uuid references public.executive_engineer_workspaces(id) on delete cascade;
+alter table public.boq_items add column if not exists project_id uuid;
+alter table public.boq_items add column if not exists boq_id uuid references public.project_boq(id) on delete cascade;
+alter table public.boq_items add column if not exists agreement_document_id uuid references public.agreement_documents(id) on delete set null;
+alter table public.boq_items add column if not exists item_number text;
+alter table public.boq_items add column if not exists item_code text;
+alter table public.boq_items add column if not exists category text;
+alter table public.boq_items add column if not exists work_type text;
+alter table public.boq_items add column if not exists component_type text;
+alter table public.boq_items add column if not exists completed_quantity numeric not null default 0;
+alter table public.boq_items add column if not exists completion_percentage numeric not null default 0;
+alter table public.boq_items add column if not exists technical_specification text;
+alter table public.boq_items add column if not exists notes text;
 
 create table if not exists public.survey_level_entries (
   id uuid primary key default gen_random_uuid(),
@@ -232,6 +270,7 @@ alter table public.project_components enable row level security;
 alter table public.project_progress_items enable row level security;
 alter table public.agreement_documents enable row level security;
 alter table public.ai_project_study enable row level security;
+alter table public.project_boq enable row level security;
 alter table public.boq_items enable row level security;
 alter table public.survey_level_entries enable row level security;
 alter table public.survey_quantity_calculations enable row level security;
@@ -283,17 +322,317 @@ begin
   ]
   loop
     execute format('drop policy if exists "%s project read" on public.%I', table_name, table_name);
-    execute format('create policy "%s project read" on public.%I for select using (workspace_id is null or public.can_access_project(workspace_id, project_id))', table_name, table_name);
     execute format('drop policy if exists "%s project insert" on public.%I', table_name, table_name);
-    execute format('create policy "%s project insert" on public.%I for insert with check (workspace_id is null or public.is_project_field_user(workspace_id, project_id))', table_name, table_name);
     execute format('drop policy if exists "%s project update" on public.%I', table_name, table_name);
-    execute format('create policy "%s project update" on public.%I for update using (workspace_id is null or public.is_project_field_user(workspace_id, project_id)) with check (workspace_id is null or public.is_project_field_user(workspace_id, project_id))', table_name, table_name);
   end loop;
 end $$;
 
+create policy "project_components project read" on public.project_components
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or updated_by = auth.uid()
+);
+create policy "project_components project insert" on public.project_components
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or updated_by = auth.uid()
+);
+create policy "project_components project update" on public.project_components
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or updated_by = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or updated_by = auth.uid()
+);
+
+create policy "project_progress_items project read" on public.project_progress_items
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or submitted_by = auth.uid()
+);
+create policy "project_progress_items project insert" on public.project_progress_items
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or submitted_by = auth.uid()
+);
+create policy "project_progress_items project update" on public.project_progress_items
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or submitted_by = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or submitted_by = auth.uid()
+);
+
+create policy "agreement_documents project read" on public.agreement_documents
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+);
+create policy "agreement_documents project insert" on public.agreement_documents
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+);
+create policy "agreement_documents project update" on public.agreement_documents
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+);
+
+create policy "ai_project_study project read" on public.ai_project_study
+for select using (workspace_id is not null and public.can_access_project(workspace_id, project_id));
+create policy "ai_project_study project insert" on public.ai_project_study
+for insert with check (workspace_id is not null and public.is_project_field_user(workspace_id, project_id));
+create policy "ai_project_study project update" on public.ai_project_study
+for update using (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+with check (workspace_id is not null and public.is_project_field_user(workspace_id, project_id));
+
+drop policy if exists "project_boq read" on public.project_boq;
+create policy "project_boq read" on public.project_boq
+for select using (
+  exists (select 1 from public.projects p where p.id = project_boq.project_id and p.owner_id = auth.uid())
+  or exists (
+    select 1
+    from public.project_assignments pa
+    where pa.project_id = project_boq.project_id
+      and public.can_access_project(pa.workspace_id, pa.project_id)
+  )
+);
+
+drop policy if exists "project_boq insert" on public.project_boq;
+create policy "project_boq insert" on public.project_boq
+for insert with check (
+  exists (select 1 from public.projects p where p.id = project_boq.project_id and p.owner_id = auth.uid())
+  or exists (
+    select 1
+    from public.project_assignments pa
+    where pa.project_id = project_boq.project_id
+      and public.is_project_field_user(pa.workspace_id, pa.project_id)
+  )
+);
+
+drop policy if exists "project_boq update" on public.project_boq;
+create policy "project_boq update" on public.project_boq
+for update using (
+  exists (select 1 from public.projects p where p.id = project_boq.project_id and p.owner_id = auth.uid())
+  or exists (
+    select 1
+    from public.project_assignments pa
+    where pa.project_id = project_boq.project_id
+      and public.is_project_field_user(pa.workspace_id, pa.project_id)
+  )
+) with check (
+  exists (select 1 from public.projects p where p.id = project_boq.project_id and p.owner_id = auth.uid())
+  or exists (
+    select 1
+    from public.project_assignments pa
+    where pa.project_id = project_boq.project_id
+      and public.is_project_field_user(pa.workspace_id, pa.project_id)
+  )
+);
+
+create policy "boq_items project read" on public.boq_items
+for select using (
+  (workspace_id is not null and project_id is not null and public.can_access_project(workspace_id, project_id))
+  or exists (
+    select 1
+    from public.project_boq pb
+    where pb.id = boq_items.boq_id
+      and (
+        exists (select 1 from public.projects p where p.id = pb.project_id and p.owner_id = auth.uid())
+        or exists (
+          select 1 from public.project_assignments pa
+          where pa.project_id = pb.project_id and public.can_access_project(pa.workspace_id, pa.project_id)
+        )
+      )
+  )
+);
+create policy "boq_items project insert" on public.boq_items
+for insert with check (
+  (workspace_id is not null and project_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or exists (
+    select 1
+    from public.project_boq pb
+    where pb.id = boq_items.boq_id
+      and (
+        exists (select 1 from public.projects p where p.id = pb.project_id and p.owner_id = auth.uid())
+        or exists (
+          select 1 from public.project_assignments pa
+          where pa.project_id = pb.project_id and public.is_project_field_user(pa.workspace_id, pa.project_id)
+        )
+      )
+  )
+);
+create policy "boq_items project update" on public.boq_items
+for update using (
+  (workspace_id is not null and project_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or exists (
+    select 1
+    from public.project_boq pb
+    where pb.id = boq_items.boq_id
+      and (
+        exists (select 1 from public.projects p where p.id = pb.project_id and p.owner_id = auth.uid())
+        or exists (
+          select 1 from public.project_assignments pa
+          where pa.project_id = pb.project_id and public.is_project_field_user(pa.workspace_id, pa.project_id)
+        )
+      )
+  )
+) with check (
+  (workspace_id is not null and project_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or exists (
+    select 1
+    from public.project_boq pb
+    where pb.id = boq_items.boq_id
+      and (
+        exists (select 1 from public.projects p where p.id = pb.project_id and p.owner_id = auth.uid())
+        or exists (
+          select 1 from public.project_assignments pa
+          where pa.project_id = pb.project_id and public.is_project_field_user(pa.workspace_id, pa.project_id)
+        )
+      )
+  )
+);
+
+create policy "survey_level_entries project read" on public.survey_level_entries
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or entered_by = auth.uid()
+);
+create policy "survey_level_entries project insert" on public.survey_level_entries
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or entered_by = auth.uid()
+);
+create policy "survey_level_entries project update" on public.survey_level_entries
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or entered_by = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or entered_by = auth.uid()
+);
+
+create policy "survey_quantity_calculations project read" on public.survey_quantity_calculations
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or calculated_by = auth.uid()
+);
+create policy "survey_quantity_calculations project insert" on public.survey_quantity_calculations
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or calculated_by = auth.uid()
+);
+create policy "survey_quantity_calculations project update" on public.survey_quantity_calculations
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or calculated_by = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or calculated_by = auth.uid()
+);
+
+create policy "material_advance_claims project read" on public.material_advance_claims
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or submitted_by = auth.uid()
+  or contractor_id = auth.uid()
+);
+create policy "material_advance_claims project insert" on public.material_advance_claims
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or submitted_by = auth.uid()
+  or contractor_id = auth.uid()
+);
+create policy "material_advance_claims project update" on public.material_advance_claims
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or submitted_by = auth.uid()
+  or contractor_id = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or submitted_by = auth.uid()
+  or contractor_id = auth.uid()
+);
+
+create policy "material_advance_documents project read" on public.material_advance_documents
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+);
+create policy "material_advance_documents project insert" on public.material_advance_documents
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+);
+create policy "material_advance_documents project update" on public.material_advance_documents
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or uploaded_by = auth.uid()
+);
+
+create policy "material_advance_ai_reviews project read" on public.material_advance_ai_reviews
+for select using (workspace_id is not null and public.can_access_project(workspace_id, project_id));
+create policy "material_advance_ai_reviews project insert" on public.material_advance_ai_reviews
+for insert with check (workspace_id is not null and public.is_project_field_user(workspace_id, project_id));
+create policy "material_advance_ai_reviews project update" on public.material_advance_ai_reviews
+for update using (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+with check (workspace_id is not null and public.is_project_field_user(workspace_id, project_id));
+
+create policy "measurement_book_entries project read" on public.measurement_book_entries
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or entered_by = auth.uid()
+  or checked_by = auth.uid()
+);
+create policy "measurement_book_entries project insert" on public.measurement_book_entries
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or entered_by = auth.uid()
+);
+create policy "measurement_book_entries project update" on public.measurement_book_entries
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or entered_by = auth.uid()
+  or checked_by = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or entered_by = auth.uid()
+  or checked_by = auth.uid()
+);
+
+create policy "ra_bill_items project read" on public.ra_bill_items
+for select using (
+  (workspace_id is not null and public.can_access_project(workspace_id, project_id))
+  or contractor_id = auth.uid()
+);
+create policy "ra_bill_items project insert" on public.ra_bill_items
+for insert with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or contractor_id = auth.uid()
+);
+create policy "ra_bill_items project update" on public.ra_bill_items
+for update using (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or contractor_id = auth.uid()
+) with check (
+  (workspace_id is not null and public.is_project_field_user(workspace_id, project_id))
+  or contractor_id = auth.uid()
+);
+
 create index if not exists idx_project_components_workspace_project on public.project_components(workspace_id, project_id);
 create index if not exists idx_project_progress_workspace_project on public.project_progress_items(workspace_id, project_id, progress_date);
+create index if not exists idx_project_boq_project on public.project_boq(project_id);
 create index if not exists idx_boq_items_workspace_project on public.boq_items(workspace_id, project_id);
+create index if not exists idx_boq_items_boq on public.boq_items(boq_id);
 create index if not exists idx_agreement_documents_workspace_project on public.agreement_documents(workspace_id, project_id);
 create index if not exists idx_survey_entries_workspace_project on public.survey_level_entries(workspace_id, project_id, entry_date);
 create index if not exists idx_material_advance_workspace_project on public.material_advance_claims(workspace_id, project_id, status);
