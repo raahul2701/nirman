@@ -20,7 +20,18 @@ const bucketPaths = {
 };
 
 const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB || 25);
-const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'application/pdf', 'text/csv'];
+const ALLOWED_MIME_PREFIXES = [
+  'image/',
+  'video/',
+  'application/pdf',
+  'text/csv',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+const ALLOWED_FILE_EXTENSIONS = ['.pdf', '.csv', '.txt', '.doc', '.docx', '.xls', '.xlsx'];
 const activeStorageProvider = (import.meta.env.VITE_STORAGE_PROVIDER as 'supabase' | 'googleDrive' | 'local' | undefined) || 'supabase';
 type DriveUploadResult = {
   path: string;
@@ -46,7 +57,9 @@ export function assertUploadAllowed(file: File) {
   if (file.size > maxBytes) {
     throw new Error(`Upload too large. Limit is ${MAX_UPLOAD_MB} MB.`);
   }
-  if (!ALLOWED_MIME_PREFIXES.some((mime) => file.type === mime || file.type.startsWith(mime))) {
+  const lowerName = file.name.toLowerCase();
+  const allowedByExtension = ALLOWED_FILE_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+  if (!ALLOWED_MIME_PREFIXES.some((mime) => file.type === mime || file.type.startsWith(mime)) && !allowedByExtension) {
     throw new Error(`Unsupported upload type: ${file.type || 'unknown'}`);
   }
 }

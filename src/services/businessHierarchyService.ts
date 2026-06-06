@@ -173,7 +173,7 @@ export function calculateContractorMonthlyAmount(actualUsers: number) {
 export function getDriveProjectFolderPath(eeNameOrId: string, projectName: string) {
   const cleanEe = String(eeNameOrId || '').trim().replace(/[\\/]+/g, '-').replace(/\s+/g, '_') || 'UnknownEE';
   const cleanProject = String(projectName || '').trim().replace(/[\\/]+/g, '-').replace(/\s+/g, '_') || 'Project';
-  return `NIRMAN/ExecutiveEngineer_${cleanEe}/Projects/${cleanProject}`;
+  return `NIRMAN AI/${cleanEe}/${cleanProject}`;
 }
 
 export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
