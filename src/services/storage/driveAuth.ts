@@ -1,9 +1,7 @@
 export interface DriveAuthState {
   enabled: boolean;
-  connected?: boolean;
   accessToken?: string;
   expiresAt?: number;
-  lastError?: string | null;
 }
 
 export interface DriveAuthProvider {

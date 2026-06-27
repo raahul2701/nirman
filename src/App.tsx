@@ -7,12 +7,10 @@ import { LoadingFallback } from './components/ui/LoadingFallback';
 import { AppRoutes } from './router/AppRoutes';
 import { initializeDataServices } from './services/data/dataInitializer';
 import { ActivityRouteTracker } from './components/ActivityRouteTracker';
-import { initializeGoogleDriveAuthProvider } from './services/storage/googleDriveAuthProvider';
 
 // Wrapper to initialize data services
 function AppContent() {
   useEffect(() => {
-    initializeGoogleDriveAuthProvider();
     initializeDataServices().catch(err => console.error('Failed to initialize data services:', err));
 
     return () => {
