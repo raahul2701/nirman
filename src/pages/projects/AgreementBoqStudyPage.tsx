@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Brain, CheckCircle2, ClipboardCheck, FileText, IndianRupee, UploadCloud } from '../../lib/icons';
+import { AlertTriangle, Brain, CheckCircle2, ClipboardCheck, FileText, FolderOpen, IndianRupee, UploadCloud } from '../../lib/icons';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Card, StatCard } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
 import { createSignedUrl, uploadFileWithRetry } from '../../services/storageService';
+import { getDriveAuthState, getOptionalDriveAccessToken, type DriveAuthState } from '../../services/storage/driveAuth';
+import { connectGoogleDrive } from '../../services/storage/googleDriveAuthProvider';
+import { getDriveFileMetadata, uploadFileToDrive, type GoogleDriveFileReference } from '../../services/storage/googleDriveStorage';
 import { getMyWorkspaceSummary, type ProjectAssignment, type WorkspaceSummary } from '../../services/businessHierarchyService';
-import { buildDriveFolderPath, recordDocumentMetadata } from '../../services/documentMapping';
+import { buildDriveFolderPath, recordDocumentMetadata, type DriveSyncStatus } from '../../services/documentMapping';
 import { agreementStudyDemo } from '../../services/executionDemoData';
 
 type ProjectOption = {
@@ -25,6 +28,8 @@ type AgreementDocument = {
   ai_processing_status?: 'uploaded' | 'pending' | 'running' | 'completed' | 'failed';
   ai_error_message?: string | null;
   google_drive_sync_status?: string | null;
+  google_drive_file_id?: string | null;
+  google_drive_folder_id?: string | null;
   drive_folder_path?: string | null;
   created_at?: string;
 };
@@ -110,6 +115,8 @@ export function AgreementBoqStudyPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [studying, setStudying] = useState(false);
+  const [driveAuth, setDriveAuth] = useState<DriveAuthState>(() => getDriveAuthState());
+  const [connectingDrive, setConnectingDrive] = useState(false);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
   const totalBoq = useMemo(() => boqItems.reduce((sum, item) => sum + Number(item.amount || 0), 0), [boqItems]);
@@ -137,6 +144,24 @@ export function AgreementBoqStudyPage() {
       active = false;
     };
   }, []);
+
+  async function connectDrive() {
+    setError('');
+    setMessage('');
+    if (driveAuth.connected) return;
+
+    setConnectingDrive(true);
+    try {
+      const state = await connectGoogleDrive();
+      setDriveAuth(state);
+      setMessage('Google Drive connected for this session.');
+    } catch (connectError) {
+      setDriveAuth(getDriveAuthState());
+      setError(connectError instanceof Error ? connectError.message : 'Google Drive connection failed.');
+    } finally {
+      setConnectingDrive(false);
+    }
+  }
 
   async function refreshBoq(projectId: string, documentId: string) {
     const { data } = await supabase
@@ -168,8 +193,36 @@ export function AgreementBoqStudyPage() {
     try {
       const cleanName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
       const storagePath = `${summary.workspace.id}/${selectedProject.id}/01-agreement-boq/${Date.now()}-${cleanName}`;
+      let driveFile: GoogleDriveFileReference | null = null;
+      let driveSyncStatus: DriveSyncStatus = 'uploaded_to_supabase';
+      let storageProvider: 'supabase' | 'google_drive' = 'supabase';
+      let driveErrorMessage: string | null = null;
+      const accessToken = await getOptionalDriveAccessToken();
+      setDriveAuth(getDriveAuthState());
+
+      if (accessToken) {
+        try {
+          const uploadedDriveFile = await uploadFileToDrive(
+            'Agreement & BOQ',
+            storagePath,
+            selectedFile,
+            accessToken,
+            undefined,
+            undefined,
+            selectedProject.id,
+          );
+          driveFile = await getDriveFileMetadata(uploadedDriveFile.id, accessToken);
+          driveSyncStatus = 'google_drive_synced';
+          storageProvider = 'google_drive';
+        } catch (driveUploadError) {
+          driveSyncStatus = 'google_drive_sync_failed';
+          driveErrorMessage = driveUploadError instanceof Error ? driveUploadError.message : 'Google Drive upload failed.';
+        }
+      }
+
       await uploadFileWithRetry('project-files', storagePath, selectedFile, { upsert: false });
       const fileUrl = await createSignedUrl('project-files', storagePath, 60 * 60);
+      const documentFileUrl = driveFile?.webViewLink || fileUrl;
       const payload = {
         workspace_id: summary.workspace.id,
         project_id: selectedProject.id,
@@ -179,12 +232,14 @@ export function AgreementBoqStudyPage() {
         module_name: 'agreement_boq',
         file_name: selectedFile.name,
         original_filename: selectedFile.name,
-        file_url: fileUrl,
+        file_url: documentFileUrl,
         storage_path: storagePath,
         supabase_path: storagePath,
+        google_drive_file_id: driveFile?.id || null,
+        google_drive_folder_id: driveFile?.parents?.[0] || null,
         mime_type: selectedFile.type || 'application/octet-stream',
-        storage_provider: 'supabase',
-        google_drive_sync_status: summary.googleConnection?.drive_root_folder_id ? 'google_drive_sync_pending' : 'uploaded_to_supabase',
+        storage_provider: storageProvider,
+        google_drive_sync_status: driveSyncStatus,
         drive_folder_path: driveFolderPath,
         document_status: 'uploaded',
         ai_processing_status: 'uploaded',
@@ -204,16 +259,22 @@ export function AgreementBoqStudyPage() {
         originalFilename: selectedFile.name,
         mimeType: selectedFile.type || 'application/octet-stream',
         sizeBytes: selectedFile.size,
-        storageProvider: 'supabase',
+        storageProvider,
         supabasePath: storagePath,
-        fileUrl,
+        googleDriveFileId: driveFile?.id || null,
+        googleDriveFolderId: driveFile?.parents?.[0] || null,
+        fileUrl: documentFileUrl,
         aiProcessingStatus: 'uploaded',
-        driveSyncStatus: summary.googleConnection?.drive_root_folder_id ? 'google_drive_sync_pending' : 'uploaded_to_supabase',
+        driveSyncStatus,
         driveFolderPath,
       });
 
       setDocument(data as AgreementDocument);
-      setMessage('Uploaded. AI Study is ready to run.');
+      setMessage(
+        driveSyncStatus === 'google_drive_synced'
+          ? 'Uploaded to Google Drive. AI Study is ready to run.'
+          : `Uploaded to Supabase. AI Study is ready to run.${driveErrorMessage ? ` Drive sync failed: ${driveErrorMessage}` : ''}`,
+      );
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Agreement upload failed.');
     } finally {
@@ -281,6 +342,19 @@ export function AgreementBoqStudyPage() {
           <div className="mt-3 rounded-lg border border-[#EFE8D4] bg-[#F9F7EF] p-3 text-xs leading-relaxed text-[#6C7568]">
             Drive path: {driveFolderPath}
           </div>
+          <Button
+            className="mt-4 w-full"
+            variant={driveAuth.connected ? 'secondary' : 'outline'}
+            loading={connectingDrive}
+            disabled={!driveAuth.enabled || driveAuth.connected}
+            icon={driveAuth.connected ? <CheckCircle2 size={14} /> : <FolderOpen size={14} />}
+            onClick={connectDrive}
+          >
+            {driveAuth.connected ? 'Google Drive Connected' : 'Connect Google Drive'}
+          </Button>
+          {!driveAuth.enabled ? (
+            <p className="mt-2 text-xs text-[#B42318]">Set VITE_GOOGLE_CLIENT_ID to enable Google Drive uploads.</p>
+          ) : null}
           <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-[#CDBD82] bg-[#F9F7EF] p-6 text-center">
             <UploadCloud size={28} className="text-[#005F56]" />
             <span className="mt-2 text-sm font-semibold text-[#12332D]">{selectedFile?.name || document?.original_filename || document?.file_name || 'Select agreement file'}</span>
@@ -301,6 +375,7 @@ export function AgreementBoqStudyPage() {
           <div className="mt-3 space-y-2 text-xs text-[#6C7568]">
             <p>Status: {statusLabel(document?.ai_processing_status)}</p>
             <p>Drive sync: {document?.google_drive_sync_status || 'pending until upload'}</p>
+            {document?.google_drive_file_id ? <p>Drive file ID: {document.google_drive_file_id}</p> : null}
           </div>
           {message ? <p className="mt-3 flex gap-2 rounded-lg border border-[#0B8B7D]/20 bg-[#0B8B7D]/8 p-3 text-xs text-[#005F56]"><CheckCircle2 size={14} />{message}</p> : null}
           {error ? <p className="mt-3 flex gap-2 rounded-lg border border-[#B42318]/20 bg-[#B42318]/8 p-3 text-xs text-[#B42318]"><AlertTriangle size={14} />{error}</p> : null}
