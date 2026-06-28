@@ -9,13 +9,26 @@ type StudyRequest = {
 };
 
 type ExtractedBoqItem = {
-  item_number?: string;
-  description: string;
-  quantity?: number;
-  unit?: string;
-  rate?: number;
-  amount?: number;
-  technical_specification?: string;
+  item_number?: string | null;
+  description?: string | null;
+  quantity?: number | string | null;
+  unit?: string | null;
+  rate?: number | string | null;
+  amount?: number | string | null;
+  technical_specification?: string | null;
+};
+
+type AgreementStudy = {
+  extracted_boq?: ExtractedBoqItem[];
+  technical_specifications?: unknown[];
+  milestones?: unknown[];
+  bg_terms?: Record<string, unknown>;
+  sd_terms?: Record<string, unknown>;
+  dlp_terms?: Record<string, unknown>;
+  payment_terms?: Record<string, unknown>;
+  completion_schedule?: Record<string, unknown>;
+  important_clauses?: unknown[];
+  confidence_score?: number | string | null;
 };
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
@@ -27,10 +40,62 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
-function extractJson(text: string) {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("AI response parsing failed: no JSON object returned");
-  return JSON.parse(match[0]);
+function toNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function asArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function asObject(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stripCodeFence(text: string) {
+  return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+}
+
+function extractJson(text: string): AgreementStudy {
+  const trimmed = stripCodeFence(text);
+  try {
+    return JSON.parse(trimmed) as AgreementStudy;
+  } catch {
+    const match = trimmed.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error("AI response parsing failed: no JSON object returned.");
+    }
+
+    try {
+      return JSON.parse(match[0]) as AgreementStudy;
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      throw new Error(`AI response parsing failed: invalid JSON returned. ${details}`);
+    }
+  }
+}
+
+function extractGeminiText(body: unknown) {
+  const response = body as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{ text?: unknown }>;
+      };
+    }>;
+    error?: { message?: string };
+  };
+
+  const parts = response.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) {
+    throw new Error(`AI response parsing failed: Gemini response did not include candidates[0].content.parts. ${response.error?.message || ""}`.trim());
+  }
+
+  const text = parts.map((part) => typeof part.text === "string" ? part.text : "").join("\n").trim();
+  if (!text) {
+    throw new Error("AI response parsing failed: Gemini response did not include text content.");
+  }
+  return text;
 }
 
 function isTextDocument(path: string, mimeType?: string | null) {
@@ -51,7 +116,12 @@ function resolveMimeType(path: string, mimeType?: string | null) {
 }
 
 async function blobToBase64(blob: Blob) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const buffer = await blob.arrayBuffer();
+  if (!buffer.byteLength) {
+    throw new Error("Parsing failed: uploaded document is empty.");
+  }
+
+  const bytes = new Uint8Array(buffer);
   let binary = "";
   const chunkSize = 0x8000;
   for (let index = 0; index < bytes.length; index += chunkSize) {
@@ -60,9 +130,15 @@ async function blobToBase64(blob: Blob) {
   return btoa(binary);
 }
 
-async function buildDocumentParts(supabase: ReturnType<typeof createClient>, bucket: string, path: string, mimeType?: string | null): Promise<GeminiPart[]> {
+async function buildDocumentParts(
+  supabase: ReturnType<typeof createClient>,
+  bucket: string,
+  path: string,
+  mimeType?: string | null,
+): Promise<GeminiPart[]> {
   const { data, error } = await supabase.storage.from(bucket).download(path);
   if (error) throw new Error(`File not found or storage permission issue: ${error.message}`);
+  if (!data) throw new Error("File not found: Supabase storage returned no file data.");
 
   if (isTextDocument(path, mimeType)) {
     const text = await data.text();
@@ -82,12 +158,33 @@ async function buildDocumentParts(supabase: ReturnType<typeof createClient>, buc
   throw new Error("Unsupported file type/parser. AI Study currently supports PDF, CSV, and TXT. DOC/DOCX/XLS/XLSX need a production document parser before AI Study can read file contents.");
 }
 
+function normalizeBoqItems(items: unknown): ExtractedBoqItem[] {
+  return asArray(items).map((item) => {
+    const row = asObject(item);
+    return {
+      item_number: typeof row.item_number === "string" ? row.item_number : null,
+      description: typeof row.description === "string" && row.description.trim() ? row.description : "Extracted BOQ item",
+      unit: typeof row.unit === "string" && row.unit.trim() ? row.unit : "unit",
+      quantity: toNumber(row.quantity),
+      rate: toNumber(row.rate),
+      amount: toNumber(row.amount),
+      technical_specification: typeof row.technical_specification === "string" ? row.technical_specification : null,
+    };
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) {
+    return jsonResponse({ error: "agreement study failed", details: "Supabase function environment is missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY." }, 500);
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
   let documentId: string | null = null;
 
   try {
@@ -139,13 +236,13 @@ serve(async (req) => {
 
     const geminiBody = await geminiResponse.json().catch(() => ({}));
     if (!geminiResponse.ok) {
-      throw new Error(`Edge Function AI provider error: ${geminiBody.error?.message || geminiResponse.statusText}`);
+      const errorMessage = asObject(asObject(geminiBody).error).message;
+      throw new Error(`Edge Function AI provider error: ${typeof errorMessage === "string" ? errorMessage : geminiResponse.statusText}`);
     }
 
-    const responseText = geminiBody.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!responseText) throw new Error("AI response parsing failed: empty Gemini response.");
+    const responseText = extractGeminiText(geminiBody);
     const study = extractJson(responseText);
-    const extractedBoq = Array.isArray(study.extracted_boq) ? study.extracted_boq as ExtractedBoqItem[] : [];
+    const extractedBoq = normalizeBoqItems(study.extracted_boq);
 
     const { data: aiStudy, error: studyError } = await supabase
       .from("ai_project_study")
@@ -154,15 +251,15 @@ serve(async (req) => {
         project_id: input.project_id,
         agreement_document_id: input.document_id,
         extracted_boq: extractedBoq,
-        technical_specifications: study.technical_specifications || [],
-        milestones: study.milestones || [],
-        bg_terms: study.bg_terms || {},
-        sd_terms: study.sd_terms || {},
-        dlp_terms: study.dlp_terms || {},
-        payment_terms: study.payment_terms || {},
-        completion_schedule: study.completion_schedule || {},
-        important_clauses: study.important_clauses || [],
-        confidence_score: Number(study.confidence_score || 0),
+        technical_specifications: asArray(study.technical_specifications),
+        milestones: asArray(study.milestones),
+        bg_terms: asObject(study.bg_terms),
+        sd_terms: asObject(study.sd_terms),
+        dlp_terms: asObject(study.dlp_terms),
+        payment_terms: asObject(study.payment_terms),
+        completion_schedule: asObject(study.completion_schedule),
+        important_clauses: asArray(study.important_clauses),
+        confidence_score: toNumber(study.confidence_score),
       })
       .select()
       .single();
@@ -177,9 +274,9 @@ serve(async (req) => {
         item_number: item.item_number || null,
         description: item.description || "Extracted BOQ item",
         unit: item.unit || "unit",
-        quantity: Number(item.quantity || 0),
-        rate: Number(item.rate || 0),
-        amount: Number(item.amount || 0),
+        quantity: toNumber(item.quantity),
+        rate: toNumber(item.rate),
+        amount: toNumber(item.amount),
         technical_specification: item.technical_specification || null,
       })));
       if (boqError) throw boqError;
