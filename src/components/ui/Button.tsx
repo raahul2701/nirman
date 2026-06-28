@@ -26,6 +26,19 @@ const sizes = {
 };
 
 export function Button({ variant = 'secondary', size = 'md', loading, icon, children, className, disabled, ...props }: ButtonProps) {
+  const textChildren = typeof children === 'string' ? children : '';
+  const shouldTraceDisabled = /upload|agreement|ai read|ai study/i.test(textChildren);
+
+  if (shouldTraceDisabled) {
+    console.log('[button disabled trace]', {
+      label: textChildren,
+      type: props.type || 'button',
+      disabledProp: disabled || false,
+      loading: loading || false,
+      effectiveDisabled: Boolean(disabled || loading),
+    });
+  }
+
   return (
     <button
       disabled={disabled || loading}

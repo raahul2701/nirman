@@ -114,6 +114,63 @@ export function AgreementBoqStudyPage() {
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
   const totalBoq = useMemo(() => boqItems.reduce((sum, item) => sum + Number(item.amount || 0), 0), [boqItems]);
   const driveFolderPath = buildDriveFolderPath(summary?.workspace, selectedProject, 'agreement_boq');
+  const uploadDisabled = !selectedFile || !selectedProjectId;
+  const aiReadDisabled = !document || document.ai_processing_status === 'running';
+
+  useEffect(() => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const supabaseProjectRef = supabaseUrl?.match(/^https:\/\/([^.]+)\.supabase\.co/)?.[1] || null;
+
+    console.log('[agreement-upload disabled trace]', {
+      location: typeof window === 'undefined' ? null : window.location.href,
+      currentUser: {
+        id: user?.id || null,
+        email: user?.email || null,
+      },
+      role: profile?.role || null,
+      supabase: {
+        url: supabaseUrl || null,
+        projectRef: supabaseProjectRef,
+        expectedProjectRef: 'aaxbulmndnblclmcuqgj',
+        matchesExpectedProjectRef: supabaseProjectRef === 'aaxbulmndnblclmcuqgj',
+      },
+      workspace: summary?.workspace || null,
+      workspaceId: summary?.workspace?.id || null,
+      assignments: summary?.projects || [],
+      assignmentCount: summary?.projects?.length || 0,
+      projects,
+      projectCount: projects.length,
+      selectedProjectId,
+      selectedProject,
+      selectedFile: selectedFile
+        ? {
+          name: selectedFile.name,
+          type: selectedFile.type,
+          size: selectedFile.size,
+        }
+        : null,
+      loadingState: {
+        loading,
+        uploading,
+        studying,
+      },
+      agreementDocumentState: {
+        document,
+        documentMissing: !document,
+        aiProcessingStatus: document?.ai_processing_status || null,
+      },
+      disabledState: {
+        uploadDisabled,
+        uploadDisabledBecauseSelectedFileMissing: !selectedFile,
+        uploadDisabledBecauseSelectedProjectIdMissing: !selectedProjectId,
+        uploadButtonEffectiveDisabled: uploadDisabled || uploading,
+        aiReadDisabled,
+        aiReadDisabledBecauseDocumentMissing: !document,
+        aiReadDisabledBecauseRunning: document?.ai_processing_status === 'running',
+        aiReadButtonEffectiveDisabled: aiReadDisabled || studying,
+      },
+    });
+  }, [aiReadDisabled, document, loading, profile?.role, projects, selectedFile, selectedProject, selectedProjectId, studying, summary, uploadDisabled, uploading, user?.email, user?.id]);
 
   useEffect(() => {
     let active = true;
@@ -151,15 +208,49 @@ export function AgreementBoqStudyPage() {
   async function uploadAgreement() {
     setError('');
     setMessage('');
+    console.log('[agreement-upload uploadAgreement start]', {
+      userId: user?.id || null,
+      role: profile?.role || null,
+      workspace: summary?.workspace || null,
+      selectedProjectId,
+      selectedProject,
+      selectedFile: selectedFile
+        ? {
+          name: selectedFile.name,
+          type: selectedFile.type,
+          size: selectedFile.size,
+        }
+        : null,
+      uploadDisabled,
+      uploadDisabledBecauseSelectedFileMissing: !selectedFile,
+      uploadDisabledBecauseSelectedProjectIdMissing: !selectedProjectId,
+      uploading,
+    });
     if (!selectedFile) {
+      console.warn('[agreement-upload uploadAgreement blocked]', {
+        reason: 'selectedFile missing',
+        selectedFile,
+        selectedProjectId,
+      });
       setError('Select an agreement/BOQ file first.');
       return;
     }
     if (!summary?.workspace || !selectedProject || !user) {
+      console.warn('[agreement-upload uploadAgreement blocked]', {
+        reason: 'workspace/project/user context missing',
+        workspace: summary?.workspace || null,
+        selectedProject,
+        userId: user?.id || null,
+      });
       setError('Workspace, project, or logged-in user context is missing. Assign the project before upload.');
       return;
     }
     if (!isSupportedStudyFile(selectedFile)) {
+      console.warn('[agreement-upload uploadAgreement blocked]', {
+        reason: 'unsupported file type',
+        fileName: selectedFile.name,
+        fileType: selectedFile.type,
+      });
       setError('Unsupported file type. Use PDF, DOC/DOCX, XLS/XLSX, CSV, or TXT.');
       return;
     }
@@ -190,7 +281,9 @@ export function AgreementBoqStudyPage() {
         ai_processing_status: 'uploaded',
       };
 
+      console.log('[agreement-upload agreement_documents payload]', payload);
       const { data, error: insertError } = await supabase.from('agreement_documents').insert(payload).select().single();
+      console.log('[agreement-upload agreement_documents result]', { data, insertError });
       if (insertError) throw insertError;
 
       await recordDocumentMetadata({
@@ -212,9 +305,11 @@ export function AgreementBoqStudyPage() {
         driveFolderPath,
       });
 
+      console.log('[agreement-upload setDocument]', data);
       setDocument(data as AgreementDocument);
       setMessage('Uploaded. AI Study is ready to run.');
     } catch (uploadError) {
+      console.error('[agreement-upload uploadAgreement error]', uploadError);
       setError(uploadError instanceof Error ? uploadError.message : 'Agreement upload failed.');
     } finally {
       setUploading(false);
@@ -292,10 +387,10 @@ export function AgreementBoqStudyPage() {
               onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
             />
           </label>
-          <Button className="mt-4 w-full" variant="outline" loading={uploading} disabled={!selectedFile || !selectedProjectId} icon={<UploadCloud size={14} />} onClick={uploadAgreement}>
+          <Button className="mt-4 w-full" variant="outline" loading={uploading} disabled={uploadDisabled} icon={<UploadCloud size={14} />} onClick={uploadAgreement}>
             Upload Agreement
           </Button>
-          <Button className="mt-3 w-full" variant="primary" loading={studying} disabled={!document || document.ai_processing_status === 'running'} icon={<Brain size={14} />} onClick={runStudy}>
+          <Button className="mt-3 w-full" variant="primary" loading={studying} disabled={aiReadDisabled} icon={<Brain size={14} />} onClick={runStudy}>
             Run AI Agreement Study
           </Button>
           <div className="mt-3 space-y-2 text-xs text-[#6C7568]">
