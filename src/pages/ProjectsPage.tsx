@@ -59,6 +59,7 @@ export function ProjectsPage() {
       owner_id: userId,
       company: '',
       name: form.name,
+      project_name: form.name,
       description: form.description,
       status: form.status,
       start_date: form.start_date || null,

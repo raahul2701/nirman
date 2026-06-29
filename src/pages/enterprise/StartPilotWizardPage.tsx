@@ -441,6 +441,7 @@ export function StartPilotWizardPage() {
             .from('projects')
             .insert({
               name: 'Demo Road Construction Pilot Project',
+              project_name: 'Demo Road Construction Pilot Project',
               description: 'Demo pilot project for testing NIRMAN assignment workflow.',
               owner_id: user.id,
               company: profile?.company || 'NIRMAN Demo',
