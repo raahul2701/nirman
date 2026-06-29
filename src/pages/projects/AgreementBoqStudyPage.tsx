@@ -65,12 +65,29 @@ function isSupportedStudyFile(file: File) {
 }
 
 async function fetchProjectOptions(assignments: ProjectAssignment[]) {
-  const legacyIds = assignments.filter((assignment) => assignment.project_table !== 'gov_projects').map((assignment) => assignment.project_id);
-  const govIds = assignments.filter((assignment) => assignment.project_table === 'gov_projects').map((assignment) => assignment.project_id);
+  const legacyAssignments = assignments.filter((assignment) => assignment.project_table !== 'gov_projects');
+  const govAssignments = assignments.filter((assignment) => assignment.project_table === 'gov_projects');
+  const legacyIds = legacyAssignments.map((assignment) => assignment.project_id);
+  const govIds = govAssignments.map((assignment) => assignment.project_id);
+  console.info('[agreement-boq] de resolver input', {
+    assignments,
+    legacyAssignments,
+    govAssignments,
+    legacyIds,
+    govIds,
+  });
   const [legacyResult, govResult] = await Promise.all([
     legacyIds.length > 0 ? supabase.from('projects').select('id,name,budget').in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
     govIds.length > 0 ? supabase.from('gov_projects').select('id,project_name,project_code,total_contract_value').in('id', govIds) : Promise.resolve({ data: [], error: null }),
   ]);
+  console.info('[agreement-boq] de resolver project queries', {
+    legacyQuery: legacyIds.length > 0 ? { table: 'projects', select: 'id,name,budget', ids: legacyIds } : null,
+    legacyData: legacyResult.data,
+    legacyError: legacyResult.error,
+    govQuery: govIds.length > 0 ? { table: 'gov_projects', select: 'id,project_name,project_code,total_contract_value', ids: govIds } : null,
+    govData: govResult.data,
+    govError: govResult.error,
+  });
 
   if (legacyResult.error) throw legacyResult.error;
   if (govResult.error) throw govResult.error;
@@ -91,10 +108,18 @@ async function fetchProjectOptions(assignments: ProjectAssignment[]) {
       budget: Number(project.total_contract_value || 0),
     })),
   ];
+  console.info('[agreement-boq] de resolver mapped options', {
+    options,
+  });
 
-  return assignments
+  const resolvedOptions = assignments
     .map((assignment) => options.find((option) => option.id === assignment.project_id))
     .filter((option): option is ProjectOption => Boolean(option));
+  console.info('[agreement-boq] de resolver resolved options', {
+    assignments,
+    resolvedOptions,
+  });
+  return resolvedOptions;
 }
 
 export function AgreementBoqStudyPage() {
@@ -122,8 +147,22 @@ export function AgreementBoqStudyPage() {
         const workspaceSummary = await getMyWorkspaceSummary();
         if (!active) return;
         setSummary(workspaceSummary);
-        const options = await fetchProjectOptions(workspaceSummary.projects.filter((assignment) => assignment.access_status === 'active' || assignment.access_status === 'pilot'));
+        console.info('[agreement-boq] V workspace summary', {
+          selectedWorkspaceId: workspaceSummary.workspace?.id || null,
+          assignmentRows: workspaceSummary.projects,
+        });
+        const activeAssignments = workspaceSummary.projects.filter((assignment) => assignment.access_status === 'active' || assignment.access_status === 'pilot');
+        console.info('[agreement-boq] assignments after access_status filter', {
+          acceptedStatuses: ['active', 'pilot'],
+          beforeCount: workspaceSummary.projects.length,
+          afterCount: activeAssignments.length,
+          rows: activeAssignments,
+        });
+        const options = await fetchProjectOptions(activeAssignments);
         if (!active) return;
+        console.info('[agreement-boq] final project list rendered', {
+          projects: options,
+        });
         setProjects(options);
         setSelectedProjectId((current) => current || options[0]?.id || '');
       } catch (loadError) {

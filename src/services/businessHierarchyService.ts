@@ -176,53 +176,78 @@ export function getDriveProjectFolderPath(eeNameOrId: string, projectName: strin
   return `NIRMAN AI/${cleanEe}/${cleanProject}`;
 }
 
+type SupabaseErrorLike = {
+  code?: string;
+  message?: string | null;
+  details?: string | null;
+  status?: number | string;
+};
+
+function isOptionalSupabaseError(error?: SupabaseErrorLike | null) {
+  if (!error) return false;
+  const hint = [error.code, error.message, error.details, error.status]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    hint.includes('pgrst205') ||
+    hint.includes('42703') ||
+    (hint.includes('relation') && hint.includes('does not exist')) ||
+    String(error.status) === '404'
+  );
+}
+
 export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
-  try {
-    const { data: memberships, error: memberError } = await supabase
-      .from('workspace_users')
-      .select('*')
-      .eq('active', true)
-      .limit(1);
-    if (memberError) throw memberError;
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
 
-    const workspaceId = (memberships?.[0] as WorkspaceMembershipRow | undefined)?.workspace_id;
-    if (!workspaceId) return EMPTY_WORKSPACE_SUMMARY;
+  const memberResult = await supabase.from('workspace_users').select('*').eq('active', true).limit(1);
+  const { data: memberships, error: memberError } = memberResult;
+  if (memberError) throw memberError;
 
-    const [
-      workspaceResult,
-      membersResult,
-      projectsResult,
-      licensesResult,
-      recommendationsResult,
-      googleResult,
-    ] = await Promise.all([
-      supabase.from('executive_engineer_workspaces').select('*').eq('id', workspaceId).maybeSingle(),
-      supabase.from('workspace_users').select('*').eq('workspace_id', workspaceId).eq('active', true),
-      supabase.from('project_assignments').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
-      supabase.from('contractor_licenses').select('*').eq('workspace_id', workspaceId).order('updated_at', { ascending: false }),
-      supabase.from('contractor_recommendations').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }),
-      supabase.from('workspace_google_connections').select('*').eq('workspace_id', workspaceId).maybeSingle(),
-    ]);
-
-    if (workspaceResult.error) throw workspaceResult.error;
-    if (membersResult.error) throw membersResult.error;
-    if (projectsResult.error) throw projectsResult.error;
-    if (licensesResult.error) throw licensesResult.error;
-    if (recommendationsResult.error) throw recommendationsResult.error;
-    if (googleResult.error) throw googleResult.error;
-
-    return normalizeWorkspaceSummary({
-      workspace: workspaceResult.data as ExecutiveEngineerWorkspace | null,
-      members: membersResult.data as WorkspaceUser[] | null,
-      projects: projectsResult.data as ProjectAssignment[] | null,
-      licenses: licensesResult.data as ContractorLicense[] | null,
-      recommendations: recommendationsResult.data as ContractorRecommendation[] | null,
-      googleConnection: googleResult.data as WorkspaceGoogleConnection | null,
-    });
-  } catch (error) {
-    console.warn('[enterprise] workspace summary unavailable', error);
+  const workspaceId = (memberships?.[0] as WorkspaceMembershipRow | undefined)?.workspace_id;
+  if (!workspaceId) {
     return EMPTY_WORKSPACE_SUMMARY;
   }
+
+  const workspaceResult = await supabase.from('executive_engineer_workspaces').select('*').eq('id', workspaceId).maybeSingle();
+  if (workspaceResult.error) throw workspaceResult.error;
+
+  const membersResult = await supabase.from('workspace_users').select('*').eq('workspace_id', workspaceId).eq('active', true);
+  if (membersResult.error) throw membersResult.error;
+
+  const projectsResult = await supabase.from('project_assignments').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false });
+  if (projectsResult.error) throw projectsResult.error;
+
+  const licensesResult = await supabase.from('contractor_licenses').select('*').eq('workspace_id', workspaceId);
+  const licenses = licensesResult.error
+    ? isOptionalSupabaseError(licensesResult.error)
+      ? []
+      : (() => { throw licensesResult.error; })()
+    : (licensesResult.data as ContractorLicense[] | null) ?? [];
+
+  const recommendationsResult = await supabase
+    .from('contractor_recommendations')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: false });
+  const recommendations = recommendationsResult.error
+    ? isOptionalSupabaseError(recommendationsResult.error)
+      ? []
+      : (() => { throw recommendationsResult.error; })()
+    : (recommendationsResult.data as ContractorRecommendation[] | null) ?? [];
+
+  const googleResult = await supabase.from('workspace_google_connections').select('*').eq('workspace_id', workspaceId).maybeSingle();
+
+  return normalizeWorkspaceSummary({
+    workspace: workspaceResult.data as ExecutiveEngineerWorkspace | null,
+    members: membersResult.data as WorkspaceUser[] | null,
+    projects: projectsResult.data as ProjectAssignment[] | null,
+    licenses,
+    recommendations,
+    googleConnection: googleResult.error ? null : (googleResult.data as WorkspaceGoogleConnection | null),
+  });
 }
 
 export async function upsertWorkspaceGoogleConnection(workspaceId: string, values: Partial<WorkspaceGoogleConnection>) {
