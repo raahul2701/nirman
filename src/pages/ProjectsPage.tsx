@@ -81,14 +81,45 @@ export function ProjectsPage() {
     const workspaceId = workspaceUsers?.[0]?.workspace_id;
     if (workspaceError || !workspaceId) { toast('Project created, but workspace assignment failed', 'error'); return; }
 
-    const { error: assignmentError } = await supabase.from('project_assignments').insert({
+    const assignmentPayload = {
       workspace_id: workspaceId,
       project_id: data.id,
       project_table: 'projects',
       executive_engineer_id: userId,
       access_status: 'active',
+    };
+    const assignmentResult = await supabase
+      .from('project_assignments')
+      .insert(assignmentPayload)
+      .select()
+      .maybeSingle();
+    const assignmentErrorDetails = assignmentResult.error as {
+      code?: string;
+      message?: string;
+      details?: string;
+      hint?: string;
+    } | null;
+    console.log('[project_assignments insert trace]', {
+      authenticatedUserId: userId,
+      insertedProjectId: data.id,
+      workspaceId,
+      assignmentPayload,
+      responseData: assignmentResult.data,
+      errorCode: assignmentErrorDetails?.code,
+      errorMessage: assignmentErrorDetails?.message,
+      errorDetails: assignmentErrorDetails?.details,
+      errorHint: assignmentErrorDetails?.hint,
     });
-    if (assignmentError) { toast('Project created, but assignment failed', 'error'); return; }
+    if (assignmentResult.error) {
+      console.error('[project_assignments insert failed]', {
+        code: assignmentErrorDetails?.code,
+        message: assignmentErrorDetails?.message,
+        details: assignmentErrorDetails?.details,
+        hint: assignmentErrorDetails?.hint,
+      });
+      toast('Project created, but assignment failed', 'error');
+      throw assignmentResult.error;
+    }
 
     if (data) setProjects(prev => [data as Project, ...prev]);
     setShowForm(false);
