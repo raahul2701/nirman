@@ -70,6 +70,26 @@ export function ProjectsPage() {
     }).select().maybeSingle();
     setSubmitting(false);
     if (error) { toast('Failed to create project', 'error'); return; }
+    if (!data?.id) { toast('Failed to create project', 'error'); return; }
+
+    const { data: workspaceUsers, error: workspaceError } = await supabase
+      .from('workspace_users')
+      .select('workspace_id')
+      .eq('user_id', userId)
+      .eq('active', true)
+      .limit(1);
+    const workspaceId = workspaceUsers?.[0]?.workspace_id;
+    if (workspaceError || !workspaceId) { toast('Project created, but workspace assignment failed', 'error'); return; }
+
+    const { error: assignmentError } = await supabase.from('project_assignments').insert({
+      workspace_id: workspaceId,
+      project_id: data.id,
+      project_table: 'projects',
+      executive_engineer_id: userId,
+      access_status: 'active',
+    });
+    if (assignmentError) { toast('Project created, but assignment failed', 'error'); return; }
+
     if (data) setProjects(prev => [data as Project, ...prev]);
     setShowForm(false);
     setForm({ name: '', description: '', status: 'active', start_date: '', end_date: '', budget: '', location: '' });
