@@ -23,6 +23,7 @@ export const DRIVE_MODULE_FOLDERS = {
 
 export type DriveModuleName = keyof typeof DRIVE_MODULE_FOLDERS;
 export type DriveSyncStatus = 'uploaded_to_supabase' | 'google_drive_sync_pending' | 'google_drive_synced' | 'google_drive_sync_failed';
+export type ProjectSourceTable = 'projects' | 'gov_projects';
 
 type ProjectReference = {
   id: string;
@@ -66,6 +67,7 @@ type DocumentMetadataInput = {
   workspaceId: string;
   ownerExecutiveEngineerId: string;
   projectId: string;
+  projectTable?: ProjectSourceTable | null;
   contractorId?: string | null;
   uploadedBy?: string | null;
   role?: string | null;
@@ -84,12 +86,57 @@ type DocumentMetadataInput = {
   driveFolderPath?: string | null;
 };
 
+async function resolveDocumentProjectTable(input: Pick<DocumentMetadataInput, 'workspaceId' | 'projectId' | 'projectTable'>): Promise<ProjectSourceTable> {
+  if (input.projectTable === 'projects' || input.projectTable === 'gov_projects') {
+    return input.projectTable;
+  }
+
+  const assignmentResult = await supabase
+    .from('project_assignments')
+    .select('project_table')
+    .eq('workspace_id', input.workspaceId)
+    .eq('project_id', input.projectId)
+    .in('project_table', ['projects', 'gov_projects'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (assignmentResult.error) throw assignmentResult.error;
+
+  const assignmentProjectTable = assignmentResult.data?.project_table;
+  if (assignmentProjectTable === 'projects' || assignmentProjectTable === 'gov_projects') {
+    return assignmentProjectTable;
+  }
+
+  const projectResult = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', input.projectId)
+    .maybeSingle();
+
+  if (projectResult.error) throw projectResult.error;
+  if (projectResult.data?.id) return 'projects';
+
+  const govProjectResult = await supabase
+    .from('gov_projects')
+    .select('id')
+    .eq('id', input.projectId)
+    .maybeSingle();
+
+  if (govProjectResult.error) throw govProjectResult.error;
+  if (govProjectResult.data?.id) return 'gov_projects';
+
+  throw new Error('Project source could not be resolved for document metadata.');
+}
+
 export async function recordDocumentMetadata(input: DocumentMetadataInput) {
+  const projectTable = await resolveDocumentProjectTable(input);
   const driveFileId = input.googleDriveFileId || (input.supabasePath ? `supabase://${input.supabasePath}` : `pending://${crypto.randomUUID()}`);
   const { error } = await supabase.from('document_metadata').insert({
     workspace_id: input.workspaceId,
     owner_executive_engineer_id: input.ownerExecutiveEngineerId,
     project_id: input.projectId,
+    project_table: projectTable,
     contractor_id: input.contractorId || null,
     uploaded_by: input.uploadedBy || null,
     role: input.role || null,
@@ -112,6 +159,7 @@ export async function recordDocumentMetadata(input: DocumentMetadataInput) {
     metadata: {
       role: input.role || null,
       module_name: input.moduleName,
+      project_table: projectTable,
       original_filename: input.originalFilename,
       storage_provider: input.storageProvider,
       supabase_path: input.supabasePath || null,

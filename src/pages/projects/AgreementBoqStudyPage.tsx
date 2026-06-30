@@ -236,6 +236,7 @@ export function AgreementBoqStudyPage() {
         workspaceId: summary.workspace.id,
         ownerExecutiveEngineerId: summary.workspace.executive_engineer_id,
         projectId: selectedProject.id,
+        projectTable: selectedProject.table === 'gov_projects' ? 'gov_projects' : 'projects',
         uploadedBy: user.id,
         role: profile?.role || null,
         documentType: 'agreement',
