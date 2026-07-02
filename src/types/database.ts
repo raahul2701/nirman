@@ -35,6 +35,23 @@ export type Database = {
         Insert: Partial<Database['public']['Tables']['audit_logs']['Row']> & { action: string };
         Update: Partial<Database['public']['Tables']['audit_logs']['Row']>;
       };
+      error_logs: {
+        Row: {
+          id: string;
+          level: string;
+          message: string;
+          context: Json | null;
+          user_id: string | null;
+          url: string | null;
+          user_agent: string | null;
+          stack: string | null;
+          created_at: string;
+          details: Json | null;
+          source: string | null;
+        };
+        Insert: Partial<Database['public']['Tables']['error_logs']['Row']> & { level: string; message: string };
+        Update: Partial<Database['public']['Tables']['error_logs']['Row']>;
+      };
       ai_request_logs: {
         Row: {
           id: string;

@@ -31,7 +31,22 @@ type AgreementStudy = {
   confidence_score?: number | string | null;
 };
 
-type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+type GeminiPart =
+  | { text: string }
+  | { file_data: { mime_type: string; file_uri: string } };
+
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: unknown }>;
+    };
+  }>;
+  error?: { message?: string };
+};
+
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const GEMINI_UPLOAD_ENDPOINT = "https://generativelanguage.googleapis.com/upload/v1beta/files";
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -76,16 +91,7 @@ function extractJson(text: string): AgreementStudy {
   }
 }
 
-function extractGeminiText(body: unknown) {
-  const response = body as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{ text?: unknown }>;
-      };
-    }>;
-    error?: { message?: string };
-  };
-
+function extractGeminiText(response: GeminiResponse) {
   const parts = response.candidates?.[0]?.content?.parts;
   if (!Array.isArray(parts)) {
     throw new Error(`AI response parsing failed: Gemini response did not include candidates[0].content.parts. ${response.error?.message || ""}`.trim());
@@ -115,47 +121,118 @@ function resolveMimeType(path: string, mimeType?: string | null) {
   return "application/octet-stream";
 }
 
-async function blobToBase64(blob: Blob) {
-  const buffer = await blob.arrayBuffer();
-  if (!buffer.byteLength) {
-    throw new Error("Parsing failed: uploaded document is empty.");
-  }
-
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return btoa(binary);
-}
-
-async function buildDocumentParts(
+async function buildGeminiStudyParts(
   supabase: ReturnType<typeof createClient>,
   bucket: string,
   path: string,
-  mimeType?: string | null,
+  mimeType: string | null | undefined,
+  prompt: string,
+  signal: AbortSignal,
 ): Promise<GeminiPart[]> {
+  if (isTextDocument(path, mimeType)) {
+    const { data, error } = await supabase.storage.from(bucket).download(path);
+    if (error) throw new Error(`File not found or storage permission issue: ${error.message}`);
+    if (!data) throw new Error("File not found: Supabase storage returned no file data.");
+
+    const text = await data.text();
+    if (!text.trim()) throw new Error("Parsing failed: uploaded document is empty.");
+    return [{ text: prompt }, { text: text.slice(0, 28000) }];
+  }
+
+  if (isPdfDocument(path, mimeType)) {
+    const name = path.split('/').pop() || path;
+    const resolvedMimeType = resolveMimeType(path, mimeType);
+    const fileUri = await uploadPdfToGemini(supabase, bucket, path, name, resolvedMimeType, signal);
+    return [{ text: prompt }, { file_data: { mime_type: resolvedMimeType, file_uri: fileUri } }];
+  }
+
+  throw new Error("Unsupported file type/parser. AI Study currently supports PDF, CSV, and TXT. DOC/DOCX/XLS/XLSX need a production document parser before AI Study can read file contents.");
+}
+
+async function uploadPdfToGemini(
+  supabase: ReturnType<typeof createClient>,
+  bucket: string,
+  path: string,
+  name: string,
+  mimeType: string,
+  signal: AbortSignal,
+) {
+  const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiApiKey) throw new Error("Gemini API key is not configured on the server.");
+
   const { data, error } = await supabase.storage.from(bucket).download(path);
   if (error) throw new Error(`File not found or storage permission issue: ${error.message}`);
   if (!data) throw new Error("File not found: Supabase storage returned no file data.");
 
-  if (isTextDocument(path, mimeType)) {
-    const text = await data.text();
-    if (!text.trim()) throw new Error("Parsing failed: uploaded document is empty.");
-    return [{ text: text.slice(0, 28000) }];
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  if (!bytes.length) throw new Error("Uploaded document is empty.");
+
+  const initResponse = await fetch(`${GEMINI_UPLOAD_ENDPOINT}?key=${encodeURIComponent(geminiApiKey)}`, {
+    method: "POST",
+    signal,
+    headers: {
+      "x-goog-api-key": geminiApiKey,
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Length": String(bytes.length),
+      "X-Goog-Upload-Header-Content-Type": mimeType,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ file: { display_name: name } }),
+  });
+  const initText = await initResponse.text().catch(() => "");
+  if (!initResponse.ok) {
+    throw new Error(`Gemini file upload init failed: ${initResponse.status} ${initText}`);
   }
 
-  if (isPdfDocument(path, mimeType)) {
-    return [{
-      inlineData: {
-        mimeType: resolveMimeType(path, mimeType),
-        data: await blobToBase64(data),
+  const uploadUrl = initResponse.headers.get("x-goog-upload-url");
+  if (!uploadUrl) throw new Error("Gemini file upload init did not return an upload URL.");
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    signal,
+    headers: {
+      "Content-Length": String(bytes.length),
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
+    },
+    body: bytes,
+  });
+  const uploadText = await uploadResponse.text().catch(() => "");
+  if (!uploadResponse.ok) {
+    throw new Error(`Gemini file upload failed: ${uploadResponse.status} ${uploadText}`);
+  }
+
+  const uploadJson = JSON.parse(uploadText) as { file?: { uri?: string } };
+  const fileUri = uploadJson.file?.uri;
+  if (!fileUri) throw new Error("Gemini file upload failed to return file_data.file_uri.");
+
+  return fileUri;
+}
+
+async function runGeminiStudy(parts: GeminiPart[], signal: AbortSignal) {
+  const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiApiKey) throw new Error("Gemini API key is not configured on the server.");
+
+  const response = await fetch(`${GEMINI_API_BASE}/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 1800,
       },
-    }];
+    }),
+  });
+  const responseText = await response.text().catch(() => "");
+  const responseJson = responseText ? JSON.parse(responseText) as GeminiResponse : {};
+  if (!response.ok) {
+    throw new Error(`Gemini generateContent failed: ${response.status} ${responseJson.error?.message || responseText}`);
   }
 
-  throw new Error("Unsupported file type/parser. AI Study currently supports PDF, CSV, and TXT. DOC/DOCX/XLS/XLSX need a production document parser before AI Study can read file contents.");
+  return extractGeminiText(responseJson);
 }
 
 function normalizeBoqItems(items: unknown): ExtractedBoqItem[] {
@@ -194,11 +271,6 @@ serve(async (req) => {
       return jsonResponse({ error: "document_id, workspace_id and project_id are required" }, 400);
     }
 
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_GEMINI_API_KEY");
-    if (!geminiApiKey) {
-      throw new Error("Missing server-side Gemini/API key. Configure GEMINI_API_KEY in Supabase Edge Function secrets.");
-    }
-
     const { data: document, error: documentError } = await supabase
       .from("agreement_documents")
       .select("*")
@@ -218,8 +290,6 @@ serve(async (req) => {
     const storagePath = document.supabase_path || document.storage_path;
     if (!storagePath) throw new Error("File not found: agreement document has no Supabase storage path.");
 
-    const documentParts = await buildDocumentParts(supabase, "project-files", storagePath, document.mime_type);
-
     const prompt = [
       "Extract an Indian public works agreement/BOQ into strict JSON.",
       "Return keys: extracted_boq, technical_specifications, milestones, bg_terms, sd_terms, dlp_terms, payment_terms, completion_schedule, important_clauses, confidence_score.",
@@ -228,19 +298,17 @@ serve(async (req) => {
       "Read the attached document or pasted text and return only JSON.",
     ].join("\n\n");
 
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, ...documentParts] }] }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort("Gemini agreement study timeout"), 45000);
+    const responseText = await (async () => {
+      try {
+        const parts = await buildGeminiStudyParts(supabase, "project-files", storagePath, document.mime_type, prompt, controller.signal);
+        return await runGeminiStudy(parts, controller.signal);
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
 
-    const geminiBody = await geminiResponse.json().catch(() => ({}));
-    if (!geminiResponse.ok) {
-      const errorMessage = asObject(asObject(geminiBody).error).message;
-      throw new Error(`Edge Function AI provider error: ${typeof errorMessage === "string" ? errorMessage : geminiResponse.statusText}`);
-    }
-
-    const responseText = extractGeminiText(geminiBody);
     const study = extractJson(responseText);
     const extractedBoq = normalizeBoqItems(study.extracted_boq);
 
