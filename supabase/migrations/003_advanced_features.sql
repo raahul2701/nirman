@@ -703,19 +703,62 @@ CREATE TRIGGER set_dispute_code
 -- ENABLE REALTIME ON NEW TABLES
 -- ─────────────────────────────────────
 
-ALTER PUBLICATION supabase_realtime 
-  ADD TABLE blacklisted_contractors;
-ALTER PUBLICATION supabase_realtime 
-  ADD TABLE bank_guarantees;
-ALTER PUBLICATION supabase_realtime 
-  ADD TABLE hindrance_register;
-ALTER PUBLICATION supabase_realtime 
-  ADD TABLE disputes;
-ALTER PUBLICATION supabase_realtime 
-  ADD TABLE budget_progress_snapshots;
-ALTER PUBLICATION supabase_realtime 
-  ADD TABLE dlp_defects;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND tablename = 'blacklisted_contractors'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE blacklisted_contractors;
+    END IF;
 
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND tablename = 'bank_guarantees'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE bank_guarantees;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND tablename = 'hindrance_register'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE hindrance_register;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND tablename = 'disputes'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE disputes;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND tablename = 'budget_progress_snapshots'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE budget_progress_snapshots;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND tablename = 'dlp_defects'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE dlp_defects;
+    END IF;
+END $$;
 -- ─────────────────────────────────────
 -- RLS POLICIES FOR NEW TABLES
 -- ─────────────────────────────────────
