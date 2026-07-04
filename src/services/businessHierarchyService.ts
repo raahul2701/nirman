@@ -201,8 +201,14 @@ function isOptionalSupabaseError(error?: SupabaseErrorLike | null) {
 export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
+  if (!userData.user?.id) return EMPTY_WORKSPACE_SUMMARY;
 
-  const memberResult = await supabase.from('workspace_users').select('*').eq('active', true).limit(1);
+  const memberResult = await supabase
+    .from('workspace_users')
+    .select('*')
+    .eq('user_id', userData.user.id)
+    .eq('active', true)
+    .limit(1);
   const { data: memberships, error: memberError } = memberResult;
   if (memberError) throw memberError;
 

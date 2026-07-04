@@ -11,9 +11,9 @@ import {
   ChevronRight,
   Activity,
   CheckCircle2,
-  ShieldCheck,
-  RadioTower
-} from 'lucide-react';
+  Shield,
+  Zap as RadioTower,
+} from '../lib/icons';
 import { AppLayout } from '../components/layout/AppLayout';
 import { StatCard } from '../components/ui/Card';
 import { SeverityBadge, StatusBadge } from '../components/ui/Badge';
@@ -25,12 +25,18 @@ import { Problem } from '../types';
 import { formatDistanceToNow, CATEGORY_LABELS } from '../lib/utils';
 import { DashboardSectionSkeleton } from '../components/dashboard/DashboardSectionSkeleton';
 import { BRANDING } from '../constants/branding';
-import { RoleBasedDashboard } from '../components/dashboard/RoleBasedDashboard';
 import { getDashboardRole } from '../services/executionDemoData';
 
 const ChartsSection = lazy(() => import('../components/dashboard/ChartsSection').then((mod) => ({ default: mod.ChartsSection })));
 const MaterialChart = lazy(() => import('../components/dashboard/MaterialChart').then((mod) => ({ default: mod.MaterialChart })));
 const OperationalIntelligenceWidgets = lazy(() => import('../components/dashboard/OperationalIntelligenceWidgets').then((mod) => ({ default: mod.OperationalIntelligenceWidgets })));
+const RoleBasedDashboard = lazy(() => import('../components/dashboard/RoleBasedDashboard').then((mod) => ({ default: mod.RoleBasedDashboard })));
+
+const DASHBOARD_STATUS_ITEMS = [
+  { label: 'Ops', value: 'Live', icon: RadioTower },
+  { label: 'AI', value: 'Ready', icon: Brain },
+  { label: 'Control', value: 'Secure', icon: Shield },
+] as const;
 
 type RoleDashboardBoundaryProps = {
   children: ReactNode;
@@ -65,6 +71,32 @@ const QUICK_ACTIONS = [
   { label: 'AI Design', icon: Brain, color: '#C89B3C', to: '/design' },
   { label: 'Inventory', icon: Package, color: '#C89B3C', to: '/inventory' },
 ] as const;
+
+function DashboardHero({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="mb-6 rounded-lg p-5 shadow-command" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F7F5EF 100%)', border: '1px solid var(--border-strong)' }}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4">
+          <img src={BRANDING.LOGO_MARK_PATH} alt="ARSPL" className="h-14 w-14 rounded-lg bg-white object-contain p-1" style={{ border: '1px solid var(--border)' }} />
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.24em]" style={{ color: '#6B5A1E' }}>{BRANDING.EXECUTIVE_LABEL}</p>
+            <h2 className="mt-1 text-2xl font-black text-[#12332D]">{title}</h2>
+            <p className="mt-1 text-sm text-[#6C7568]">{description}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          {DASHBOARD_STATUS_ITEMS.map((item) => (
+            <div key={item.label} className="rounded-lg px-4 py-3" style={{ background: 'rgba(0,95,86,0.06)', border: '1px solid rgba(0,95,86,0.12)' }}>
+              <item.icon size={16} className="mx-auto text-[#005F56]" />
+              <p className="mt-1 text-sm font-bold text-[#12332D]">{item.value}</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-[#6C7568]">{item.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type ProblemRowProps = {
   problem: Problem;
@@ -116,7 +148,7 @@ export function DashboardPage() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [roleDashboardFailed, setRoleDashboardFailed] = useState(false);
   const dashboardRole = getDashboardRole(profile?.role);
-  const shouldShowRoleDashboard = !roleDashboardFailed && Boolean(user || profile);
+  const shouldShowRoleDashboard = !roleDashboardFailed && !!dashboardRole;
   const dashboardTitle = dashboardRole === 'executive_engineer'
     ? 'Executive Engineer Project Command Center'
     : dashboardRole === 'assistant_engineer'
@@ -210,67 +242,21 @@ export function DashboardPage() {
 
   if (shouldShowRoleDashboard) {
     return (
-      <AppLayout title={dashboardTitle} subtitle={`ARSPL role-based command view for ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
-        <div className="mb-6 rounded-lg p-5 shadow-command" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F7F5EF 100%)', border: '1px solid var(--border-strong)' }}>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <img src={BRANDING.LOGO_MARK_PATH} alt="ARSPL" className="h-14 w-14 rounded-lg bg-white object-contain p-1" style={{ border: '1px solid var(--border)' }} />
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.24em]" style={{ color: '#6B5A1E' }}>{BRANDING.EXECUTIVE_LABEL}</p>
-                <h2 className="mt-1 text-2xl font-black text-[#12332D]">{dashboardTitle}</h2>
-                <p className="mt-1 text-sm text-[#6C7568]">Role-aware project access, component progress, submissions, and billing readiness.</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              {[
-                { label: 'Ops', value: 'Live', icon: RadioTower },
-                { label: 'AI', value: 'Ready', icon: Brain },
-                { label: 'Control', value: 'Secure', icon: ShieldCheck },
-              ].map((item) => (
-                <div key={item.label} className="rounded-lg px-4 py-3" style={{ background: 'rgba(0,95,86,0.06)', border: '1px solid rgba(0,95,86,0.12)' }}>
-                  <item.icon size={16} className="mx-auto text-[#005F56]" />
-                  <p className="mt-1 text-sm font-bold text-[#12332D]">{item.value}</p>
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-[#6C7568]">{item.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <AppLayout title={dashboardTitle} subtitle={`Role-based command view for ${profile?.full_name?.split(' ')[0] || 'User'}`}>
+        <DashboardHero title={dashboardTitle} description="Role-aware project access, component progress, submissions, and billing readiness." />
 
         <RoleDashboardBoundary onError={() => setRoleDashboardFailed(true)}>
-          <RoleBasedDashboard role={profile?.role} identity={{ userId: user?.id, fullName: profile?.full_name, company: profile?.company }} />
+          <Suspense fallback={<DashboardSectionSkeleton />}>
+            <RoleBasedDashboard role={dashboardRole} identity={{ userId: user?.id, fullName: profile?.full_name, company: profile?.company }} />
+          </Suspense>
         </RoleDashboardBoundary>
       </AppLayout>
     );
   }
 
   return (
-    <AppLayout title={dashboardTitle} subtitle={`ARSPL role-based command view for ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
-      <div className="mb-6 rounded-lg p-5 shadow-command" style={{ background: 'linear-gradient(135deg, #FFFFFF 0%, #F7F5EF 100%)', border: '1px solid var(--border-strong)' }}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <img src={BRANDING.LOGO_MARK_PATH} alt="ARSPL" className="h-14 w-14 rounded-lg bg-white object-contain p-1" style={{ border: '1px solid var(--border)' }} />
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.24em]" style={{ color: '#6B5A1E' }}>{BRANDING.EXECUTIVE_LABEL}</p>
-              <h2 className="mt-1 text-2xl font-black text-[#12332D]">{dashboardTitle}</h2>
-              <p className="mt-1 text-sm text-[#6C7568]">Role-aware project access, component progress, submissions, and billing readiness.</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            {[
-              { label: 'Ops', value: 'Live', icon: RadioTower },
-              { label: 'AI', value: 'Ready', icon: Brain },
-              { label: 'Control', value: 'Secure', icon: ShieldCheck },
-            ].map((item) => (
-              <div key={item.label} className="rounded-lg px-4 py-3" style={{ background: 'rgba(0,95,86,0.06)', border: '1px solid rgba(0,95,86,0.12)' }}>
-                <item.icon size={16} className="mx-auto text-[#005F56]" />
-                <p className="mt-1 text-sm font-bold text-[#12332D]">{item.value}</p>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-[#6C7568]">{item.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+    <AppLayout title="NIRMAN AI Dashboard" subtitle={`Welcome, ${profile?.full_name?.split(' ')[0] || 'Builder'}`}>
+      <DashboardHero title={dashboardTitle} description="A legacy overview of your projects and activities." />
 
       <div className="my-6 h-px bg-[#EFE8D4]" />
 
