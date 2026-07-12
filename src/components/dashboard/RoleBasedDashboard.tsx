@@ -15,7 +15,6 @@ import {
   ScanLine,
   Shield,
   TrendingUp,
-  Truck,
 } from '../../lib/icons';
 import { StatCard } from '../ui/Card';
 import { getDashboardRole, getRoleProjects, type DashboardIdentity } from '../../services/executionDemoData';

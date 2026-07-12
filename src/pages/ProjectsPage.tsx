@@ -88,9 +88,6 @@ export function ProjectsPage() {
       executive_engineer_id: userId,
       access_status: 'active',
     };
-    console.log('[project_assignments insert before]', {
-      assignmentPayload,
-    });
     const assignmentResult = await supabase
       .from('project_assignments')
       .insert(assignmentPayload)
@@ -102,34 +99,12 @@ export function ProjectsPage() {
       details?: string;
       hint?: string;
     } | null;
-    console.log('[project_assignments insert after]', {
-      assignmentPayload,
-      responseData: assignmentResult.data,
-      assignmentResultData: assignmentResult.data,
-      assignmentResultError: assignmentResult.error,
-      error: {
-        code: assignmentErrorDetails?.code,
-        message: assignmentErrorDetails?.message,
-        details: assignmentErrorDetails?.details,
-        hint: assignmentErrorDetails?.hint,
-      },
-      errorCode: assignmentErrorDetails?.code,
-      errorMessage: assignmentErrorDetails?.message,
-      errorDetails: assignmentErrorDetails?.details,
-      errorHint: assignmentErrorDetails?.hint,
-    });
     console.log('[project_assignments insert trace]', {
       authenticatedUserId: userId,
       insertedProjectId: data.id,
       workspaceId,
       assignmentPayload,
       responseData: assignmentResult.data,
-      error: {
-        code: assignmentErrorDetails?.code,
-        message: assignmentErrorDetails?.message,
-        details: assignmentErrorDetails?.details,
-        hint: assignmentErrorDetails?.hint,
-      },
       errorCode: assignmentErrorDetails?.code,
       errorMessage: assignmentErrorDetails?.message,
       errorDetails: assignmentErrorDetails?.details,
