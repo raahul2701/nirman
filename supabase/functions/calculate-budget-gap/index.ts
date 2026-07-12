@@ -11,10 +11,26 @@ serve(async (req) => {
     const supabase = createSupabaseClient();
     const { data: projects, error: projectsError } = await supabase
       .from('gov_projects')
-      .select('id, project_name, total_contract_value, progress_percent, owner_id, engineer_id')
+      .select('id, project_name, total_contract_value, progress_percent')
       .eq('status', 'active');
 
     if (projectsError) throw projectsError;
+
+    const projectIds = (projects || []).map((project) => project.id);
+    const { data: assignments, error: assignmentsError } = projectIds.length
+      ? await supabase
+        .from('project_assignments')
+        .select('project_id, executive_engineer_id, assistant_engineer_id, junior_engineer_id')
+        .eq('project_table', 'gov_projects')
+        .in('access_status', ['active', 'pilot'])
+        .in('project_id', projectIds)
+      : { data: [], error: null };
+
+    if (assignmentsError) throw assignmentsError;
+
+    const assignmentByProjectId = new Map(
+      (assignments || []).map((assignment) => [assignment.project_id, assignment]),
+    );
 
     const alerts: Array<Record<string, unknown>> = [];
     const snapshots: Array<Record<string, unknown>> = [];
@@ -49,8 +65,9 @@ serve(async (req) => {
       });
 
       if (riskFlag) {
+        const assignment = assignmentByProjectId.get(project.id);
         alerts.push({
-          user_id: project.engineer_id ?? project.owner_id,
+          user_id: assignment?.assistant_engineer_id || assignment?.junior_engineer_id || assignment?.executive_engineer_id || null,
           title: `Budget Gap Alert: ${project.project_name}`,
           message: `The project has a budget gap of ${gap.toFixed(2)}% between financial and physical progress.`,
           type: 'warning',

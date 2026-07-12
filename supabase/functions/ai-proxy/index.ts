@@ -402,7 +402,9 @@ async function fetchWithRetry(payload: Record<string, unknown>, signal: AbortSig
       });
       const respText = await response.text().catch(() => '');
       let respJson: unknown = null;
-      try { respJson = JSON.parse(respText); } catch {}
+      try { respJson = JSON.parse(respText); } catch (error) {
+        console.error(error);
+      }
       await logGeminiEvent({ phase: 'generate_content.response', endpoint: genEndpoint, status: response.status, body: respText });
 
       if (!response.ok) {
@@ -439,6 +441,7 @@ Deno.serve(async (req: Request) => {
   const requestId = crypto.randomUUID();
   let userId: string | undefined;
   let workflow = 'gemini-chat';
+  let model = defaultModel;
 
   try {
     const authorization = req.headers.get('Authorization');
@@ -466,7 +469,7 @@ Deno.serve(async (req: Request) => {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort('AI proxy timeout'), DEFAULT_TIMEOUT_MS);
-    const model = body.model || defaultModel;
+    model = body.model || defaultModel;
 
     try {
       await audit({
@@ -518,8 +521,10 @@ Deno.serve(async (req: Request) => {
     });
     // Detailed debug log when enabled
     try {
-      await logGeminiEvent({ phase: 'proxy.failure', error: errMessage, stack: error instanceof Error ? error.stack : undefined, requestId, workflow, model: (typeof (globalThis as any).model !== 'undefined' ? (globalThis as any).model : undefined) });
-    } catch {}
+      await logGeminiEvent({ phase: 'proxy.failure', error: errMessage, stack: error instanceof Error ? error.stack : undefined, requestId, workflow, model });
+    } catch (error) {
+      console.error(error);
+    }
     if (AI_PROXY_DEBUG) {
       console.error('[ai-proxy] failing error', error instanceof Error ? error.stack || error.message : String(error));
     }

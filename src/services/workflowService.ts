@@ -110,7 +110,7 @@ async function createWorkflowStage(input: CreateWorkflowStageInput) {
   return data;
 }
 
-export async function createWorkflowInstance(input: CreateWorkflowInstanceInput): Promise<any> {
+export async function createWorkflowInstance(input: CreateWorkflowInstanceInput): Promise<Json> {
   const userId = await getCurrentUserId();
 
   const resolvedDefinition = input.workflowDefinitionId
@@ -162,7 +162,7 @@ export async function createWorkflowInstance(input: CreateWorkflowInstanceInput)
   return data;
 }
 
-export async function recordWorkflowAction(input: RecordWorkflowActionInput): Promise<any> {
+export async function recordWorkflowAction(input: RecordWorkflowActionInput): Promise<Json> {
   const actorId = input.actorId?.trim() || (await getCurrentUserId());
 
   const { data: workflowData, error: workflowError } = await supabase
@@ -267,7 +267,7 @@ export async function recordWorkflowAction(input: RecordWorkflowActionInput): Pr
   return data;
 }
 
-export async function createWorkflowAttachment(input: CreateWorkflowAttachmentInput): Promise<any> {
+export async function createWorkflowAttachment(input: CreateWorkflowAttachmentInput): Promise<Json> {
   const actorId = await getCurrentUserId();
   const { data: workflowRecord, error: workflowLookupError } = await supabase
     .from('workflow_instances')
@@ -293,7 +293,7 @@ export async function createWorkflowAttachment(input: CreateWorkflowAttachmentIn
   return data;
 }
 
-export async function createWorkflowNotification(input: CreateWorkflowNotificationInput): Promise<any> {
+export async function createWorkflowNotification(input: CreateWorkflowNotificationInput): Promise<Json> {
   const { data: workflowRecord, error: workflowLookupError } = await supabase
     .from('workflow_instances')
     .select('workspace_id, project_id')
@@ -318,7 +318,7 @@ export async function createWorkflowNotification(input: CreateWorkflowNotificati
   return data;
 }
 
-export async function createWorkflowRevision(input: CreateWorkflowRevisionInput): Promise<any> {
+export async function createWorkflowRevision(input: CreateWorkflowRevisionInput): Promise<Json> {
   const actorId = await getCurrentUserId();
   const { data: workflowRecord, error: workflowLookupError } = await supabase
     .from('workflow_instances')
@@ -342,7 +342,7 @@ export async function createWorkflowRevision(input: CreateWorkflowRevisionInput)
   return data;
 }
 
-export async function addWorkflowContextValue(input: { workflowId: string; keyName: string; value: Json }): Promise<any> {
+export async function addWorkflowContextValue(input: { workflowId: string; keyName: string; value: Json }): Promise<Json> {
   const { data: workflowRecord, error: workflowLookupError } = await supabase
     .from('workflow_instances')
     .select('workspace_id, project_id')
