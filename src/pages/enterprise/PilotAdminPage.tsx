@@ -38,7 +38,7 @@ export function PilotAdminPage() {
 
   const totals = useMemo(() => ({
     monthlyAmount: licenses.reduce((total, license) => total + Number(license.monthly_amount || 0), 0),
-    actualUsers: licenses.reduce((total, license) => total + Number(license.contractor_user_count || 0), 0),
+    actualUsers: licenses.reduce((total, license) => total + Number(license.actual_users || 0), 0),
     billableUsers: licenses.reduce((total, license) => total + Number(license.billable_users || 0), 0),
   }), [licenses]);
 
@@ -140,12 +140,12 @@ export function PilotAdminPage() {
             </thead>
             <tbody>
               {licenses.map((license) => {
-                const assigned = projects.filter((project) => project.contractorId === license.contractor_id);
+                const assigned = projects.filter((project) => project.contractorId === license.contractorId);
                 return (
                   <tr key={license.id} className="border-b border-[#232323] text-[#D0D0D0]">
-                    <td className="py-3 pr-4 text-white">{license.contractor_company_name}</td>
-                    <td className="py-3 pr-4"><StatusBadge status={license.license_status} /></td>
-                    <td className="py-3 pr-4">{license.contractor_user_count}</td>
+                    <td className="py-3 pr-4 text-white">{license.contractor_name}</td>
+                    <td className="py-3 pr-4"><StatusBadge status={license.license_status || 'unknown'} /></td>
+                    <td className="py-3 pr-4">{license.actual_users}</td>
                     <td className="py-3 pr-4">{license.billable_users}</td>
                     <td className="py-3 pr-4">₹{Number(license.monthly_amount).toLocaleString('en-IN')}</td>
                     <td className="py-3 pr-4">{assigned.map((project) => project.code).join(', ')}</td>

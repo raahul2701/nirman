@@ -31,7 +31,7 @@ export function ContractorLicensingPage() {
   const totals = useMemo(() => {
     const licenses = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY).licenses;
     return {
-      actualUsers: licenses.reduce((total, license) => total + Number(license.contractor_user_count || 0), 0),
+      actualUsers: licenses.reduce((total, license) => total + Number(license.actual_users || 0), 0),
       billableUsers: licenses.reduce((total, license) => total + Number(license.billable_users || 0), 0),
       monthlyAmount: licenses.reduce((total, license) => total + Number(license.monthly_amount || 0), 0),
       active: licenses.filter((license) => license.license_status === 'active').length,
@@ -84,12 +84,12 @@ export function ContractorLicensingPage() {
               <tbody>
                 {licenses.map((license) => (
                   <tr key={license.id} className="border-b border-[#232323] text-[#D0D0D0]">
-                    <td className="py-3 pr-4 text-white">{license.contractor_company_name || 'Unnamed contractor'}</td>
-                    <td className="py-3 pr-4">{Number(license.contractor_user_count || 0)}</td>
+                    <td className="py-3 pr-4 text-white">{license.contractor_name || 'Unnamed contractor'}</td>
+                    <td className="py-3 pr-4">{Number(license.actual_users || 0)}</td>
                     <td className="py-3 pr-4">{Number(license.billable_users || 0)}</td>
                     <td className="py-3 pr-4">₹{Number(license.monthly_amount || 0).toLocaleString('en-IN')}</td>
                     <td className="py-3 pr-4"><StatusBadge status={license.license_status || 'unknown'} /></td>
-                    <td className="py-3 pr-4">{license.expires_at ? new Date(license.expires_at).toLocaleDateString('en-IN') : 'Manual'}</td>
+                    <td className="py-3 pr-4">{license.renewal_date ? new Date(license.renewal_date).toLocaleDateString('en-IN') : 'Manual'}</td>
                   </tr>
                 ))}
                 {!loading && licenses.length === 0 && (
