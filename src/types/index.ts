@@ -173,20 +173,16 @@ export interface DashboardStats {
   aiQueriesUsed: number;
 }
 
-// ─── GovTrack Pro Types ───
-
 export type GovProjectType = 'highway' | 'building' | 'bridge' | 'dam' | 'irrigation' | 'railway' | 'other';
 export type GovProjectStatus = 'active' | 'completed' | 'on_hold' | 'cancelled';
 
 export interface GovProject {
   id: string;
-  owner_id: string;
   project_name: string;
   project_code: string;
   department: string;
   contractor_name: string;
   contractor_id?: string;
-  engineer_id?: string;
   total_contract_value: number;
   start_date: string;
   end_date?: string;
@@ -412,3 +408,4 @@ export interface SiteGISData {
   health_status: 'critical' | 'delayed' | 'normal' | 'completed';
   last_updated: string;
 }
+
