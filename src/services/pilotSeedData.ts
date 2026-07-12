@@ -36,6 +36,10 @@ export interface PilotChecklistItem {
   expected: string;
 }
 
+export interface PilotContractorLicense extends ContractorLicense {
+  contractorId: string;
+}
+
 export const pilotIds = {
   workspace: '10000000-0000-4000-8000-000000000001',
   ee: '10000000-0000-4000-8000-000000000010',
@@ -139,29 +143,25 @@ export const pilotProjects: PilotProject[] = [
   },
 ];
 
-function buildLicense(contractorId: string, company: string, users: number, status: ContractorLicense['license_status']): ContractorLicense {
+function buildLicense(contractorId: string, company: string, users: number, status: ContractorLicense['license_status']): PilotContractorLicense {
   const billing = calculateContractorMonthlyAmount(users);
   return {
     id: `license-${contractorId}`,
     workspace_id: pilotIds.workspace,
-    contractor_id: contractorId,
-    contractor_company_name: company,
-    contractor_user_count: billing.actualUsers,
-    minimum_billable_users: 10,
-    price_per_user_month: 270,
+    contractorId,
+    contractor_name: company,
+    actual_users: billing.actualUsers,
     billable_users: billing.billableUsers,
+    price_per_user: 270,
     monthly_amount: billing.monthlyAmount,
     license_status: status,
-    billing_owner: 'contractor',
-    recommended_by_executive_engineer_id: pilotIds.ee,
-    approved_by_executive_engineer_id: status === 'trial' ? null : pilotIds.ee,
-    starts_at: status === 'trial' ? null : new Date().toISOString(),
-    expires_at: status === 'trial' ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    grace_until: null,
+    recommended_by: pilotIds.ee,
+    renewal_date: status === 'trial' ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    created_at: new Date().toISOString(),
   };
 }
 
-export const pilotLicenses: ContractorLicense[] = [
+export const pilotLicenses: PilotContractorLicense[] = [
   buildLicense(pilotIds.contractor1, 'Mithila Infra Pvt Ltd', 8, 'active'),
   buildLicense(pilotIds.contractor2, 'Ganga Buildcon', 12, 'active'),
   buildLicense(pilotIds.contractor3, 'Patna Roadworks', 1, 'trial'),
@@ -234,3 +234,4 @@ export function getPilotWorkspaceSummary(): WorkspaceSummary {
     googleConnection: pilotGoogleConnection,
   };
 }
+

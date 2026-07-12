@@ -28,21 +28,16 @@ export interface WorkspaceUser {
 
 export interface ContractorLicense {
   id: string;
-  workspace_id: string;
-  contractor_id: string;
-  contractor_company_name: string;
-  contractor_user_count: number;
-  minimum_billable_users: number;
-  price_per_user_month: number;
-  billable_users: number;
-  monthly_amount: number;
-  license_status: LicenseStatus;
-  billing_owner: 'contractor';
-  recommended_by_executive_engineer_id: string | null;
-  approved_by_executive_engineer_id: string | null;
-  starts_at: string | null;
-  expires_at: string | null;
-  grace_until: string | null;
+  workspace_id: string | null;
+  contractor_name: string;
+  actual_users: number | null;
+  billable_users: number | null;
+  price_per_user: number | null;
+  monthly_amount: number | null;
+  license_status: LicenseStatus | null;
+  renewal_date: string | null;
+  recommended_by: string | null;
+  created_at: string | null;
 }
 
 export interface ContractorRecommendation {
@@ -130,19 +125,13 @@ type ContractorRecommendationInsert = {
   status: string;
 };
 type ContractorLicenseUpsert = {
-  workspace_id: string;
-  contractor_id: string;
-  contractor_company_name: string;
-  contractor_user_count: number;
-  minimum_billable_users: number;
-  price_per_user_month: number;
+  workspace_id: string | null;
+  contractor_name: string;
+  actual_users: number;
+  price_per_user: number;
   license_status: LicenseStatus;
-  billing_owner: 'contractor';
-  recommended_by_executive_engineer_id: string | null;
-  approved_by_executive_engineer_id: string | null;
-  starts_at: string;
-  expires_at: string | null;
-  updated_at: string;
+  recommended_by: string | null;
+  renewal_date: string | null;
 };
 
 export function normalizeWorkspaceSummary(summary?: WorkspaceSummaryInput | null): WorkspaceSummary {
@@ -158,6 +147,11 @@ export function normalizeWorkspaceSummary(summary?: WorkspaceSummaryInput | null
 
 export const CONTRACTOR_LICENSE_PRICE = 270;
 export const CONTRACTOR_MIN_BILLABLE_USERS = 10;
+
+export async function getActiveWorkspaceId(): Promise<string | null> {
+  const summary = await getMyWorkspaceSummary();
+  return summary.workspace?.id ?? null;
+}
 
 export function calculateContractorMonthlyAmount(actualUsers: number) {
   const safeUsers = Math.max(0, Math.floor(Number(actualUsers) || 0));
@@ -304,32 +298,27 @@ export async function recommendContractor(input: {
 
 export async function activateContractorLicense(input: {
   workspaceId: string;
-  contractorId: string;
   contractorCompanyName: string;
   contractorUserCount: number;
   recommendedByExecutiveEngineerId?: string | null;
   approvedByExecutiveEngineerId?: string | null;
   expiresAt?: string | null;
 }) {
+  const billing = calculateContractorMonthlyAmount(input.contractorUserCount);
   const { data, error } = await supabase
     .from('contractor_licenses')
     .upsert({
       workspace_id: input.workspaceId,
-      contractor_id: input.contractorId,
-      contractor_company_name: input.contractorCompanyName,
-      contractor_user_count: input.contractorUserCount,
-      minimum_billable_users: CONTRACTOR_MIN_BILLABLE_USERS,
-      price_per_user_month: CONTRACTOR_LICENSE_PRICE,
+      contractor_name: input.contractorCompanyName,
+      actual_users: billing.actualUsers,
+      price_per_user: CONTRACTOR_LICENSE_PRICE,
       license_status: 'active',
-      billing_owner: 'contractor',
-      recommended_by_executive_engineer_id: input.recommendedByExecutiveEngineerId || null,
-      approved_by_executive_engineer_id: input.approvedByExecutiveEngineerId || null,
-      starts_at: new Date().toISOString(),
-      expires_at: input.expiresAt || null,
-      updated_at: new Date().toISOString(),
-    } as ContractorLicenseUpsert, { onConflict: 'workspace_id,contractor_id' })
+      recommended_by: input.approvedByExecutiveEngineerId || input.recommendedByExecutiveEngineerId || null,
+      renewal_date: input.expiresAt || null,
+    } as ContractorLicenseUpsert, { onConflict: 'workspace_id,contractor_name' })
     .select()
     .single();
   if (error) throw error;
   return data as ContractorLicense;
 }
+

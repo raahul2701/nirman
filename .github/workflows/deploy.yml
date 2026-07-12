@@ -83,45 +83,35 @@ jobs:
     needs: build-and-test
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Validate Supabase URL
+      - name: Validate Environment Secrets
         run: |
+          set -e # exit immediately if a command exits with a non-zero status.
+          
           if [[ -z "${{ secrets.VITE_SUPABASE_URL }}" ]]; then
-            echo "❌ VITE_SUPABASE_URL is not set"
+            echo "ERROR: VITE_SUPABASE_URL is not set"
             exit 1
           fi
-          echo "✅ Supabase URL validated"
-
-      - name: Validate Supabase Keys
-        run: |
           if [[ -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ]]; then
-            echo "❌ VITE_SUPABASE_ANON_KEY is not set"
+            echo "ERROR: VITE_SUPABASE_ANON_KEY is not set"
             exit 1
           fi
-          echo "✅ Supabase anonymous key validated"
-
-      - name: Validate Claude API Key
-        run: |
           if [[ -z "${{ secrets.VITE_CLAUDE_API_KEY }}" ]]; then
-            echo "❌ VITE_CLAUDE_API_KEY is not set"
+            echo "ERROR: VITE_CLAUDE_API_KEY is not set"
             exit 1
           fi
-          echo "✅ Claude API key validated"
-
-      - name: Validate Vercel Configuration
-        run: |
           if [[ -z "${{ secrets.VERCEL_TOKEN }}" ]]; then
-            echo "❌ VERCEL_TOKEN is not set"
+            echo "ERROR: VERCEL_TOKEN is not set"
             exit 1
           fi
           if [[ -z "${{ secrets.VERCEL_ORG_ID }}" ]]; then
-            echo "❌ VERCEL_ORG_ID is not set"
+            echo "ERROR: VERCEL_ORG_ID is not set"
             exit 1
           fi
           if [[ -z "${{ secrets.VERCEL_PROJECT_ID }}" ]]; then
-            echo "❌ VERCEL_PROJECT_ID is not set"
+            echo "ERROR: VERCEL_PROJECT_ID is not set"
             exit 1
           fi
-          echo "✅ Vercel configuration validated"
+          echo "OK: All required production secrets are present."
 
   # Deploy to Production
   deploy-production:
@@ -131,35 +121,11 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build for production
-        run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_SERVICE_KEY: ${{ secrets.VITE_SUPABASE_SERVICE_KEY }}
-          VITE_CLAUDE_API_KEY: ${{ secrets.VITE_CLAUDE_API_KEY }}
-          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
-          VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
-          VITE_GOOGLE_REDIRECT_URI: ${{ secrets.VITE_GOOGLE_REDIRECT_URI }}
-          VITE_APP_NAME: ${{ secrets.VITE_APP_NAME }}
-          VITE_APP_URL: ${{ secrets.VITE_APP_URL }}
-          VITE_COMPANY_NAME: ${{ secrets.VITE_COMPANY_NAME }}
-          VITE_OPENWEATHER_API_KEY: ${{ secrets.VITE_OPENWEATHER_API_KEY }}
-          VITE_WHATSAPP_MODE: ${{ secrets.VITE_WHATSAPP_MODE }}
-          VITE_NODE_ENV: production
+          name: build-files
+          path: dist/
 
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v25
@@ -169,7 +135,7 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
-          working-directory: ./
+          working-directory: dist/
 
       - name: Comment deployment URL on commit
         uses: actions/github-script@v7
@@ -180,7 +146,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               commit_sha: context.sha,
-              body: `🚀 **Production Deployment Successful!**\n\n✅ Build completed\n✅ Tests passed\n✅ Security checks passed\n\n🌐 **Live URL:** ${{ steps.vercel-deployment.outputs.preview-url }}\n\n**Deployed by:** @${{ github.actor }}\n**Commit:** ${context.sha.substring(0, 7)}`
+              body: `Production Deployment Successful!\n\nBuild completed\nTests passed\nSecurity checks passed\n\nLive URL: ${{ steps.vercel-deployment.outputs.preview-url }}\n\nDeployed by: @${{ github.actor }}\nCommit: ${context.sha.substring(0, 7)}`
             })
 
   # Deploy to Staging
@@ -191,29 +157,11 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment: staging
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build for staging
-        run: npm run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_CLAUDE_API_KEY: ${{ secrets.VITE_CLAUDE_API_KEY }}
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
-          VITE_APP_NAME: ${{ secrets.VITE_APP_NAME }}
-          VITE_APP_URL: ${{ secrets.VITE_APP_URL }}
-          VITE_COMPANY_NAME: ${{ secrets.VITE_COMPANY_NAME }}
-          VITE_NODE_ENV: staging
+          name: build-files
+          path: dist/
 
       - name: Deploy to Vercel (Staging)
         uses: amondnet/vercel-action@v25
@@ -222,8 +170,7 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod=false'
-          working-directory: ./
+          working-directory: dist/
 
       - name: Comment staging URL on commit
         uses: actions/github-script@v7
@@ -234,5 +181,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               commit_sha: context.sha,
-              body: `🧪 **Staging Deployment Successful!**\n\n✅ Build completed\n✅ Tests passed\n\n🌐 **Staging URL:** ${{ steps.vercel-staging.outputs.preview-url }}\n\n**Deployed by:** @${{ github.actor }}\n**Commit:** ${context.sha.substring(0, 7)}`
+              body: `Staging Deployment Successful!\n\nBuild completed\nTests passed\n\nStaging URL: ${{ steps.vercel-staging.outputs.preview-url }}\n\nDeployed by: @${{ github.actor }}\nCommit: ${context.sha.substring(0, 7)}`
             })
