@@ -4,6 +4,7 @@ import { AppLayout } from '../../components/layout/AppLayout';
 import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Card, StatCard } from '../../components/ui/Card';
 import { EMPTY_WORKSPACE_SUMMARY, getMyWorkspaceSummary, normalizeWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { isAssignmentRole } from '../../services/assignmentHierarchy';
 
 function roleLabel(role: string) {
   return String(role || 'unknown').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -40,9 +41,9 @@ export function EnterpriseOverviewPage() {
     const members = safeSummary.members;
     const licenses = safeSummary.licenses;
     return {
-      ae: members.filter((member) => member.role === 'assistant_engineer').length,
-      je: members.filter((member) => member.role === 'junior_engineer').length,
-      contractors: members.filter((member) => member.role === 'contractor').length,
+      ae: members.filter((member) => isAssignmentRole(member, 'assistant_engineer')).length,
+      je: members.filter((member) => isAssignmentRole(member, 'junior_engineer')).length,
+      contractors: members.filter((member) => isAssignmentRole(member, 'contractor')).length,
       projects: safeSummary.projects.length,
       activeLicenses: licenses.filter((license) => license.license_status === 'active').length,
       monthlyRevenue: licenses.reduce((total, license) => total + Number(license.monthly_amount || 0), 0),
@@ -101,8 +102,8 @@ export function EnterpriseOverviewPage() {
                       <p className="text-[#606060] text-xs">User {shortId(member.user_id)}{member.subdivision_name ? ` · ${member.subdivision_name}` : ''}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {member.free_lifetime && member.role !== 'contractor' && <Badge color="#22c55e">Free</Badge>}
-                      {member.role === 'contractor' && <Badge color="#F59E0B">Paid</Badge>}
+                      {member.free_lifetime && !isAssignmentRole(member, 'contractor') && <Badge color="#22c55e">Free</Badge>}
+                      {isAssignmentRole(member, 'contractor') && <Badge color="#F59E0B">Paid</Badge>}
                       <StatusBadge status={member.active ? 'active' : 'locked'} />
                     </div>
                   </div>

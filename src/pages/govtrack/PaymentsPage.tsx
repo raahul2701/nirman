@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { PaymentRequest, GovProject, PaymentMilestone } from '../../types';
 import { formatCurrency, formatDistanceToNow } from '../../lib/utils';
+import { loadAssignedGovProjects } from '../../services/assignedProjectsService';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#F59E0B', je_approved: '#3B82F6', ee_approved: '#8B5CF6',
@@ -50,12 +51,16 @@ export function PaymentsPage() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    const [payRes, projRes] = await Promise.all([
-      supabase.from('payment_requests').select('*').or(`requested_by.eq.${user.id},project_id.in.(select id from gov_projects where owner_id.eq.${user.id} or engineer_id.eq.${user.id})`).order('created_at', { ascending: false }),
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`),
+    const [payRes, projectsData] = await Promise.all([
+      supabase.from('payment_requests').select('*').order('created_at', { ascending: false }),
+      loadAssignedGovProjects(user.id),
     ]);
-    if (payRes.data) setPayments(payRes.data as PaymentRequest[]);
-    if (projRes.data) setProjects(projRes.data as GovProject[]);
+    const projectIds = projectsData.map((project) => project.id);
+    if (payRes.data) {
+      const paymentRows = payRes.data as PaymentRequest[];
+      setPayments(paymentRows.filter((payment) => payment.requested_by === user.id || Boolean(payment.project_id && projectIds.includes(payment.project_id))));
+    }
+    setProjects(projectsData);
     setLoading(false);
   }, [user]);
 

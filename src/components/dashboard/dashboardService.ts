@@ -58,7 +58,7 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
 
   const [legacyProjects, govProjects, componentResult] = await Promise.all([
     legacyIds.length > 0 ? supabase.from('projects').select('id,name,budget,progress_percent,status').in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
-    govIds.length > 0 ? supabase.from('gov_projects').select('id,project_name,project_code,total_contract_value,progress_percent,project_type,status').in('id', govIds) : Promise.resolve({ data: [], error: null }),
+    govIds.length > 0 ? supabase.from('gov_projects').select('id,project_name,project_code,total_contract_value,project_type,status').in('id', govIds) : Promise.resolve({ data: [], error: null }),
     supabase
       .from('project_components')
       .select('project_id,component_type,component_name,planned_quantity,executed_quantity,unit,progress_percent')
@@ -81,8 +81,12 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   });
 
   return assignments.map((assignment: ProjectAssignment): DashboardProject => {
-    const project = normalizeProjectRow(rows.get(assignment.project_id));
+    const baseProject = normalizeProjectRow(rows.get(assignment.project_id));
     const components = componentsByProject.get(assignment.project_id);
+    const componentProgress = components && components.length > 0
+      ? components.reduce((total, component) => total + Number(component.progress_percent || 0), 0) / components.length
+      : baseProject.progress;
+    const project = { ...baseProject, progress: componentProgress };
     return {
       id: assignment.project_id,
       ...project,

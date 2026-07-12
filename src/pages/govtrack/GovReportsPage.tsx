@@ -8,6 +8,8 @@ import { AppLayout } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
+import { filterRowsByAssignedProject, loadAssignedGovProjects } from '../../services/assignedProjectsService';
+import type { PaymentRequest, WorkUpload, InspectionReport } from '../../types';
 
 const monthlyPayments = [
   { month: 'Jan', released: 18, pending: 5 },
@@ -40,17 +42,18 @@ export function GovReportsPage() {
 
   const loadStats = useCallback(async () => {
     if (!user) return;
-    const [proj, pay, insp, uploads] = await Promise.all([
-      supabase.from('gov_projects').select('id', { count: 'exact' }).or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`),
-      supabase.from('payment_requests').select('id', { count: 'exact' }),
-      supabase.from('inspection_reports').select('id', { count: 'exact' }).eq('inspected_by', user.id),
-      supabase.from('work_uploads').select('id', { count: 'exact' }).eq('uploaded_by', user.id),
+    const [projects, pay, insp, uploads] = await Promise.all([
+      loadAssignedGovProjects(user.id),
+      supabase.from('payment_requests').select('id, project_id, requested_by'),
+      supabase.from('inspection_reports').select('id, project_id, inspected_by'),
+      supabase.from('work_uploads').select('id, project_id, uploaded_by'),
     ]);
+    const projectIds = projects.map((project) => project.id);
     setStats({
-      totalProjects: proj.count || 0,
-      totalPayments: pay.count || 0,
-      totalInspections: insp.count || 0,
-      totalUploads: uploads.count || 0,
+      totalProjects: projects.length,
+      totalPayments: pay.data ? filterRowsByAssignedProject(pay.data as PaymentRequest[], projectIds).length : 0,
+      totalInspections: insp.data ? filterRowsByAssignedProject(insp.data as InspectionReport[], projectIds).length : 0,
+      totalUploads: uploads.data ? filterRowsByAssignedProject(uploads.data as WorkUpload[], projectIds).length : 0,
     });
     setLoading(false);
   }, [user]);

@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { WorkUpload, GovProject, PaymentMilestone } from '../../types';
 import { formatDistanceToNow } from '../../lib/utils';
+import { loadAssignedGovProjects } from '../../services/assignedProjectsService';
 
 const workCategories = [
   { value: 'foundation', label: 'Foundation' },
@@ -52,11 +53,11 @@ export function UploadWorkPage() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    const [projRes, uploadRes] = await Promise.all([
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},contractor_id.eq.${user.id}`).order('created_at', { ascending: false }),
+    const [projectsData, uploadRes] = await Promise.all([
+      loadAssignedGovProjects(user.id),
       supabase.from('work_uploads').select('*').eq('uploaded_by', user.id).order('upload_timestamp', { ascending: false }).limit(20),
     ]);
-    if (projRes.data) setProjects(projRes.data as GovProject[]);
+    setProjects(projectsData);
     if (uploadRes.data) setUploads(uploadRes.data as WorkUpload[]);
     setLoading(false);
   }, [user]);

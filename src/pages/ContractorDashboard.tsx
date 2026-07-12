@@ -8,9 +8,9 @@ import {
 } from '../lib/icons';
 import { StatCard } from '../components/ui/Card';
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
 import { DashboardSectionSkeleton } from '../components/dashboard/DashboardSectionSkeleton';
+import { loadAssignedGovProjects } from '../services/assignedProjectsService';
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', {
@@ -21,6 +21,7 @@ const formatCurrency = (value: number) =>
 
 type ContractorProjectKpiRow = {
   total_contract_value?: number | null;
+  progress_percent?: number | null;
   physical_progress_percentage?: number | null;
 };
 
@@ -43,22 +44,10 @@ export function ContractorDashboard() {
         return;
       }
 
-      // This logic uses the existing schema and will be updated in Milestone 2.
-      const { data: projects, error } = await supabase
-        .from('gov_projects')
-        .select('total_contract_value, physical_progress_percentage')
-        .eq('contractor_id', user.id);
-
-      if (error) {
-        console.error("Failed to fetch contractor's projects", error);
-        setLoading(false);
-        return;
-      }
-
-      const projectRows = (projects ?? []) as ContractorProjectKpiRow[];
+      const projectRows = (await loadAssignedGovProjects(user.id)) as ContractorProjectKpiRow[];
       const totalValue = projectRows.reduce((sum, p) => sum + (p.total_contract_value || 0), 0);
       const avgProgress = projectRows.length > 0
-          ? projectRows.reduce((sum, p) => sum + (p.physical_progress_percentage || 0), 0) / projectRows.length
+          ? projectRows.reduce((sum, p) => sum + (p.physical_progress_percentage ?? p.progress_percent ?? 0), 0) / projectRows.length
           : 0;
 
       // Mocking some KPIs as the schema doesn't support them yet.

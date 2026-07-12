@@ -14,6 +14,8 @@ import { useToast } from '../../components/ui/useToast';
 import { GovProject } from '../../types';
 import { formatCurrency } from '../../lib/utils';
 import { featureFlags } from '../../lib/featureFlags';
+import { loadAssignedGovProjects } from '../../services/assignedProjectsService';
+import { getActiveWorkspaceId } from '../../services/businessHierarchyService';
 
 const projectTypes = [
   { value: 'highway', label: 'Highway' },
@@ -58,10 +60,8 @@ export function GovProjectsPage() {
 
   const loadProjects = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase.from('gov_projects').select('*')
-      .or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`)
-      .order('created_at', { ascending: false });
-    if (data) setProjects(data as GovProject[]);
+    const data = await loadAssignedGovProjects(user.id);
+    setProjects(data);
     setLoading(false);
   }, [user]);
 
@@ -73,11 +73,14 @@ export function GovProjectsPage() {
     if (!form.project_name || !form.project_code) {
       toast('Project name and code are required', 'warning'); return;
     }
+    if (!user) {
+      toast('You must be signed in to create a project', 'warning'); return;
+    }
     setSubmitting(true);
     const code = form.project_code.toUpperCase();
     const { data, error } = await supabase.from('gov_projects').insert({
-      owner_id: user!.id,
       ...form,
+      engineer_id: user.id,
       project_code: code,
       total_contract_value: parseFloat(form.total_contract_value) || 0,
       start_date: form.start_date || null,
@@ -85,9 +88,38 @@ export function GovProjectsPage() {
       status: 'active',
       progress_percent: 0,
     }).select().maybeSingle();
+
+    if (error) {
+      setSubmitting(false);
+      toast(error.message || 'Failed to create project', 'error');
+      return;
+    }
+
+    if (!data?.id) {
+      setSubmitting(false);
+      toast('Failed to create project', 'error');
+      return;
+    }
+
+    const workspaceId = await getActiveWorkspaceId();
+    if (workspaceId) {
+      const assignmentResult = await supabase.from('project_assignments').insert({
+        workspace_id: workspaceId,
+        project_id: data.id,
+        project_table: 'gov_projects',
+        executive_engineer_id: user.id,
+        access_status: 'active',
+      }).select().maybeSingle();
+
+      if (assignmentResult.error) {
+        setSubmitting(false);
+        toast('Project created, but workspace assignment failed', 'error');
+        return;
+      }
+    }
+
     setSubmitting(false);
-    if (error) { toast(error.message || 'Failed to create project', 'error'); return; }
-    if (data) setProjects(prev => [data as GovProject, ...prev]);
+    setProjects(prev => [data as GovProject, ...prev]);
     setShowForm(false);
     toast(`Project ${code} created!`, 'success');
   }

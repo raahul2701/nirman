@@ -80,7 +80,7 @@ export function ProjectAccessControlPage() {
             <p className="text-[#606060] text-xs">Contractors only see their assigned project rows; documents are filtered by workspace and project.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="primary" onClick={() => navigate('/enterprise/start-pilot')}>Start New Pilot Assignment</Button>
+            <Button size="sm" variant="primary" onClick={() => navigate('/enterprise/start-pilot')}>Create New Assignment</Button>
             <Button size="sm" variant="outline" onClick={() => navigate('/enterprise/assign-project')}>Create/Edit Project Assignment</Button>
             <Badge color="#FF6B00">RLS enforced</Badge>
           </div>

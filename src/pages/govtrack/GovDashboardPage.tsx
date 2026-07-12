@@ -12,6 +12,7 @@ import { Badge } from '../../components/ui/Badge';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/useAuth';
 import { GovProject, PaymentRequest } from '../../types';
+import { filterRowsByAssignedProject, loadAssignedGovProjects } from '../../services/assignedProjectsService';
 
 const paymentTimeline = [
   { month: 'Jan', amount: 24 }, { month: 'Feb', amount: 18 },
@@ -35,12 +36,13 @@ export function GovDashboardPage() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    const [projRes, payRes] = await Promise.all([
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},contractor_id.eq.${user.id},engineer_id.eq.${user.id}`).order('created_at', { ascending: false }),
+    const [projectsData, payRes] = await Promise.all([
+      loadAssignedGovProjects(user.id),
       supabase.from('payment_requests').select('*').eq('final_status', 'pending').order('created_at', { ascending: false }),
     ]);
-    if (projRes.data) setProjects(projRes.data as GovProject[]);
-    if (payRes.data) setPendingPayments(payRes.data as PaymentRequest[]);
+    setProjects(projectsData);
+    const projectIds = projectsData.map((project) => project.id);
+    if (payRes.data) setPendingPayments(filterRowsByAssignedProject(payRes.data as PaymentRequest[], projectIds));
     setLoading(false);
   }, [user]);
 

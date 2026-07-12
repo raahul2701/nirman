@@ -13,6 +13,7 @@ import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { InspectionReport, GovProject } from '../../types';
 import { formatDistanceToNow } from '../../lib/utils';
+import { loadAssignedGovProjects } from '../../services/assignedProjectsService';
 
 const inspectionTypes = [
   { value: 'routine', label: 'Routine Inspection' },
@@ -41,12 +42,12 @@ export function InspectionsPage() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    const [inspRes, projRes] = await Promise.all([
+    const [inspRes, projectsData] = await Promise.all([
       supabase.from('inspection_reports').select('*').eq('inspected_by', user.id).order('created_at', { ascending: false }),
-      supabase.from('gov_projects').select('*').or(`owner_id.eq.${user.id},engineer_id.eq.${user.id}`),
+      loadAssignedGovProjects(user.id),
     ]);
     if (inspRes.data) setInspections(inspRes.data as InspectionReport[]);
-    if (projRes.data) setProjects(projRes.data as GovProject[]);
+    setProjects(projectsData);
     setLoading(false);
   }, [user]);
 
