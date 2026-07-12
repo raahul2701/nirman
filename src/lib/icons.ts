@@ -2,7 +2,7 @@
 export {
   LayoutDashboard, AlertTriangle, Users, Plane, Brain,
   Package, FolderOpen, BarChart2, Settings, LogOut,
-  ChevronLeft, ChevronRight, Zap, HardHat, Truck,
+  ChevronDown, ChevronLeft, ChevronRight, Zap, HardHat, Truck,
   Landmark, Camera, IndianRupee, ClipboardCheck, FileBarChart,
   Shield, Banknote, ScanLine, Beaker, FileStack, CloudRain,
   MessageSquare, MapPin, TrendingUp, FileX, Scale,

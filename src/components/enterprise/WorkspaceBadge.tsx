@@ -1,16 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Building2, LockKeyhole } from 'lucide-react';
-import { featureFlags } from '../../lib/featureFlags';
 import { getMyWorkspaceSummary, normalizeWorkspaceSummary, WorkspaceSummary } from '../../services/businessHierarchyService';
-import { getPilotWorkspaceSummary } from '../../services/pilotSeedData';
 
 export function WorkspaceBadge() {
-  const [summary, setSummary] = useState<WorkspaceSummary | null>(featureFlags.pilotMode ? getPilotWorkspaceSummary() : null);
-  const [source, setSource] = useState<'live' | 'pilot' | 'pending'>(featureFlags.pilotMode ? 'pilot' : 'pending');
+  const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
+  const [source, setSource] = useState<'live' | 'pending'>('pending');
 
   useEffect(() => {
-    if (!featureFlags.eeWorkspaceIsolation) return;
-
     let cancelled = false;
     getMyWorkspaceSummary()
       .then((data) => {
@@ -18,18 +14,15 @@ export function WorkspaceBadge() {
         if (data.workspace) {
           setSummary(normalizeWorkspaceSummary(data));
           setSource('live');
-        } else if (featureFlags.pilotMode) {
-          setSummary(getPilotWorkspaceSummary());
-          setSource('pilot');
         } else {
           setSummary(normalizeWorkspaceSummary(data));
           setSource('pending');
         }
       })
       .catch(() => {
-        if (!cancelled && featureFlags.pilotMode) {
-          setSummary(getPilotWorkspaceSummary());
-          setSource('pilot');
+        if (!cancelled) {
+          setSummary(null);
+          setSource('pending');
         }
       });
 
@@ -38,7 +31,6 @@ export function WorkspaceBadge() {
     };
   }, []);
 
-  if (!featureFlags.eeWorkspaceIsolation) return null;
 
   const workspaceName = summary?.workspace?.workspace_name || 'Workspace pending';
   const division = summary?.workspace?.division_code || 'No division';
@@ -56,8 +48,9 @@ export function WorkspaceBadge() {
       </div>
       <div className="flex items-center gap-2 rounded-full border border-[#00D4AA]/20 bg-[#00D4AA]/10 px-3 py-1 text-[11px] font-semibold text-[#00D4AA]">
         <LockKeyhole size={12} />
-        {source === 'live' ? 'Workspace Locked' : source === 'pilot' ? 'Pilot Workspace Locked' : 'Workspace Pending'}
+        {source === 'live' ? 'Workspace Locked' : 'Workspace Pending'}
       </div>
     </div>
   );
 }
+

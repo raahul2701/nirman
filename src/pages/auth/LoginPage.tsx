@@ -115,12 +115,6 @@ export function LoginPage() {
               </Link>
             </p>
           </div>
-
-          <div className="mt-5 p-4 rounded-lg" style={{ background: 'rgba(0,95,86,0.06)', border: '1px solid rgba(0,95,86,0.14)' }}>
-            <p className="text-[11px] font-semibold mb-2" style={{ color: '#005F56' }}>Demo Credentials</p>
-            <p className="text-[#6C7568] text-xs">Email: {BRANDING.DEMO_EMAIL}</p>
-            <p className="text-[#6C7568] text-xs">Password: {BRANDING.DEMO_PASSWORD}</p>
-          </div>
         </div>
       </div>
     </div>

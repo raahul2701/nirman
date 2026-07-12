@@ -106,11 +106,10 @@ const navSections = [
     title: 'ENTERPRISE',
     icon: Landmark,
     items: [
-      { to: '/enterprise', icon: Landmark, label: 'Hierarchy' },
-      { to: '/enterprise/start-pilot', icon: ClipboardCheck, label: 'Start Pilot' },
-      { to: '/enterprise/pilot-guide', icon: FileText, label: 'Pilot Guide' },
+      { to: '/enterprise', icon: Landmark, label: 'Enterprise Dashboard' },
+      { to: '/enterprise/start-pilot', icon: ClipboardCheck, label: 'Assignment Setup' },
+      { to: '/enterprise/pilot-guide', icon: FileText, label: 'Operations Guide' },
       { to: '/enterprise/assign-project', icon: FolderOpen, label: 'Assign Project' },
-      { to: '/enterprise/pilot', icon: ClipboardCheck, label: 'Pilot Admin' },
       { to: '/enterprise/setup', icon: Settings, label: 'Workspace Setup' },
       { to: '/enterprise/billing', icon: IndianRupee, label: 'Licensing' },
       { to: '/enterprise/onboarding', icon: Users, label: 'Onboarding' },
@@ -243,3 +242,4 @@ function SidebarComponent() {
 }
 
 export const Sidebar = memo(SidebarComponent);
+
