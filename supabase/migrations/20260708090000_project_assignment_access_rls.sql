@@ -35,9 +35,7 @@ as $$
       from public.gov_projects gp
       where gp.id = target_project_id
         and (
-          gp.owner_id = auth.uid()
-          or gp.engineer_id = auth.uid()
-          or gp.contractor_id = auth.uid()
+          gp.engineer_id = auth.uid()
         )
     );
 $$;
@@ -72,8 +70,7 @@ as $$
       from public.gov_projects gp
       where gp.id = target_project_id
         and (
-          gp.owner_id = auth.uid()
-          or gp.engineer_id = auth.uid()
+          gp.engineer_id = auth.uid()
         )
     );
 $$;
@@ -112,8 +109,7 @@ drop policy if exists "Users can insert gov projects" on public.gov_projects;
 create policy "Users can insert gov projects"
   on public.gov_projects for insert to authenticated
   with check (
-    owner_id = auth.uid()
-    or engineer_id = auth.uid()
+    engineer_id = auth.uid()
   );
 
 drop policy if exists "Users can update own gov projects" on public.gov_projects;

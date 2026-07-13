@@ -470,7 +470,7 @@ export function StartPilotWizardPage() {
         const govProjectInsert = await supabase
           .from('gov_projects')
           .insert({
-            owner_id: user.id,
+            engineer_id: user.id,
             project_name: 'Demo Road Construction Pilot Project',
             project_code: projectCode,
             department: 'Demo Public Works Department',
