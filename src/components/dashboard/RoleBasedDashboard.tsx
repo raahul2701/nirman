@@ -1,10 +1,8 @@
 import {
   AlertTriangle,
-  Brain,
   Calendar,
   Camera,
   ClipboardCheck,
-  Clock,
   FileBarChart,
   FileText,
   FileX,
@@ -15,9 +13,10 @@ import {
   ScanLine,
   Shield,
   TrendingUp,
+  Truck,
 } from '../../lib/icons';
 import { StatCard } from '../ui/Card';
-import { getDashboardRole, getRoleProjects, type DashboardIdentity } from '../../services/executionDemoData';
+import { getDashboardRole, type DashboardIdentity } from '../../services/executionDemoData';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { loadAssignedDashboardProjects } from './dashboardService';
 import type { DashboardProject } from './dashboard';
@@ -28,6 +27,7 @@ import { QuickActions, type DashboardAction } from './QuickActions';
 import { InsightsList } from './InsightsList';
 import { RecentActivityList } from './RecentActivityList';
 import { ProgressGraph } from './ProgressGraph';
+import { ProjectTimeline } from './ProjectTimeline';
 
 const ContractorDashboard = lazy(() => import('./ContractorDashboard').then((mod) => ({ default: mod.ContractorDashboard })));
 
@@ -35,53 +35,43 @@ function formatMoney(value: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
 }
 
-type WorkflowLane = {
-  label: string;
-  count: string | number;
-  tone: string;
-};
-
-function compactNumber(value: number) {
-  return new Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
-}
-
 function averageProgress(projects: DashboardProject[]) {
-  if (projects.length === 0) return 0;
-  return Math.round(projects.reduce((sum, project) => sum + project.progress, 0) / projects.length);
+  if (projects.length === 0) return 'Not available';
+  const progressValues = projects.map((project) => Number(project.progress)).filter((value) => Number.isFinite(value));
+  if (progressValues.length === 0) return 'Not available';
+  return `${Math.round(progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length)}%`;
 }
 
-function WorkflowStatusPanel({ lanes }: { lanes: WorkflowLane[] }) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {lanes.map((lane) => (
-        <div key={lane.label} className="rounded-lg border border-[#EFE8D4] bg-[#F9F7EF] p-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6C7568]">{lane.label}</p>
-          <p className="mt-2 text-2xl font-black text-[#12332D]">{lane.count}</p>
-          <div className="mt-3 h-1.5 rounded-full bg-[#EFE8D4]">
-            <div className="h-1.5 rounded-full" style={{ width: '68%', background: lane.tone }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+function totalContractValue(projects: DashboardProject[]) {
+  return projects.reduce((sum, project) => sum + Number(project.budget || 0), 0);
+}
+
+function withProjectContext(actions: DashboardAction[], project?: DashboardProject | null) {
+  if (!project) return actions;
+  const params = new URLSearchParams({ projectId: project.id, projectTable: project.projectTable });
+  if (project.workspaceId) params.set('workspaceId', project.workspaceId);
+  return actions.map((action) => ({ ...action, to: `${action.to}?${params.toString()}` }));
 }
 
 const JE_ACTIONS: DashboardAction[] = [
-  { label: 'Verify DPR', to: '/quality/inspections', icon: <ClipboardCheck size={16} /> },
-  { label: 'Measurement Book', to: '/field/survey-quantity', icon: <ScanLine size={16} /> },
-  { label: 'Material Verification', to: '/quality/material-tests', icon: <Package size={16} /> },
-  { label: 'Photo Verification', to: '/field/daily-progress', icon: <Camera size={16} /> },
-  { label: 'Raise NCR', to: '/problems', icon: <AlertTriangle size={16} /> },
-  { label: 'Safety Checklist', to: '/quality/inspections', icon: <Shield size={16} /> },
+  { label: 'Daily Progress', to: '/field/daily-progress', icon: <ClipboardCheck size={16} /> },
+  { label: 'Survey & Quantity', to: '/field/survey-quantity', icon: <ScanLine size={16} /> },
+  { label: 'Labour', to: '/field/labour', icon: <FileText size={16} /> },
+  { label: 'Material', to: '/field/materials', icon: <Package size={16} /> },
+  { label: 'Equipment', to: '/field/equipment', icon: <Truck size={16} /> },
+  { label: 'Diesel', to: '/diesel', icon: <Truck size={16} /> },
+  { label: 'Photos', to: '/field/daily-progress', icon: <Camera size={16} /> },
+  { label: 'Inspection', to: '/quality/inspections', icon: <Shield size={16} /> },
+  { label: 'Reports', to: '/reports/physical-progress', icon: <FileBarChart size={16} /> },
 ];
 
 const AE_ACTIONS: DashboardAction[] = [
   { label: 'JE Submissions', to: '/quality/inspections', icon: <ClipboardCheck size={16} /> },
-  { label: 'MB Approval', to: '/field/survey-quantity', icon: <ScanLine size={16} /> },
+  { label: 'MB Review', to: '/field/survey-quantity', icon: <ScanLine size={16} /> },
   { label: 'BOQ Variation', to: '/projects/agreement-boq', icon: <FileText size={16} /> },
-  { label: 'Drawing Approval', to: '/quality/drawing-compare', icon: <FileBarChart size={16} /> },
+  { label: 'Drawing Review', to: '/quality/drawing-compare', icon: <FileBarChart size={16} /> },
   { label: 'Extension Requests', to: '/delays/extensions', icon: <MessageSquare size={16} /> },
-  { label: 'RA Bill Verification', to: '/finance/ra-bills', icon: <IndianRupee size={16} /> },
+  { label: 'RA Bills', to: '/finance/ra-bills', icon: <IndianRupee size={16} /> },
 ];
 
 const EE_ACTIONS: DashboardAction[] = [
@@ -93,62 +83,9 @@ const EE_ACTIONS: DashboardAction[] = [
   { label: 'DLP Tracker', to: '/delays/dlp', icon: <FileX size={16} /> },
 ];
 
-const JE_INSIGHTS = [
-  'Compare DPR quantities with MB entries before marking progress verified.',
-  'Flag photo submissions without GPS metadata for return or re-upload.',
-  'Material verification should be closed before quantity approval.',
-];
+type DashboardRole = ReturnType<typeof getDashboardRole>;
 
-const AE_INSIGHTS = [
-  'Variation recommendation requires BOQ and agreement clause review.',
-  'Delayed projects should be checked for hindrance and extension linkage.',
-  'RA bill verification should reconcile approved MB quantities only.',
-];
-
-const EE_INSIGHTS = [
-  'Delay prediction should prioritize projects with low progress and pending inspections.',
-  'Cost overrun watchlist uses progress variance, open issues, and RA bill readiness.',
-  'Contractor ranking should combine quality score, resubmissions, and payment cycle time.',
-];
-
-type DashboardMetrics = {
-  totalContractValue: number;
-  completedValue: number;
-  avgProgress: number;
-  pendingInspections: number;
-  openIssues: number;
-  materialPending: number;
-  activityItems: string[];
-  approvalLanes: WorkflowLane[];
-};
-
-function getDashboardMetrics(projects: DashboardProject[]): DashboardMetrics {
-  const totalContractValue = projects.reduce((sum, project) => sum + project.budget, 0);
-  const completedValue = projects.reduce((sum, project) => sum + project.budget * (project.progress / 100), 0);
-  const avgProgress = averageProgress(projects);
-  const pendingInspections = projects.reduce((sum, project) => sum + project.pendingInspections, 0);
-  const openIssues = projects.reduce((sum, project) => sum + project.issues, 0);
-  const materialPending = Math.max(1, projects.length + Math.ceil(openIssues / 2));
-  const activityItems = projects.length > 0
-    ? projects.slice(0, 4).map((project) => `${project.code}: ${project.progress}% physical progress updated`)
-    : ['No recent workflow activity for this role.'];
-
-  return {
-    totalContractValue,
-    completedValue,
-    avgProgress,
-    pendingInspections,
-    openIssues,
-    materialPending,
-    activityItems,
-    approvalLanes: [
-      { label: 'Pending', count: Math.max(0, projects.length + pendingInspections), tone: '#C89B3C' },
-      { label: 'Approved', count: Math.max(0, projects.length * 2), tone: '#005F56' },
-      { label: 'Returned', count: Math.max(0, openIssues), tone: '#B42318' },
-      { label: 'Resubmitted', count: Math.max(0, Math.ceil(openIssues / 2)), tone: '#2F6B9A' },
-    ],
-  };
-}
+type LoadState = 'loading' | 'loaded' | 'empty' | 'error';
 
 export function RoleBasedDashboard({ role, identity }: { role?: string | null; identity?: DashboardIdentity }) {
   const dashboardRole = getDashboardRole(role);
@@ -164,160 +101,185 @@ export function RoleBasedDashboard({ role, identity }: { role?: string | null; i
   return <AssignedRoleDashboard role={role} identity={identity} dashboardRole={dashboardRole} />;
 }
 
-function AssignedRoleDashboard({ role, identity, dashboardRole }: { role?: string | null; identity?: DashboardIdentity; dashboardRole: ReturnType<typeof getDashboardRole> }) {
-  const [dbProjects, setDbProjects] = useState<DashboardProject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [source, setSource] = useState<'database' | 'demo' | 'empty'>('empty');
+function AssignedRoleDashboard({ role, identity, dashboardRole }: { role?: string | null; identity?: DashboardIdentity; dashboardRole: DashboardRole }) {
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
+  const [state, setState] = useState<LoadState>('loading');
+  const [error, setError] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const identityUserId = identity?.userId;
   const identityFullName = identity?.fullName;
   const identityCompany = identity?.company;
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    setState('loading');
+    setError(null);
     loadAssignedDashboardProjects(role, { userId: identityUserId, fullName: identityFullName, company: identityCompany })
-      .then((projects) => {
+      .then((loadedProjects) => {
         if (!active) return;
-        setDbProjects(projects);
-        setSource(projects.length > 0 ? 'database' : identityUserId ? 'empty' : 'demo');
+        setProjects(loadedProjects);
+        setState(loadedProjects.length > 0 ? 'loaded' : 'empty');
+        setSelectedProjectId((current) => loadedProjects.some((project) => project.id === current) ? current : loadedProjects[0]?.id || '');
       })
-      .catch((error) => {
+      .catch((loadError) => {
         if (!active) return;
-        console.warn('[dashboard] database role allocation unavailable, using demo fallback', error);
-        setDbProjects([]);
-        setSource(identityUserId ? 'empty' : 'demo');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+        console.warn('[dashboard] assignment-backed dashboard unavailable', loadError);
+        setProjects([]);
+        setState('error');
+        setError(loadError instanceof Error ? loadError.message : 'Dashboard data could not be loaded.');
       });
     return () => {
       active = false;
     };
   }, [identityCompany, identityFullName, identityUserId, role]);
 
-  const assignedProjects = useMemo(
-    () => {
-      if (dbProjects.length > 0) return dbProjects;
-      if (source === 'demo') return getRoleProjects(role, { userId: identityUserId, fullName: identityFullName, company: identityCompany });
-      return [];
-    },
-    [dbProjects, identityCompany, identityFullName, identityUserId, role, source]
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) || projects[0] || null,
+    [projects, selectedProjectId],
   );
-
-  const sourceNote = source === 'database'
-    ? 'Loaded from workspace and project assignment tables.'
-    : source === 'demo'
-      ? 'Demo fallback shown because no signed-in user context was available.'
-      : 'No active workspace/project assignment was found for this role.';
-  const {
-    totalContractValue,
-    completedValue,
-    avgProgress, 
-    pendingInspections,
-    openIssues,
-    materialPending,
-    activityItems,
-    approvalLanes,
-  } = useMemo(() => getDashboardMetrics(assignedProjects), [assignedProjects]);
+  const actions = useMemo(() => {
+    if (dashboardRole === 'junior_engineer') return withProjectContext(JE_ACTIONS, selectedProject);
+    if (dashboardRole === 'assistant_engineer') return withProjectContext(AE_ACTIONS, selectedProject);
+    return withProjectContext(EE_ACTIONS, selectedProject);
+  }, [dashboardRole, selectedProject]);
+  const totalValue = totalContractValue(projects);
+  const avgProgress = averageProgress(projects);
+  const roleLabel = dashboardRole === 'junior_engineer'
+    ? 'Junior Engineer'
+    : dashboardRole === 'assistant_engineer'
+      ? 'Assistant Engineer'
+      : dashboardRole === 'admin'
+        ? 'Admin Viewer'
+        : 'Executive Engineer';
+  const sourceNote = state === 'loading'
+    ? 'Resolving assignment-backed project context...'
+    : state === 'error'
+      ? error || 'Dashboard data could not be loaded.'
+      : state === 'empty'
+        ? 'No active project_assignments row was found for this role.'
+        : 'Loaded from active workspace and project_assignments.';
 
   if (dashboardRole === 'junior_engineer') {
     return (
       <div className="space-y-5">
-        <p className="text-xs text-[#6C7568]">{loading ? 'Resolving role allocation...' : sourceNote}</p>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <StatCard label="Pending Inspections" value={pendingInspections || assignedProjects.length} icon={<ClipboardCheck size={18} />} color="#005F56" loading={loading} />
-          <StatCard label="Today's Site Visits" value={Math.max(1, Math.min(assignedProjects.length, 4))} icon={<Calendar size={18} />} color="#0B8B7D" />
-          <StatCard label="Pending MB" value={Math.max(1, assignedProjects.length + openIssues)} icon={<ScanLine size={18} />} color="#C89B3C" />
-          <StatCard label="Material Checks" value={materialPending} icon={<Package size={18} />} color="#B42318" />
-        </div>
-        <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-          <DashboardCard title="Pending Verification Queue" subtitle="DPR, quantities, site inspection, material checks, and safety actions.">
-            <QuickActions actions={JE_ACTIONS} />
-          </DashboardCard>
-          <DashboardCard title="AI Recommendations">
-            <InsightsList items={JE_INSIGHTS} />
-          </DashboardCard>
-        </div>
-        <div className="grid gap-4 xl:grid-cols-3">
-          <DashboardCard title="Recent Contractor Uploads"><RecentActivityList items={activityItems} /></DashboardCard>
-          <DashboardCard title="Inspection Calendar"><WorkflowStatusPanel lanes={approvalLanes} /></DashboardCard>
-          <DashboardCard title="Assigned Projects"><ProgressGraph projects={assignedProjects} /></DashboardCard>
-        </div>
-      </div>
-    );
-  }
-
-  if (dashboardRole === 'assistant_engineer') {
-    return (
-      <div className="space-y-5">
-        <p className="text-xs text-[#6C7568]">{loading ? 'Resolving role allocation...' : sourceNote}</p>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-          <StatCard label="Pending JE Approvals" value={approvalLanes[0].count} icon={<FileText size={18} />} color="#005F56" loading={loading} />
-          <StatCard label="Delayed Projects" value={openIssues} icon={<AlertTriangle size={18} />} color="#B42318" />
-          <StatCard label="Budget Variance" value={`${Math.max(0, 100 - avgProgress)}%`} icon={<IndianRupee size={18} />} color="#C89B3C" />
-          <StatCard label="Quality Score" value={`${Math.max(70, 98 - openIssues * 3)}%`} icon={<Shield size={18} />} color="#0B8B7D" />
-          <StatCard label="Material Consumption" value={`${Math.min(100, avgProgress + 8)}%`} icon={<Package size={18} />} color="#2F6B9A" />
-        </div>
-        <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-          <DashboardCard title="Pending Approvals" subtitle="Technical approval queue for MB, BOQ variation, materials, drawings, extensions, and RA bills.">
-            <QuickActions actions={AE_ACTIONS} />
-          </DashboardCard>
-          <DashboardCard title="Technical Alerts">
-            <InsightsList items={AE_INSIGHTS} />
-          </DashboardCard>
-        </div>
-        <div className="grid gap-4 xl:grid-cols-3">
-          <DashboardCard title="Charts"><ProgressGraph projects={assignedProjects} /></DashboardCard>
-          <DashboardCard title="Workflow Status"><WorkflowStatusPanel lanes={approvalLanes} /></DashboardCard>
-          <DashboardCard title="Workload Summary"><RecentActivityList items={activityItems} /></DashboardCard>
-        </div>
+        <JEDashboardHeader
+          projects={projects}
+          selectedProject={selectedProject}
+          selectedProjectId={selectedProjectId}
+          onProjectChange={setSelectedProjectId}
+          roleLabel={roleLabel}
+          loading={state === 'loading'}
+        />
+        <p className="text-xs text-[#6C7568]">{sourceNote}</p>
+        {state === 'error' && <EmptyState title="JE dashboard unavailable" description={sourceNote} />}
+        {state === 'empty' && <EmptyState title="No JE assigned projects" description="Ask the EE/Admin to add this user to an active project_assignments.junior_engineer_id row." />}
+        {state !== 'error' && state !== 'empty' && (
+          <>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <StatCard label="Assigned Projects" value={projects.length} icon={<FolderOpen size={18} />} color="#005F56" loading={state === 'loading'} />
+              <StatCard label="Selected Progress" value={selectedProject ? `${selectedProject.progress}%` : 'Not available'} icon={<TrendingUp size={18} />} color="#0B8B7D" loading={state === 'loading'} />
+              <StatCard label="Contract Value" value={selectedProject ? formatMoney(selectedProject.budget) : 'Not available'} icon={<IndianRupee size={18} />} color="#C89B3C" loading={state === 'loading'} />
+              <StatCard label="Pending MB" value="Not available" icon={<ScanLine size={18} />} color="#B42318" loading={state === 'loading'} />
+            </div>
+            <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+              <DashboardCard title="Quick Actions" subtitle="Routes are existing app routes and include selected project context.">
+                <QuickActions actions={actions} />
+              </DashboardCard>
+              <DashboardCard title="Project Status" subtitle={selectedProject ? `${selectedProject.code} - ${selectedProject.projectTable}` : 'No selected project'}>
+                {selectedProject ? (
+                  <div className="space-y-3 text-sm text-[#12332D]">
+                    <p><span className="font-bold">Project:</span> {selectedProject.name}</p>
+                    <p><span className="font-bold">Progress:</span> {selectedProject.progress}%</p>
+                    <p><span className="font-bold">Contract value:</span> {formatMoney(selectedProject.budget)}</p>
+                    <p><span className="font-bold">Assignment role:</span> {selectedProject.assignmentRole || 'junior_engineer'}</p>
+                  </div>
+                ) : <EmptyState description="Select an assigned project to view status." />}
+              </DashboardCard>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-3">
+              <DashboardCard title="Today's Work"><EmptyState description="No DPR/task table is currently wired for a verified today work queue." /></DashboardCard>
+              <DashboardCard title="Pending Actions"><EmptyState description="No workflow action count is available for this selected project yet." /></DashboardCard>
+              <DashboardCard title="Assigned Projects"><ProgressGraph projects={projects} /></DashboardCard>
+              <DashboardCard title="Recent Activity"><RecentActivityList items={['No verified activity feed is available for this JE dashboard yet.']} /></DashboardCard>
+              <DashboardCard title="Site Conditions"><EmptyState description="Weather and site condition logs are unavailable for this project context." /></DashboardCard>
+              <DashboardCard title="AI Recommendations"><InsightsList items={['No Gemini-backed project recommendation record is available for the selected project yet.']} /></DashboardCard>
+            </div>
+          </>
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-[#6C7568]">{loading ? 'Resolving role allocation...' : sourceNote}</p>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-        <StatCard label="Total Works" value={assignedProjects.length} icon={<FolderOpen size={18} />} color="#005F56" loading={loading} />
-        <StatCard label="Cost Overrun" value={`${Math.max(0, 100 - avgProgress)}%`} icon={<IndianRupee size={18} />} color="#B42318" />
-        <StatCard label="Time Overrun" value={openIssues} icon={<Clock size={18} />} color="#C89B3C" />
-        <StatCard label="Red Flag Projects" value={openIssues} icon={<AlertTriangle size={18} />} color="#B42318" />
-        <StatCard label="AI Recommendations" value={Math.max(1, assignedProjects.length)} icon={<Brain size={18} />} color="#2F6B9A" />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-        <DashboardCard title="Executive Summary" subtitle={`Budget under command: ${formatMoney(totalContractValue)}. Completed value: ${formatMoney(completedValue)}.`}>
-          <QuickActions actions={EE_ACTIONS} />
-        </DashboardCard>
-        <DashboardCard title="AI Alerts">
-          <InsightsList items={EE_INSIGHTS} />
-        </DashboardCard>
-      </div>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <DashboardCard title="Financial Charts"><ProgressGraph projects={assignedProjects} /></DashboardCard>
-        <DashboardCard title="Risk Heat Map">
-          <WorkflowStatusPanel lanes={[
-            { label: 'Low', count: Math.max(0, assignedProjects.length - openIssues), tone: '#005F56' },
-            { label: 'Medium', count: Math.max(0, pendingInspections), tone: '#C89B3C' },
-            { label: 'High', count: openIssues, tone: '#B42318' },
-            { label: 'Predicted Delay', count: `${Math.max(0, 100 - avgProgress)}%`, tone: '#2F6B9A' },
-          ]} />
-        </DashboardCard>
-        <DashboardCard title="Project Ranking">
-          <div className="space-y-2">
-            {[...assignedProjects].sort((a, b) => b.progress - a.progress).slice(0, 5).map((project, index) => (
-              <div key={project.id} className="flex items-center gap-3 rounded-lg border border-[#EFE8D4] bg-[#F9F7EF] p-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#005F56]/10 text-xs font-black text-[#005F56]">{index + 1}</span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-[#12332D]">{project.name}</p>
-                  <p className="text-[10px] text-[#6C7568]">{compactNumber(project.budget)} contract value</p>
-                </div>
-                <span className="text-xs font-bold text-[#12332D]">{project.progress}%</span>
-              </div>
-            ))}
-            {assignedProjects.length === 0 && !loading && <EmptyState description="No division-wide project ranking available." />}
+      <p className="text-xs text-[#6C7568]">{sourceNote}</p>
+      {state === 'error' && <EmptyState title={`${roleLabel} dashboard unavailable`} description={sourceNote} />}
+      {state === 'empty' && <EmptyState title="No assigned projects" description="No active assignment-backed project context is available for this role." />}
+      {state !== 'error' && state !== 'empty' && (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <StatCard label="Assigned Projects" value={projects.length} icon={<FolderOpen size={18} />} color="#005F56" loading={state === 'loading'} />
+            <StatCard label="Total Contract Value" value={formatMoney(totalValue)} icon={<IndianRupee size={18} />} color="#C89B3C" loading={state === 'loading'} />
+            <StatCard label="Average Progress" value={avgProgress} icon={<TrendingUp size={18} />} color="#0B8B7D" loading={state === 'loading'} />
+            <StatCard label="Open Workflow Items" value="Not available" icon={<ClipboardCheck size={18} />} color="#2F6B9A" loading={state === 'loading'} />
           </div>
-        </DashboardCard>
+          <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+            <DashboardCard title={`${roleLabel} Actions`} subtitle="Existing app routes with selected project context when a project is selected.">
+              <QuickActions actions={actions} />
+            </DashboardCard>
+            <DashboardCard title="Data Availability">
+              <InsightsList items={['Assignment-backed projects, contract values, and progress are loaded from database rows. Workflow, site condition, and AI recommendation counts remain unavailable until backend records are wired.']} />
+            </DashboardCard>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <DashboardCard title="Progress"><ProgressGraph projects={projects} /></DashboardCard>
+            <DashboardCard title="Assigned Projects"><ProjectTimeline projects={projects} /></DashboardCard>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function JEDashboardHeader({
+  projects,
+  selectedProject,
+  selectedProjectId,
+  onProjectChange,
+  roleLabel,
+  loading,
+}: {
+  projects: DashboardProject[];
+  selectedProject: DashboardProject | null;
+  selectedProjectId: string;
+  onProjectChange: (projectId: string) => void;
+  roleLabel: string;
+  loading: boolean;
+}) {
+  const today = new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date());
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-[#EFE8D4] bg-[#F9F7EF] p-4 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#6C7568]">JE Field Execution Command Center</p>
+        <h2 className="mt-1 text-lg font-black text-[#12332D]">{loading ? 'Loading project context...' : selectedProject?.name || 'No assigned project selected'}</h2>
+        <p className="text-xs text-[#6C7568]">
+          {selectedProject ? `${selectedProject.code} - ${selectedProject.projectTable} - ${roleLabel}` : `${roleLabel} - ${today}`}
+        </p>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2 rounded-lg border border-[#D8B15A]/30 bg-white px-3 py-2 text-xs font-bold text-[#12332D]">
+          <Calendar size={14} />
+          {today}
+        </div>
+        {projects.length > 1 && (
+          <select
+            className="rounded-lg border border-[#D8B15A]/40 bg-white px-3 py-2 text-sm font-semibold text-[#12332D]"
+            value={selectedProjectId}
+            onChange={(event) => onProjectChange(event.target.value)}
+          >
+            {projects.map((project) => <option key={`${project.projectTable}:${project.id}`} value={project.id}>{project.code} - {project.name}</option>)}
+          </select>
+        )}
       </div>
     </div>
   );
