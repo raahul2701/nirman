@@ -22,3 +22,7 @@ dist-ssr
 *.sw?
 .env
 supabase/.temp/
+_archive_orphan_widgets/
+_archive_phase2_unintegrated/
+dev-server.err
+desktop.ini
