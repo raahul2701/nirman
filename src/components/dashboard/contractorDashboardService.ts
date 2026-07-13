@@ -1,57 +1,100 @@
+import { supabase } from '../../lib/supabase';
 import { loadAssignedDashboardProjects } from './dashboardService';
 import type { DashboardProject } from './dashboard';
 
 export interface ContractorKpis {
   totalContractValue: number;
-  workCompletedPercent: number;
+  workCompletedPercent: number | string;
   runningBills: number | string;
   pendingApprovals: number | string;
   materialPending: number | string;
   todaysProgress: number | string;
 }
 
-/**
- * Fetches all data required for the Contractor Dashboard.
- * This service layer abstracts the data fetching logic from the UI component.
- * Currently, it uses the old schema (`gov_projects.contractor_id`).
- * In Milestone 2, this will be updated to use the new `project_contracts` schema
- * without requiring any changes to the `ContractorDashboard.tsx` component.
- */
-export async function getContractorDashboardData(userId: string): Promise<{ projects: DashboardProject[], kpis: ContractorKpis }> {
+export type ContractorDashboardResult = {
+  projects: DashboardProject[];
+  kpis: ContractorKpis;
+  warnings: string[];
+};
+
+const UNAVAILABLE = 'Not available';
+
+type SupabaseCountResult = {
+  count: number | null;
+  error: { message?: string | null } | null;
+};
+
+async function safeCount(label: string, query: PromiseLike<SupabaseCountResult>, warnings: string[]) {
+  try {
+    const result = await query;
+    if (result.error) {
+      warnings.push(`${label} unavailable: ${result.error.message || 'query failed'}`);
+      return UNAVAILABLE;
+    }
+    return result.count ?? 0;
+  } catch (error) {
+    warnings.push(`${label} unavailable: ${error instanceof Error ? error.message : 'query failed'}`);
+    return UNAVAILABLE;
+  }
+}
+
+export async function getContractorDashboardData(userId: string): Promise<ContractorDashboardResult> {
   if (!userId) {
-    return { projects: [], kpis: getEmptyKpis() };
+    return { projects: [], kpis: getEmptyKpis(), warnings: ['No authenticated user.'] };
   }
 
-  // This service currently uses a generic project loader.
-  // It will be made more specific as the data model evolves.
+  const warnings: string[] = [];
   const projects = await loadAssignedDashboardProjects('contractor', { userId });
+  const totalValue = projects.reduce((sum, project) => sum + project.budget, 0);
+  const progressValues = projects.map((project) => Number(project.progress)).filter((value) => Number.isFinite(value));
+  const avgProgress = progressValues.length > 0
+    ? Math.round(progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length)
+    : UNAVAILABLE;
 
-  const totalValue = projects.reduce((sum, p) => sum + p.budget, 0);
-  const avgProgress = projects.length > 0
-    ? projects.reduce((sum, p) => sum + p.progress, 0) / projects.length
-    : 0;
+  const govProjectIds = projects.filter((project) => project.projectTable === 'gov_projects').map((project) => project.id);
+  const runningBills = govProjectIds.length > 0
+    ? await safeCount(
+      'Running bills',
+      supabase
+        .from('payment_requests')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', govProjectIds),
+      warnings,
+    )
+    : UNAVAILABLE;
+  const pendingApprovals = govProjectIds.length > 0
+    ? await safeCount(
+      'Pending approvals',
+      supabase
+        .from('payment_requests')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', govProjectIds)
+        .is('final_status', null),
+      warnings,
+    )
+    : UNAVAILABLE;
 
-  const kpis: ContractorKpis = {
-    totalContractValue: totalValue,
-    workCompletedPercent: Math.round(avgProgress),
-    // These KPIs are not yet supported by the schema.
-    // Displaying a placeholder instead of fake numbers.
-    runningBills: '--',
-    pendingApprovals: '--',
-    materialPending: '--',
-    todaysProgress: '--',
+  return {
+    projects,
+    warnings,
+    kpis: {
+      totalContractValue: totalValue,
+      workCompletedPercent: avgProgress,
+      runningBills,
+      pendingApprovals,
+      materialPending: UNAVAILABLE,
+      todaysProgress: UNAVAILABLE,
+    },
   };
-
-  return { projects, kpis };
 }
 
 function getEmptyKpis(): ContractorKpis {
   return {
     totalContractValue: 0,
-    workCompletedPercent: 0,
-    runningBills: 0,
-    pendingApprovals: 0,
-    materialPending: 0,
-    todaysProgress: 0,
+    workCompletedPercent: UNAVAILABLE,
+    runningBills: UNAVAILABLE,
+    pendingApprovals: UNAVAILABLE,
+    materialPending: UNAVAILABLE,
+    todaysProgress: UNAVAILABLE,
   };
 }

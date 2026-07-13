@@ -25,7 +25,7 @@ type ComponentRow = {
   progress_percent: number;
 };
 
-function normalizeProjectRow(row?: ProjectRow | null): Omit<DashboardProject, 'id' | 'aeId' | 'ae' | 'jeId' | 'je' | 'contractorId' | 'contractor' | 'issues' | 'pendingInspections' | 'components'> {
+function normalizeProjectRow(row?: ProjectRow | null): Omit<DashboardProject, 'id' | 'projectTable' | 'workspaceId' | 'assignmentRole' | 'aeId' | 'ae' | 'jeId' | 'je' | 'contractorId' | 'contractor' | 'issues' | 'pendingInspections' | 'components'> {
   return {
     name: row?.project_name || row?.name || 'Assigned Project',
     code: row?.project_code || row?.code || 'PROJECT',
@@ -35,6 +35,21 @@ function normalizeProjectRow(row?: ProjectRow | null): Omit<DashboardProject, 'i
   };
 }
 
+function getAssignmentRoleForUser(assignment: ProjectAssignment, userId: string, dashboardRole: ReturnType<typeof getDashboardRole>) {
+  if (dashboardRole === 'executive_engineer' && assignment.executive_engineer_id === userId) return 'executive_engineer';
+  if (dashboardRole === 'assistant_engineer' && assignment.assistant_engineer_id === userId) return 'assistant_engineer';
+  if (dashboardRole === 'junior_engineer' && assignment.junior_engineer_id === userId) return 'junior_engineer';
+  if (dashboardRole === 'contractor' && assignment.contractor_id === userId) return 'contractor';
+  if (dashboardRole === 'admin') return 'admin_viewer';
+  return null;
+}
+
+function normalizeProjectTable(projectTable?: string | null): 'projects' | 'gov_projects' | null {
+  if (!projectTable || projectTable === 'gov_projects') return 'gov_projects';
+  if (projectTable === 'projects') return 'projects';
+  return null;
+}
+
 export async function loadAssignedDashboardProjects(role?: string | null, identity: DashboardIdentity = {}) {
   const dashboardRole = getDashboardRole(role);
   const summary = await getMyWorkspaceSummary();
@@ -42,6 +57,7 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
 
   const currentUserId = identity.userId || '';
   const assignments = summary.projects.filter((assignment) => {
+    if (!assignment.project_id || !normalizeProjectTable(assignment.project_table)) return false;
     if (assignment.access_status !== 'active' && assignment.access_status !== 'pilot') return false;
     if (dashboardRole === 'executive_engineer') return assignment.executive_engineer_id === currentUserId || summary.workspace?.executive_engineer_id === currentUserId;
     if (dashboardRole === 'admin') return summary.members.some((member) => member.user_id === currentUserId && member.active);
@@ -53,11 +69,11 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
 
   if (assignments.length === 0) return [];
 
-  const legacyIds = assignments.filter((assignment) => assignment.project_table !== 'gov_projects').map((assignment) => assignment.project_id);
-  const govIds = assignments.filter((assignment) => assignment.project_table === 'gov_projects').map((assignment) => assignment.project_id);
+  const legacyIds = assignments.filter((assignment) => normalizeProjectTable(assignment.project_table) === 'projects').map((assignment) => assignment.project_id);
+  const govIds = assignments.filter((assignment) => normalizeProjectTable(assignment.project_table) === 'gov_projects').map((assignment) => assignment.project_id);
 
   const [legacyProjects, govProjects, componentResult] = await Promise.all([
-    legacyIds.length > 0 ? supabase.from('projects').select('id,name,budget,progress_percent,status').in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
+    legacyIds.length > 0 ? supabase.from('projects').select('id,name,project_name,code,project_code,budget,progress_percent,status').in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
     govIds.length > 0 ? supabase.from('gov_projects').select('id,project_name,project_code,total_contract_value,project_type,status').in('id', govIds) : Promise.resolve({ data: [], error: null }),
     supabase
       .from('project_components')
@@ -81,7 +97,9 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   });
 
   return assignments.map((assignment: ProjectAssignment): DashboardProject => {
-    const baseProject = normalizeProjectRow(rows.get(assignment.project_id));
+    const projectTable = normalizeProjectTable(assignment.project_table) || 'gov_projects';
+    const projectRow = rows.get(assignment.project_id);
+    const baseProject = projectRow ? normalizeProjectRow(projectRow) : { name: 'Project record unavailable', code: assignment.project_id.slice(0, 8), budget: 0, progress: 0, category: ProjectCategory.OTHER };
     const components = componentsByProject.get(assignment.project_id);
     const componentProgress = components && components.length > 0
       ? components.reduce((total, component) => total + Number(component.progress_percent || 0), 0) / components.length
@@ -89,6 +107,9 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
     const project = { ...baseProject, progress: componentProgress };
     return {
       id: assignment.project_id,
+      projectTable,
+      workspaceId: assignment.workspace_id,
+      assignmentRole: getAssignmentRoleForUser(assignment, currentUserId, dashboardRole),
       ...project,
       aeId: assignment.assistant_engineer_id || '',
       ae: 'Assistant Engineer',

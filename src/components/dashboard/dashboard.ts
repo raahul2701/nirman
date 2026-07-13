@@ -16,6 +16,9 @@ export type ComponentProgress = {
 
 export type DashboardProject = {
   id: string;
+  projectTable: 'projects' | 'gov_projects';
+  workspaceId?: string | null;
+  assignmentRole?: 'executive_engineer' | 'assistant_engineer' | 'junior_engineer' | 'contractor' | 'admin_viewer' | null;
   name: string;
   code: string;
   category: ProjectCategory | 'road' | 'building' | 'bridge' | 'other' | 'irrigation' | 'phe';
