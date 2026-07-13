@@ -152,7 +152,7 @@ npm run build
 export VITE_SUPABASE_URL="https://your-project.supabase.co"
 export VITE_SUPABASE_ANON_KEY="your-anon-key"
 export SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
-export CLAUDE_API_KEY="your-claude-key"
+export GEMINI_API_KEY="your-server-side-gemini-key"
 
 # 3. Deploy to Vercel (recommended)
 vercel deploy --prod

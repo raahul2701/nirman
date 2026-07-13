@@ -82,7 +82,7 @@ All 5 advanced features have been fully built and integrated into NIRMAN AI. Her
 
 ### API Functions
 - [x] `/extract-boq` Edge function
-- [x] Claude API integration for extraction
+- [x] Gemini API integration for extraction
 - [x] Automatic item number parsing
 - [x] Unit recognition
 - [x] Category classification
@@ -97,7 +97,7 @@ All 5 advanced features have been fully built and integrated into NIRMAN AI. Her
 
 ### Features
 - [x] Accept Excel and PDF files
-- [x] Claude AI automatic extraction
+- [x] Gemini AI automatic extraction
 - [x] Structured item parsing
 - [x] Completion % calculation
 - [x] Interweaving with daily reports
@@ -116,7 +116,7 @@ All 5 advanced features have been fully built and integrated into NIRMAN AI. Her
 
 ### API Functions
 - [x] `/analyze-progress` Edge function
-- [x] Claude Sonnet 4 integration
+- [x] Gemini 2.5 Flash integration
 - [x] 7-day report analysis
 - [x] BOQ target comparison
 - [x] Survey data integration
@@ -197,7 +197,7 @@ All 5 advanced features have been fully built and integrated into NIRMAN AI. Her
 - [x] Format/calculation helpers
 
 ### API Endpoints
-- [x] `/claude-analyze` generic endpoint
+- [x] `/ai-analyze` generic endpoint
 - [x] `/analyze-progress` specialized endpoint
 - [x] `/extract-boq` BOQ extraction endpoint
 - [x] CORS configuration with shared file
@@ -223,7 +223,7 @@ All 5 advanced features have been fully built and integrated into NIRMAN AI. Her
 4. ✅ `src/components/EEContractorManagement.tsx`
 5. ✅ `src/components/AIProgressIntelligence.tsx`
 6. ✅ `src/pages/DailyReportsPage.tsx`
-7. ✅ `supabase/functions/claude-analyze/index.ts`
+7. ✅ `supabase/functions/ai-analyze/index.ts`
 8. ✅ `supabase/functions/analyze-progress/index.ts`
 9. ✅ `supabase/functions/extract-boq/index.ts`
 10. ✅ `supabase/functions/_shared/cors.ts`
@@ -245,7 +245,7 @@ All 5 advanced features have been fully built and integrated into NIRMAN AI. Her
 - [x] React.js frontend with TypeScript
 - [x] Tailwind CSS styling (existing design system)
 - [x] Supabase backend with PostgreSQL
-- [x] Claude AI integration (Sonnet 4)
+- [x] Gemini AI integration (Gemini 2.5 Flash)
 - [x] Edge functions for server logic
 - [x] Row-level security for data isolation
 
@@ -311,7 +311,7 @@ All 5 advanced features have been fully built and integrated into NIRMAN AI. Her
 9. ai_progress_reports
 
 ### API Endpoints: 3
-1. /claude-analyze
+1. /ai-analyze
 2. /analyze-progress
 3. /extract-boq
 
@@ -331,7 +331,7 @@ npx supabase db push
 supabase functions deploy
 
 # 3. Set environment variables in .env.local and Supabase secrets
-CLAUDE_API_KEY=your_key
+GEMINI_API_KEY=your_server_side_gemini_key
 GOOGLE_OAUTH_CLIENT_ID=your_id
 GOOGLE_OAUTH_CLIENT_SECRET=your_secret
 

@@ -193,7 +193,7 @@ npm run preview
 - [ ] Set VITE_SUPABASE_URL environment variable
 - [ ] Set VITE_SUPABASE_ANON_KEY environment variable
 - [ ] Set SUPABASE_SERVICE_ROLE_KEY environment variable
-- [ ] Set CLAUDE_API_KEY environment variable
+- [ ] Set GEMINI_API_KEY environment variable
 - [ ] Verify database migrations applied
 - [ ] Enable pg_cron in Supabase
 - [ ] Configure backup policy

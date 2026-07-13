@@ -87,7 +87,6 @@ NIRMAN AI is a comprehensive Government Construction Monitoring ERP system desig
 | `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key | ✅ |
 | `GEMINI_API_KEY` | Server-side Gemini API key for the Supabase AI proxy | ✅ |
 | `VITE_GOOGLE_CLIENT_ID` | Google OAuth client ID | ✅ |
-| `VITE_GOOGLE_CLIENT_SECRET` | Google OAuth client secret | ✅ |
 | `VITE_OPENWEATHER_API_KEY` | OpenWeatherMap API key | ❌ |
 
 ### Optional Environment Variables

@@ -23,7 +23,7 @@ This guide covers the complete deployment process for NIRMAN AI, a Government Co
    - Edge functions deployed
 
 4. **External APIs**
-   - Anthropic Claude API key
+   - Google Gemini API key
    - Google Cloud Console (OAuth + Drive API)
    - OpenWeatherMap API (free tier)
 
@@ -110,20 +110,18 @@ Add these secrets in GitHub repository settings:
 ```
 VITE_SUPABASE_URL=https://xxxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1Ni...
-VITE_SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1Ni...
+
 ```
 
 #### AI & External APIs
 ```
-VITE_CLAUDE_API_KEY=sk-ant-api03-...
-VITE_GEMINI_API_KEY=AIzaSy...
+GEMINI_API_KEY=your_server_side_gemini_key
 VITE_OPENWEATHER_API_KEY=abcd1234...
 ```
 
 #### Google Integration
 ```
 VITE_GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
-VITE_GOOGLE_CLIENT_SECRET=GOCSPX-...
 VITE_GOOGLE_REDIRECT_URI=https://yourdomain.com/auth/google/callback
 ```
 
@@ -249,8 +247,8 @@ Create storage bucket for file uploads:
 Configure secrets for Edge Functions:
 
 ```bash
-# Set Claude API key for functions
-supabase secrets set CLAUDE_API_KEY=sk-ant-api03-...
+# Set Gemini API key for functions
+supabase secrets set GEMINI_API_KEY=your_server_side_gemini_key
 ```
 
 ## Monitoring & Maintenance

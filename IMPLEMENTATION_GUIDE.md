@@ -42,7 +42,7 @@ New functions:
 - `generateEEInviteCode()` - Creates invite codes
 - `generateInviteLink()` - Creates invite links
 - `generateReportCode()` - Creates report codes
-- `callClaudeAPI()` - Claude API calls
+- `callGeminiAPI()` - Gemini API calls
 - `extractBOQFromFile()` - BOQ extraction
 - `analyzeConstructionProgress()` - AI analysis
 - `calculateManpowerEfficiency()` - Efficiency scoring
@@ -50,8 +50,8 @@ New functions:
 
 ### ✅ API Functions (Supabase Edge Functions)
 
-**1. Claude Analyze** → `supabase/functions/claude-analyze/index.ts`
-- Generic Claude API wrapper
+**1. AI Analyze** → `supabase/functions/ai-analyze/index.ts`
+- Generic Gemini API wrapper
 - Accepts system prompt + user message
 - Returns structured response
 
@@ -61,7 +61,7 @@ New functions:
 - Returns JSON with recommendations
 
 **3. Extract BOQ** → `supabase/functions/extract-boq/index.ts`
-- Uploads file to Claude API
+- Uploads file to Gemini API
 - Extracts BOQ items automatically
 - Returns structured item list
 
@@ -137,7 +137,7 @@ Add to `.env.local`:
 ```
 VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_anon_key
-CLAUDE_API_KEY=your_claude_api_key
+GEMINI_API_KEY=your_server_side_gemini_key
 GOOGLE_OAUTH_CLIENT_ID=your_google_client_id
 GOOGLE_OAUTH_CLIENT_SECRET=your_google_client_secret
 ```
@@ -146,7 +146,7 @@ GOOGLE_OAUTH_CLIENT_SECRET=your_google_client_secret
 
 ```bash
 # Deploy all edge functions
-supabase functions deploy claude-analyze
+supabase functions deploy ai-analyze
 supabase functions deploy analyze-progress
 supabase functions deploy extract-boq
 
@@ -182,7 +182,7 @@ npm run deploy
 - [ ] Database migration applied to Supabase
 - [ ] All new environment variables set
 - [ ] Edge functions deployed
-- [ ] Claude API key working
+- [ ] Gemini API key working
 - [ ] Frontend builds without errors
 - [ ] Daily Reports page accessible
 - [ ] Forms submit correctly
@@ -201,7 +201,7 @@ All tables have RLS enabled:
 
 ### API Security
 - All endpoints verify authentication
-- Claude API key protected (server-side only)
+- Gemini API key protected (server-side only)
 - OAuth tokens encrypted in database
 - File uploads to authenticated storage bucket
 
@@ -260,7 +260,7 @@ idx_ai_progress_reports_ee_id
 
 ### Test BOQ Upload
 1. Upload Excel BOQ file
-2. Wait for Claude extraction
+2. Wait for Gemini extraction
 3. Verify items display in table
 4. Check completion % calculations
 5. Verify total BOQ value correct
@@ -313,9 +313,9 @@ const link = generateInviteLink(code);
 // Output: https://nirman.apostolicredeem.com/join?ee=NIRMAN-EE-RAHU-7834
 ```
 
-### Call Claude API
+### Call Gemini API
 ```typescript
-const result = await callClaudeAPI(
+const result = await callGeminiAPI(
   "You are a construction expert",
   "Analyze this site progress data..."
 );
@@ -349,8 +349,8 @@ const analysis = await analyzeConstructionProgress({
 
 ## 🔧 Troubleshooting
 
-### Issue: Claude API errors
-**Solution:** Verify Claude API key in environment variables and Supabase secrets
+### Issue: Gemini API errors
+**Solution:** Verify Gemini API key in environment variables and Supabase secrets
 
 ### Issue: Daily report form not submitting
 **Solution:** Check Supabase auth and storage bucket permissions
@@ -402,5 +402,5 @@ const analysis = await analyzeConstructionProgress({
 Apostolic Redeem Services Pvt Ltd
 ROC Patna | CIN: U45201BR2018PTC038980
 
-Built with React.js, Tailwind CSS, Supabase, Claude AI
+Built with React.js, Tailwind CSS, Supabase, Gemini AI
 Last Updated: 2026-05-13

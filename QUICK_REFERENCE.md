@@ -14,10 +14,10 @@ supabase migration up
 supabase functions deploy
 ```
 
-### 3. Set Claude API Key
+### 3. Set Gemini API Key
 ```bash
 # In Supabase Dashboard → Settings → Edge Function Secrets
-CLAUDE_API_KEY=sk-ant-xxxxxxxxxxxx
+GEMINI_API_KEY=your_server_side_gemini_key
 ```
 
 ### 4. Test in Browser
@@ -92,11 +92,11 @@ const code = generateReportCode("PR-2024-001");
 // Returns: "PR-2024-001-DR-130524-123"
 ```
 
-### Call Claude API
+### Call Gemini API
 ```typescript
-import { callClaudeAPI } from '@/lib/utils';
+import { callGeminiAPI } from '@/lib/utils';
 
-const result = await callClaudeAPI(
+const result = await callGeminiAPI(
   "You are a construction expert.",
   "Analyze this progress data..."
 );
@@ -252,12 +252,12 @@ interface AIProgressIntelligenceProps {
 
 ## 🔍 Common Issues & Solutions
 
-### Issue: Claude API 401 error
+### Issue: Gemini API 401 error
 ```
 Solution: 
-1. Check CLAUDE_API_KEY in Supabase Secrets
-2. Use correct model: "claude-sonnet-4-20250514"
-3. Verify API key format: "sk-ant-..."
+1. Check GEMINI_API_KEY in Supabase Secrets
+2. Use correct model: "gemini-2.5-flash"
+3. Verify API key format: "server-side Gemini key"
 ```
 
 ### Issue: Daily report not saving
@@ -274,7 +274,7 @@ Solution:
 Solution:
 1. Ensure file is valid Excel/PDF (not corrupted)
 2. BOQ file should have clear headers
-3. Check Claude API response in edge function logs
+3. Check Gemini API response in edge function logs
 4. Verify file encoding UTF-8
 ```
 
@@ -364,7 +364,7 @@ nirman/
 │   ├── migrations/
 │   │   └── 003_advanced_features.sql    ← Database schema
 │   └── functions/
-│       ├── claude-analyze/
+│       ├── ai-analyze/
 │       ├── analyze-progress/
 │       └── extract-boq/
 ├── ADVANCED_FEATURES_GUIDE.md           ← Feature docs
@@ -376,10 +376,10 @@ nirman/
 
 ## 🔗 External Resources
 
-### Claude API
-- Docs: https://docs.anthropic.com
-- API Key: https://console.anthropic.com
-- Model: claude-sonnet-4-20250514
+### Gemini API
+- Docs: https://ai.google.dev/gemini-api/docs
+- API Key: https://aistudio.google.com/app/apikey
+- Model: gemini-2.5-flash
 
 ### Supabase
 - Docs: https://supabase.io/docs
@@ -414,7 +414,7 @@ SELECT * FROM daily_reports;
 supabase functions list
 
 # View function logs
-supabase functions logs claude-analyze
+supabase functions logs ai-analyze
 
 # Test locally
 supabase functions serve

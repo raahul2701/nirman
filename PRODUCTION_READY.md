@@ -233,7 +233,7 @@ npm run lint
 export VITE_SUPABASE_URL=your_production_url
 export VITE_SUPABASE_ANON_KEY=your_production_key
 export SUPABASE_SERVICE_ROLE_KEY=your_service_key
-export CLAUDE_API_KEY=your_claude_key
+export GEMINI_API_KEY=your_server_side_gemini_key
 ```
 
 ### Step 3: Database Deployment
