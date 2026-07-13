@@ -9,13 +9,6 @@ export function createSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-export function getClaudeKey() {
-  const key = Deno.env.get('CLAUDE_API_KEY');
-  if (!key) {
-    throw new Error('Claude API key not configured');
-  }
-  return key;
-}
 
 export function getOpenWeatherKey() {
   const key = Deno.env.get('OPENWEATHER_API_KEY');

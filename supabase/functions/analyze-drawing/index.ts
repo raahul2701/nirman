@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import { createSupabaseClient, getClaudeKey } from '../_shared/supabaseClient.ts';
+import { createSupabaseClient } from '../_shared/supabaseClient.ts';
+import { runGeminiJson } from '../_shared/gemini.ts';
 
 function uint8ArrayToBase64(bytes: Uint8Array) {
   let binary = '';
@@ -34,7 +35,6 @@ serve(async (req) => {
       });
     }
 
-    const claudeKey = getClaudeKey();
     const drawingBase64 = await downloadBase64(drawingUrl);
     const photoBase64 = await downloadBase64(sitePhotoUrl);
 
@@ -74,28 +74,7 @@ SITE PHOTO BASE64: ${photoBase64.slice(0, 9000)}
 
 Respond ONLY with valid JSON.`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': claudeKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 1200,
-        temperature: 0.2,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Claude error ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const text = payload.content?.[0]?.text || payload.completion?.[0]?.text || '';
-    const result = JSON.parse(text);
+    const result = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1200, temperature: 0.2 });
 
     const supabase = createSupabaseClient();
     await supabase.from('drawing_comparisons').insert([{
@@ -108,7 +87,7 @@ Respond ONLY with valid JSON.`;
       site_observation: siteObservation || '',
       ai_comparison_result: JSON.stringify(result),
       ai_deviation_found: result.severity !== 'compliant',
-      ai_deviation_percentage: result.compliance_score ? 100 - result.compliance_score : 0,
+      ai_deviation_percentage: result.compliance_score ? 100 - Number(result.compliance_score) : 0,
       ai_severity: result.severity,
       ai_details: result.elements || [],
       action_required: result.recommendation,
@@ -116,7 +95,7 @@ Respond ONLY with valid JSON.`;
       compared_by: null,
     }]);
 
-    return new Response(JSON.stringify({ success: true, result }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: true, result, response: JSON.stringify(result) }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Internal error' }), {
       status: 500,

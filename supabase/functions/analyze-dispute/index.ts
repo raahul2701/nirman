@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import { createSupabaseClient, getClaudeKey } from '../_shared/supabaseClient.ts';
+import { createSupabaseClient } from '../_shared/supabaseClient.ts';
+import { runGeminiJson } from '../_shared/gemini.ts';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,7 +19,6 @@ serve(async (req) => {
       });
     }
 
-    const claudeKey = getClaudeKey();
     const prompt = `You are an expert legal AI for Indian government construction dispute resolution.
 
 Agreement Text:
@@ -27,7 +27,7 @@ ${agreementText}
 Dispute Description:
 ${disputeDescription}
 
-Claim Amount: ₹${claimAmount}
+Claim Amount: INR ${claimAmount}
 
 BOQ Summary:
 ${boq || 'Not provided'}
@@ -47,25 +47,7 @@ Analyze validity, contract compliance, risk and arbitration probability. Return 
 }
 Respond ONLY with valid JSON.`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': claudeKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 1400,
-        temperature: 0.2,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (!response.ok) throw new Error(`Claude API returned ${response.status}`);
-    const payload = await response.json();
-    const text = payload.content?.[0]?.text || payload.completion?.[0]?.text || '';
-    const result = JSON.parse(text);
+    const result = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1400, temperature: 0.2 });
 
     const supabase = createSupabaseClient();
     await supabase.from('disputes').update({
@@ -78,7 +60,7 @@ Respond ONLY with valid JSON.`;
       resolution_status: 'ai_review',
     }).eq('id', disputeId);
 
-    return new Response(JSON.stringify({ success: true, result }), {
+    return new Response(JSON.stringify({ success: true, result, response: JSON.stringify(result) }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {

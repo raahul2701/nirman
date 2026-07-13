@@ -1,12 +1,10 @@
-import Anthropic from "npm:@anthropic-ai/sdk@0.27.0";
+import { runGeminiJson, runGeminiText } from '../_shared/gemini.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
-
-const client = new Anthropic();
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -40,21 +38,7 @@ Analyze this problem and respond with a JSON object containing:
 }
 
 Respond ONLY with valid JSON, no markdown.`;
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = message.content[0];
-      if (content.type === "text") {
-        try {
-          responseData = JSON.parse(content.text);
-        } catch {
-          responseData = { error: "Failed to parse AI response", raw: content.text };
-        }
-      }
+      responseData = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1024, temperature: 0.2 });
     } else if (type === "survey") {
       const { survey_type, notes } = body;
       prompt = `You are an expert drone survey analyst for construction sites.
@@ -69,21 +53,7 @@ Generate a professional survey analysis report in JSON:
 }
 
 Respond ONLY with valid JSON, no markdown.`;
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = message.content[0];
-      if (content.type === "text") {
-        try {
-          responseData = JSON.parse(content.text);
-        } catch {
-          responseData = { report: content.text, findings_count: 2 };
-        }
-      }
+      responseData = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1024, temperature: 0.2 });
     } else if (type === "design") {
       const { project_type, area_sqft, budget_min, budget_max, floors, location, soil_type, requirements } = body;
       prompt = `You are a senior construction architect and project consultant in India.
@@ -94,7 +64,7 @@ Generate a comprehensive design brief for this project:
 - Floors: ${floors}
 - Location: ${location || "India"}
 - Soil Type: ${soil_type}
-- Budget: ₹${budget_min || 0}L to ₹${budget_max || 0}L
+- Budget: INR ${budget_min || 0}L to INR ${budget_max || 0}L
 - Requirements: ${requirements || "Standard construction"}
 
 Create a detailed design brief covering:
@@ -108,17 +78,7 @@ Create a detailed design brief covering:
 8. RISK ASSESSMENT
 
 Format as clean readable text with section headers. Be specific with numbers and quantities.`;
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = message.content[0];
-      if (content.type === "text") {
-        responseData = { output: content.text };
-      }
+      responseData = { output: await runGeminiText(prompt, { maxTokens: 4096, temperature: 0.2 }) };
     } else if (type === "milestone") {
       const { milestone_name, description, payment_amount, completion_percentage } = body;
       prompt = `You are a government project payment verification engineer in India.
@@ -126,7 +86,7 @@ Format as clean readable text with section headers. Be specific with numbers and
 A payment milestone is being assessed:
 - Milestone: ${milestone_name}
 - Description: ${description || "Not provided"}
-- Payment Amount: ₹${payment_amount}
+- Payment Amount: INR ${payment_amount}
 - Completion Reported: ${completion_percentage}%
 
 Analyze and respond with JSON:
@@ -138,21 +98,7 @@ Analyze and respond with JSON:
 }
 
 Respond ONLY with valid JSON, no markdown.`;
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = message.content[0];
-      if (content.type === "text") {
-        try {
-          responseData = JSON.parse(content.text);
-        } catch {
-          responseData = { safe_amount: payment_amount * 0.85, hold_amount: payment_amount * 0.15, risk_level: "low", analysis: content.text };
-        }
-      }
+      responseData = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1024, temperature: 0.2 });
     } else if (type === "work_upload") {
       const { work_category, description } = body;
       prompt = `You are a construction quality inspector for government projects in India.
@@ -168,28 +114,14 @@ Analyze and respond with JSON:
   "issues": [{"type": "string", "severity": "low|medium|high", "description": "string", "location": "string"}]
 }
 
-If no issues found, return empty issues array. Respond ONLY with valid JSON, no markdown.`;
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = message.content[0];
-      if (content.type === "text") {
-        try {
-          responseData = JSON.parse(content.text);
-        } catch {
-          responseData = { quality_score: 75, analysis: content.text, issues: [] };
-        }
-      }
+If no issues found, return empty issues array. Respond ONLY with valid JSON.`;
+      responseData = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1024, temperature: 0.2 });
     } else if (type === "payment") {
       const { claimed_amount, project_id } = body;
       prompt = `You are a government payment verification AI for construction projects in India.
 
 A payment request has been submitted:
-- Claimed Amount: ₹${claimed_amount}
+- Claimed Amount: INR ${claimed_amount}
 - Project ID: ${project_id}
 
 Analyze and respond with JSON:
@@ -201,21 +133,7 @@ Analyze and respond with JSON:
 }
 
 Respond ONLY with valid JSON, no markdown.`;
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = message.content[0];
-      if (content.type === "text") {
-        try {
-          responseData = JSON.parse(content.text);
-        } catch {
-          responseData = { recommended_amount: claimed_amount * 0.85, hold_amount: claimed_amount * 0.15, risk_level: "low", report: content.text };
-        }
-      }
+      responseData = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1024, temperature: 0.2 });
     } else if (type === "inspection") {
       const { inspection_type, notes } = body;
       prompt = `You are a senior government construction inspector in India.
@@ -231,22 +149,8 @@ Generate a professional inspection report in JSON:
   "recommendation": "approve|partial|hold|reject"
 }
 
-Respond ONLY with valid JSON, no markdown.`;
-
-      const message = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const content = message.content[0];
-      if (content.type === "text") {
-        try {
-          responseData = JSON.parse(content.text);
-        } catch {
-          responseData = { quality_score: 80, report: content.text, recommendation: "approve" };
-        }
-      }
+Respond ONLY with valid JSON.`;
+      responseData = await runGeminiJson<Record<string, unknown>>(prompt, { maxTokens: 1024, temperature: 0.2 });
     } else {
       responseData = { error: "Unknown analysis type" };
     }
