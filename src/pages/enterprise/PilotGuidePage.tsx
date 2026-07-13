@@ -197,7 +197,7 @@ const features = [
     does: 'Generates inspection notes, discrepancy analysis, progress reports, drawing checks, and risk flags.',
     data: 'Project context, uploads, reports, file references, Edge Function response data.',
     after: 'AI output becomes review guidance; human approvers retain final decision.',
-    limitation: 'Gemini/Claude keys must remain server-side via Supabase Edge Functions; client pages should never expose raw keys.',
+    limitation: 'Gemini keys must remain server-side via Supabase Edge Functions; client pages should never expose raw keys.',
   },
 ];
 
