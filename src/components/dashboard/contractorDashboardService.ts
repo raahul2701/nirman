@@ -46,7 +46,7 @@ export async function getContractorDashboardData(userId: string): Promise<Contra
   const warnings: string[] = [];
   const projects = await loadAssignedDashboardProjects('contractor', { userId });
   const totalValue = projects.reduce((sum, project) => sum + project.budget, 0);
-  const progressValues = projects.map((project) => Number(project.progress)).filter((value) => Number.isFinite(value));
+  const progressValues = projects.map((project) => project.progress).filter((value): value is number => value != null && Number.isFinite(value));
   const avgProgress = progressValues.length > 0
     ? Math.round(progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length)
     : UNAVAILABLE;

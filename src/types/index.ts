@@ -182,15 +182,19 @@ export interface GovProject {
   project_code: string;
   department: string;
   contractor_name: string;
-  contractor_id?: string;
+  contractor_id?: string | null;
+  engineer_id?: string | null;
+  je_id?: string | null;
+  se_id?: string | null;
   total_contract_value: number;
-  start_date: string;
-  end_date?: string;
-  contract_pdf_url: string;
-  location: string;
-  project_type: GovProjectType;
+  start_date: string | null;
+  end_date?: string | null;
+  contract_pdf_url?: string | null;
+  location?: string | null;
+  district?: string | null;
+  state?: string | null;
+  project_type: GovProjectType | null;
   status: GovProjectStatus;
-  progress_percent: number;
   created_at: string;
 }
 

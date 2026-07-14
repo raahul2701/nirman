@@ -42,6 +42,8 @@ const typeColors: Record<string, string> = {
   dam: '#0891B2', irrigation: '#00D4AA', railway: '#F59E0B', other: '#6B7280',
 };
 
+const GOV_PROJECT_SELECT = 'id, project_name, project_code, department, contractor_name, contractor_id, engineer_id, je_id, se_id, total_contract_value, start_date, end_date, contract_pdf_url, location, district, state, project_type, status, created_at';
+
 export function GovProjectsPage() {
   const { user } = useAuth();
   const toast = useToast();
@@ -78,20 +80,25 @@ export function GovProjectsPage() {
     }
     setSubmitting(true);
     const code = form.project_code.toUpperCase();
-    const { data, error } = await supabase.from('gov_projects').insert({
-      ...form,
-      engineer_id: user.id,
+    const payload = {
+      project_name: form.project_name,
       project_code: code,
+      department: form.department,
+      contractor_name: form.contractor_name,
+      engineer_id: user.id,
       total_contract_value: parseFloat(form.total_contract_value) || 0,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
+      location: form.location,
+      project_type: form.project_type,
       status: 'active',
-      progress_percent: 0,
-    }).select().maybeSingle();
+    };
+    const { data, error } = await supabase.from('gov_projects').insert(payload).select(GOV_PROJECT_SELECT).maybeSingle();
 
     if (error) {
       setSubmitting(false);
-      toast(error.message || 'Failed to create project', 'error');
+      const duplicateCode = error.code === '23505' || /duplicate|unique/i.test(error.message || '');
+      toast(duplicateCode ? `Project code ${code} is already in use` : error.message || 'Failed to create project', 'error');
       return;
     }
 
@@ -164,7 +171,7 @@ export function GovProjectsPage() {
   });
 
   return (
-    <AppLayout title="GovTrack Projects — NIRMAN AI" subtitle="Government contract management by ARSPL">
+    <AppLayout title="GovTrack Projects — NIRMAN AI" subtitle="Government contract projects">
       <div className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="relative flex-1 min-w-48">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#606060]" />
@@ -238,8 +245,8 @@ export function GovProjectsPage() {
               className="flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-all hover:border-[#00D4AA]/20"
               style={{ background: '#1A1A1A', border: '1px solid #232323' }}
             >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${typeColors[p.project_type] || '#6B7280'}15`, border: `1px solid ${typeColors[p.project_type] || '#6B7280'}25` }}>
-                <Building2 size={18} style={{ color: typeColors[p.project_type] || '#6B7280' }} />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${typeColors[p.project_type || 'other'] || '#6B7280'}15`, border: `1px solid ${typeColors[p.project_type || 'other'] || '#6B7280'}25` }}>
+                <Building2 size={18} style={{ color: typeColors[p.project_type || 'other'] || '#6B7280' }} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
@@ -261,10 +268,7 @@ export function GovProjectsPage() {
                 <div className="w-24">
                   <div className="flex items-center justify-between mb-0.5">
                     <span className="text-[9px] text-[#606060]">Progress</span>
-                    <span className="text-[9px] text-white font-semibold">{p.progress_percent}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#2A2A2A' }}>
-                    <div className="h-full rounded-full" style={{ width: `${p.progress_percent}%`, background: 'linear-gradient(90deg, #FF6B00, #FF8C00)' }} />
+                    <span className="text-[9px] text-white font-semibold">Not available</span>
                   </div>
                 </div>
                 <Badge color={p.status === 'active' ? '#22c55e' : p.status === 'on_hold' ? '#F59E0B' : '#808080'}>

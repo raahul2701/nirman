@@ -8,7 +8,7 @@ export enum ProjectCategory {
 export type ComponentProgress = {
   id?: string;
   name: 'Earthwork' | 'Subgrade' | 'PQC' | 'Structure' | string;
-  progress: number;
+  progress: number | null;
   plannedQty: number;
   executedQty: number;
   unit: string;
@@ -28,7 +28,7 @@ export type DashboardProject = {
   je: string;
   contractorId: string;
   contractor: string;
-  progress: number;
+  progress: number | null;
   budget: number;
   issues: number;
   pendingInspections: number;

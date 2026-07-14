@@ -509,7 +509,6 @@ export function StartPilotWizardPage() {
             location: 'Demo District',
             project_type: 'highway',
             status: 'active',
-            progress_percent: 0,
             } as GovProjectInsertPayload)
           .select('id, project_name, project_code, contractor_name')
           .maybeSingle();

@@ -113,10 +113,7 @@ export function GovDashboardPage() {
                     <div className="w-20">
                       <div className="flex items-center justify-between mb-0.5">
                         <span className="text-[9px] text-[#606060]">Progress</span>
-                        <span className="text-[9px] text-white font-semibold">{p.progress_percent}%</span>
-                      </div>
-                      <div className="h-1 rounded-full overflow-hidden" style={{ background: '#2A2A2A' }}>
-                        <div className="h-full rounded-full" style={{ width: `${p.progress_percent}%`, background: 'linear-gradient(90deg, #FF6B00, #FF8C00)' }} />
+                        <span className="text-[9px] text-white font-semibold">N/A</span>
                       </div>
                     </div>
                     <Badge color={p.status === 'active' ? '#22c55e' : p.status === 'on_hold' ? '#F59E0B' : '#808080'}>

@@ -162,7 +162,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <AppLayout title="Projects" subtitle="Manage construction projects and track progress">
+    <AppLayout title="Projects" subtitle="Workspace execution projects">
       <div className="flex items-center justify-between mb-6">
         <div className="flex gap-3">
           {['active', 'completed', 'on_hold'].map(s => (

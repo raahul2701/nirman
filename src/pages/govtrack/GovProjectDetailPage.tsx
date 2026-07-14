@@ -18,6 +18,7 @@ import { formatCurrency } from '../../lib/utils';
 
 const RISK_COLORS: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#eab308', safe: '#22c55e' };
 const MILESTONE_STATUS_COLORS: Record<string, string> = { locked: '#606060', active: '#FF6B00', submitted: '#3B82F6', approved: '#00D4AA', paid: '#22c55e' };
+const GOV_PROJECT_SELECT = 'id, project_name, project_code, department, contractor_name, contractor_id, engineer_id, je_id, se_id, total_contract_value, start_date, end_date, contract_pdf_url, location, district, state, project_type, status, created_at';
 
 export function GovProjectDetailPage() {
   const { id } = useParams();
@@ -34,7 +35,7 @@ export function GovProjectDetailPage() {
   const loadData = useCallback(async () => {
     if (!user || !id) return;
     const [projRes, mileRes] = await Promise.all([
-      supabase.from('gov_projects').select('*').eq('id', id).maybeSingle(),
+      supabase.from('gov_projects').select(GOV_PROJECT_SELECT).eq('id', id).maybeSingle(),
       supabase.from('payment_milestones').select('*').eq('project_id', id).order('milestone_number'),
     ]);
     if (projRes.data) setProject(projRes.data as GovProject);
@@ -160,14 +161,11 @@ export function GovProjectDetailPage() {
           ))}
         </div>
 
-        {/* Progress bar */}
+        {/* Progress availability */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[#606060] text-xs">Overall Progress</span>
-            <span className="text-white text-xs font-bold">{project.progress_percent}%</span>
-          </div>
-          <div className="h-2 rounded-full overflow-hidden" style={{ background: '#2A2A2A' }}>
-            <div className="h-full rounded-full transition-all" style={{ width: `${project.progress_percent}%`, background: 'linear-gradient(90deg, #FF6B00, #00D4AA)' }} />
+            <span className="text-white text-xs font-bold">Not available</span>
           </div>
           <div className="flex items-center justify-between mt-1">
             <span className="text-[#606060] text-[10px]">Paid: {formatCurrency(totalPaid)}</span>

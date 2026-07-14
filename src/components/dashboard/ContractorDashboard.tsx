@@ -52,6 +52,10 @@ function displayPercent(value: ContractorKpis[keyof ContractorKpis]) {
   return typeof value === 'number' ? `${value}%` : value;
 }
 
+function formatProgress(value: number | null) {
+  return value == null ? 'Not available' : `${Math.round(value)}%`;
+}
+
 function projectDetailPath(project: DashboardProject) {
   return project.projectTable === 'gov_projects' ? `/govtrack/projects/${project.id}` : `/projects/details?projectId=${project.id}&projectTable=projects`;
 }
@@ -165,7 +169,7 @@ export function ContractorDashboard() {
                 {selectedProject ? (
                   <div className="space-y-3 text-sm text-[#12332D]">
                     <p><span className="font-bold">Code:</span> {selectedProject.code}</p>
-                    <p><span className="font-bold">Progress:</span> {selectedProject.progress}%</p>
+                    <p><span className="font-bold">Progress:</span> {formatProgress(selectedProject.progress)}</p>
                     <p><span className="font-bold">Contract value:</span> {formatCurrency(selectedProject.budget)}</p>
                     <Link className="inline-flex rounded-lg bg-[#005F56] px-3 py-2 text-xs font-bold text-white" to={projectDetailPath(selectedProject)}>Open project</Link>
                   </div>

@@ -3,6 +3,10 @@ import type { DashboardProject } from './dashboard';
 import { EmptyState } from './EmptyState';
 import { ProgressBar } from './ProgressBar';
 
+function formatProgress(value: number | null) {
+  return value == null ? 'Not available' : `${Math.round(value)}%`;
+}
+
 export const ProgressGraph = memo(function ProgressGraph({ projects }: { projects: DashboardProject[] }) {
   if (projects.length === 0) return <EmptyState description="No active assigned project data available." />;
   return (
@@ -11,7 +15,7 @@ export const ProgressGraph = memo(function ProgressGraph({ projects }: { project
         <div key={project.id}>
           <div className="mb-1 flex items-center justify-between gap-3 text-xs">
             <span className="truncate font-semibold text-[#12332D]">{project.name}</span>
-            <span className="text-[#6C7568]">{project.progress}%</span>
+            <span className="text-[#6C7568]">{formatProgress(project.progress)}</span>
           </div>
           <ProgressBar value={project.progress} />
         </div>

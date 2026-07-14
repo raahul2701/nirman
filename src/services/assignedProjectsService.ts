@@ -101,7 +101,7 @@ export async function loadAssignedGovProjects(userId: string) {
 
   const { data, error } = await supabase
     .from('gov_projects')
-    .select('*')
+    .select('id, project_name, project_code, department, contractor_name, contractor_id, engineer_id, je_id, se_id, total_contract_value, start_date, end_date, contract_pdf_url, location, district, state, project_type, status, created_at')
     .in('id', assignmentIds)
     .order('created_at', { ascending: false });
 

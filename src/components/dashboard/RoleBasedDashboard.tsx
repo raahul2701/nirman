@@ -37,7 +37,7 @@ function formatMoney(value: number) {
 
 function averageProgress(projects: DashboardProject[]) {
   if (projects.length === 0) return 'Not available';
-  const progressValues = projects.map((project) => Number(project.progress)).filter((value) => Number.isFinite(value));
+  const progressValues = projects.map((project) => project.progress).filter((value): value is number => value != null && Number.isFinite(value));
   if (progressValues.length === 0) return 'Not available';
   return `${Math.round(progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length)}%`;
 }
@@ -177,7 +177,7 @@ function AssignedRoleDashboard({ role, identity, dashboardRole }: { role?: strin
           <>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <StatCard label="Assigned Projects" value={projects.length} icon={<FolderOpen size={18} />} color="#005F56" loading={state === 'loading'} />
-              <StatCard label="Selected Progress" value={selectedProject ? `${selectedProject.progress}%` : 'Not available'} icon={<TrendingUp size={18} />} color="#0B8B7D" loading={state === 'loading'} />
+              <StatCard label="Selected Progress" value={selectedProject?.progress == null ? 'Not available' : `${Math.round(selectedProject.progress)}%`} icon={<TrendingUp size={18} />} color="#0B8B7D" loading={state === 'loading'} />
               <StatCard label="Contract Value" value={selectedProject ? formatMoney(selectedProject.budget) : 'Not available'} icon={<IndianRupee size={18} />} color="#C89B3C" loading={state === 'loading'} />
               <StatCard label="Pending MB" value="Not available" icon={<ScanLine size={18} />} color="#B42318" loading={state === 'loading'} />
             </div>
@@ -189,7 +189,7 @@ function AssignedRoleDashboard({ role, identity, dashboardRole }: { role?: strin
                 {selectedProject ? (
                   <div className="space-y-3 text-sm text-[#12332D]">
                     <p><span className="font-bold">Project:</span> {selectedProject.name}</p>
-                    <p><span className="font-bold">Progress:</span> {selectedProject.progress}%</p>
+                    <p><span className="font-bold">Progress:</span> {selectedProject.progress == null ? 'Not available' : `${Math.round(selectedProject.progress)}%`}</p>
                     <p><span className="font-bold">Contract value:</span> {formatMoney(selectedProject.budget)}</p>
                     <p><span className="font-bold">Assignment role:</span> {selectedProject.assignmentRole || 'junior_engineer'}</p>
                   </div>
@@ -228,7 +228,7 @@ function AssignedRoleDashboard({ role, identity, dashboardRole }: { role?: strin
               <QuickActions actions={actions} />
             </DashboardCard>
             <DashboardCard title="Data Availability">
-              <InsightsList items={['Assignment-backed projects, contract values, and progress are loaded from database rows. Workflow, site condition, and AI recommendation counts remain unavailable until backend records are wired.']} />
+              <InsightsList items={['Assignment-backed projects and contract values are loaded from database rows; progress is shown only when a verified project or component progress source exists. Workflow, site condition, and AI recommendation counts remain unavailable until backend records are wired.']} />
             </DashboardCard>
           </div>
           <div className="grid gap-4 xl:grid-cols-2">

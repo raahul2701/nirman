@@ -5,13 +5,14 @@ import { ProjectCategory, type ComponentProgress, type DashboardProject } from '
 
 type ProjectRow = {
   id: string;
+  table: 'projects' | 'gov_projects';
   name?: string;
   project_name?: string;
   code?: string;
   project_code?: string;
   budget?: number;
   total_contract_value?: number;
-  progress_percent?: number;
+  progress_percent?: number | null;
   project_type?: string;
 };
 
@@ -30,7 +31,7 @@ function normalizeProjectRow(row?: ProjectRow | null): Omit<DashboardProject, 'i
     name: row?.project_name || row?.name || 'Assigned Project',
     code: row?.project_code || row?.code || 'PROJECT',
     budget: Number(row?.total_contract_value ?? row?.budget ?? 0),
-    progress: Number(row?.progress_percent ?? 0),
+    progress: row?.table === 'projects' ? Number(row?.progress_percent ?? 0) : null,
     category: (row?.project_type as ProjectCategory) || ProjectCategory.OTHER,
   };
 }
@@ -87,8 +88,8 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   if (componentResult.error) throw componentResult.error;
 
   const rows = new Map<string, ProjectRow>();
-  ((legacyProjects.data || []) as ProjectRow[]).forEach((project) => rows.set(project.id, project));
-  ((govProjects.data || []) as ProjectRow[]).forEach((project) => rows.set(project.id, project));
+  ((legacyProjects.data || []) as Omit<ProjectRow, 'table'>[]).forEach((project) => rows.set(project.id, { ...project, table: 'projects' }));
+  ((govProjects.data || []) as Omit<ProjectRow, 'table'>[]).forEach((project) => rows.set(project.id, { ...project, table: 'gov_projects' }));
   const componentsByProject = new Map<string, ComponentRow[]>();
   ((componentResult.data || []) as ComponentRow[]).forEach((component) => {
     const list = componentsByProject.get(component.project_id) || [];
@@ -99,7 +100,7 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   return assignments.map((assignment: ProjectAssignment): DashboardProject => {
     const projectTable = normalizeProjectTable(assignment.project_table) || 'gov_projects';
     const projectRow = rows.get(assignment.project_id);
-    const baseProject = projectRow ? normalizeProjectRow(projectRow) : { name: 'Project record unavailable', code: assignment.project_id.slice(0, 8), budget: 0, progress: 0, category: ProjectCategory.OTHER };
+    const baseProject = projectRow ? normalizeProjectRow(projectRow) : { name: 'Project record unavailable', code: assignment.project_id.slice(0, 8), budget: 0, progress: null, category: ProjectCategory.OTHER };
     const components = componentsByProject.get(assignment.project_id);
     const componentProgress = components && components.length > 0
       ? components.reduce((total, component) => total + Number(component.progress_percent || 0), 0) / components.length
@@ -121,7 +122,7 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
       pendingInspections: 0,
       components: components && components.length > 0
         ? components.map((c): ComponentProgress => ({ id: `${assignment.project_id}-${c.component_name}`, name: c.component_name, progress: Number(c.progress_percent || 0), plannedQty: Number(c.planned_quantity || 0), executedQty: Number(c.executed_quantity || 0), unit: c.unit || 'unit' }))
-        : [{ id: `${assignment.project_id}-default`, name: 'Earthwork', progress: project.progress, plannedQty: 0, executedQty: 0, unit: 'unit' }],
+        : [{ id: `${assignment.project_id}-default`, name: 'Progress', progress: project.progress, plannedQty: 0, executedQty: 0, unit: 'unit' }],
     };
   });
 }
