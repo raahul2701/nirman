@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Edit3, FolderTree, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { StatusBadge } from '../../components/ui/Badge';
@@ -119,8 +120,21 @@ function selectValue(value: string | null | undefined) {
   return value || EMPTY_VALUE;
 }
 
+function findActiveWorkspaceUser(users: WorkspaceUserRow[], workspaceId: string, userId: string, role: WorkspaceUserRow['role']) {
+  return users.find((workspaceUser) => (
+    workspaceUser.workspace_id === workspaceId
+    && workspaceUser.user_id === userId
+    && workspaceUser.role === role
+    && workspaceUser.active !== false
+  ));
+}
+
+function preserveExistingSelection(selectedId: string, existingId: string | null | undefined) {
+  return selectedId || existingId || null;
+}
 export function AssignProjectPage() {
   const { user, profile } = useAuth();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([]);
@@ -273,6 +287,23 @@ export function AssignProjectPage() {
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
   const selectedProject = projects.find((project) => `${project.table}:${project.id}` === projectKey);
+  useEffect(() => {
+    if (loading) return;
+    const queryWorkspaceId = searchParams.get('workspaceId');
+    const queryProjectId = searchParams.get('projectId');
+    const queryProjectTable = searchParams.get('projectTable') || 'gov_projects';
+
+    if (queryWorkspaceId && workspaces.some((workspace) => workspace.id === queryWorkspaceId) && queryWorkspaceId !== workspaceId) {
+      setWorkspaceId(queryWorkspaceId);
+    }
+
+    if (queryProjectId) {
+      const queryProjectKey = `${queryProjectTable}:${queryProjectId}`;
+      if (projects.some((project) => `${project.table}:${project.id}` === queryProjectKey) && projectKey !== queryProjectKey) {
+        setProjectKey(queryProjectKey);
+      }
+    }
+  }, [loading, projectKey, projects, searchParams, workspaceId, workspaces]);
 
   const aeOptions = useMemo(() => workspaceUsers.filter((user) => user.role === 'assistant_engineer'), [workspaceUsers]);
   const jeOptions = useMemo(() => workspaceUsers.filter((user) => user.role === 'junior_engineer'), [workspaceUsers]);
@@ -324,31 +355,47 @@ export function AssignProjectPage() {
       setError('No project is selected. Create a GovTrack project first.');
       return;
     }
-    if (!assistantEngineerId && !juniorEngineerId && !contractorId) {
+    const existing = assignments.find((assignment) => (
+      assignment.workspace_id === selectedWorkspace.id
+      && assignment.project_id === selectedProject.id
+      && (assignment.project_table || 'gov_projects') === selectedProject.table
+    ));
+
+    const preservedAssistantEngineerId = preserveExistingSelection(assistantEngineerId, existing?.assistant_engineer_id);
+    const preservedJuniorEngineerId = preserveExistingSelection(juniorEngineerId, existing?.junior_engineer_id);
+    const preservedContractorId = preserveExistingSelection(contractorId, existing?.contractor_id);
+
+    if (!preservedAssistantEngineerId && !preservedJuniorEngineerId && !preservedContractorId) {
       setError('Select at least one AE, JE, or Contractor before saving.');
+      return;
+    }
+    if (preservedAssistantEngineerId && !findActiveWorkspaceUser(workspaceUsers, selectedWorkspace.id, preservedAssistantEngineerId, 'assistant_engineer')) {
+      setError('Selected Assistant Engineer must be an active assistant_engineer profile in this workspace.');
+      return;
+    }
+    if (preservedJuniorEngineerId && !findActiveWorkspaceUser(workspaceUsers, selectedWorkspace.id, preservedJuniorEngineerId, 'junior_engineer')) {
+      setError('Selected Junior Engineer must be an active junior_engineer profile in this workspace.');
+      return;
+    }
+    if (preservedContractorId && !findActiveWorkspaceUser(workspaceUsers, selectedWorkspace.id, preservedContractorId, 'contractor')) {
+      setError('Selected Contractor must be an active contractor profile in this workspace.');
       return;
     }
 
     setSaving(true);
     try {
-      const contractor = contractorOptions.find((option) => option.id === contractorId);
+      const contractor = contractorOptions.find((option) => option.id === preservedContractorId);
       const payload: AssignmentPayload = {
         workspace_id: selectedWorkspace.id,
         project_id: selectedProject.id,
         project_table: selectedProject.table,
         executive_engineer_id: selectedWorkspace.executive_engineer_id,
-        assistant_engineer_id: assistantEngineerId || null,
-        junior_engineer_id: juniorEngineerId || null,
-        contractor_id: contractorId || null,
-        contractor_company_name: contractor?.label || selectedProject.contractorName || null,
+        assistant_engineer_id: preservedAssistantEngineerId,
+        junior_engineer_id: preservedJuniorEngineerId,
+        contractor_id: preservedContractorId,
+        contractor_company_name: contractor?.label || selectedProject.contractorName || existing?.contractor_company_name || null,
         access_status: status,
       };
-
-      const existing = assignments.find((assignment) => (
-        assignment.workspace_id === payload.workspace_id
-        && assignment.project_id === payload.project_id
-        && (assignment.project_table || 'gov_projects') === payload.project_table
-      ));
 
       const targetId = editingId || existing?.id;
       const result = targetId

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ClipboardCheck, Plus, X, Zap,
   Shield, Star
@@ -29,6 +30,8 @@ const recColors: Record<string, string> = {
 export function InspectionsPage() {
   const { user } = useAuth();
   const toast = useToast();
+  const [searchParams] = useSearchParams();
+  const preselectedProjectId = searchParams.get('projectId');
   const [inspections, setInspections] = useState<InspectionReport[]>([]);
   const [projects, setProjects] = useState<GovProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +57,11 @@ export function InspectionsPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+  useEffect(() => {
+    if (!preselectedProjectId || !projects.some((project) => project.id === preselectedProjectId)) return;
+    setForm((current) => current.project_id ? current : { ...current, project_id: preselectedProjectId });
+    setShowForm(true);
+  }, [preselectedProjectId, projects]);
 
   async function createInspection() {
     if (!form.project_id) { toast('Select a project', 'warning'); return; }

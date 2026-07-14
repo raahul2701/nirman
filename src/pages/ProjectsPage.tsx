@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   FolderOpen, Plus, X, Calendar, MapPin, DollarSign,
   TrendingUp, CheckCircle, Clock, PauseCircle, XCircle
@@ -31,6 +32,7 @@ export function ProjectsPage() {
   const { user } = useAuth();
   const userId = user?.id;
   const toast = useToast();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -79,7 +81,11 @@ export function ProjectsPage() {
       .eq('active', true)
       .limit(1);
     const workspaceId = workspaceUsers?.[0]?.workspace_id;
-    if (workspaceError || !workspaceId) { toast('Project created, but workspace assignment failed', 'error'); return; }
+    if (workspaceError || !workspaceId) {
+      toast(`Project created, but workspace assignment failed. Project ID: ${data.id}`, 'error');
+      navigate(`/enterprise/assign-project?projectId=${data.id}&projectTable=projects`);
+      return;
+    }
 
     const assignmentPayload = {
       workspace_id: workspaceId,
@@ -88,18 +94,40 @@ export function ProjectsPage() {
       executive_engineer_id: userId,
       access_status: 'active',
     };
-    const assignmentResult = await supabase
+    const existingAssignment = await supabase
       .from('project_assignments')
-      .insert(assignmentPayload)
-      .select()
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('project_id', data.id)
+      .eq('project_table', 'projects')
       .maybeSingle();
+
+    if (existingAssignment.error) {
+      setSubmitting(false);
+      toast(`Project created, but assignment lookup failed. Project ID: ${data.id}`, 'error');
+      navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${data.id}&projectTable=projects`);
+      return;
+    }
+
+    const assignmentResult = existingAssignment.data?.id
+      ? await supabase
+        .from('project_assignments')
+        .update(assignmentPayload)
+        .eq('id', existingAssignment.data.id)
+        .select()
+        .maybeSingle()
+      : await supabase
+        .from('project_assignments')
+        .insert(assignmentPayload)
+        .select()
+        .maybeSingle();
     const assignmentErrorDetails = assignmentResult.error as {
       code?: string;
       message?: string;
       details?: string;
       hint?: string;
     } | null;
-    console.log('[project_assignments insert trace]', {
+    console.log('[project_assignments save trace]', {
       authenticatedUserId: userId,
       insertedProjectId: data.id,
       workspaceId,
@@ -111,14 +139,15 @@ export function ProjectsPage() {
       errorHint: assignmentErrorDetails?.hint,
     });
     if (assignmentResult.error) {
-      console.error('[project_assignments insert failed]', {
+      console.error('[project_assignments save failed]', {
         code: assignmentErrorDetails?.code,
         message: assignmentErrorDetails?.message,
         details: assignmentErrorDetails?.details,
         hint: assignmentErrorDetails?.hint,
       });
-      toast('Project created, but assignment failed', 'error');
-      throw assignmentResult.error;
+      toast(`Project created, but assignment failed. Project ID: ${data.id}`, 'error');
+      navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${data.id}&projectTable=projects`);
+      return;
     }
 
     if (data) setProjects(prev => [data as Project, ...prev]);

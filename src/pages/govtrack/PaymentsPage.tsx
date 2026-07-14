@@ -33,6 +33,7 @@ export function PaymentsPage() {
   const toast = useToast();
   const [searchParams] = useSearchParams();
   const preselectedMilestone = searchParams.get('milestone');
+  const preselectedProjectId = searchParams.get('projectId');
 
   const [payments, setPayments] = useState<PaymentRequest[]>([]);
   const [projects, setProjects] = useState<GovProject[]>([]);
@@ -71,6 +72,12 @@ export function PaymentsPage() {
   useEffect(() => {
     if (preselectedMilestone) setShowForm(true);
   }, [preselectedMilestone]);
+
+  useEffect(() => {
+    if (!preselectedProjectId || !projects.some((project) => project.id === preselectedProjectId)) return;
+    setForm((current) => current.project_id ? current : { ...current, project_id: preselectedProjectId });
+    setShowForm(true);
+  }, [preselectedProjectId, projects]);
 
   const loadMilestones = useCallback(async () => {
     if (!form.project_id) return;

@@ -109,6 +109,18 @@ function selectValue(value: string) {
   return value || EMPTY_VALUE;
 }
 
+function findActiveWorkspaceUser(users: WorkspaceUserRow[], workspaceId: string, userId: string, role: WorkspaceRole) {
+  return users.find((workspaceUser) => (
+    workspaceUser.workspace_id === workspaceId
+    && workspaceUser.user_id === userId
+    && workspaceUser.role === role
+    && workspaceUser.active !== false
+  ));
+}
+
+function preserveExistingSelection(selectedId: string, existingId: string | null | undefined) {
+  return selectedId || existingId || null;
+}
 export function StartPilotWizardPage() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
@@ -304,18 +316,35 @@ export function StartPilotWizardPage() {
       return;
     }
 
+    const preservedAssistantEngineerId = preserveExistingSelection(assistantEngineerId, existingAssignment?.assistant_engineer_id);
+    const preservedJuniorEngineerId = preserveExistingSelection(juniorEngineerId, existingAssignment?.junior_engineer_id);
+    const preservedContractorId = preserveExistingSelection(contractorId, existingAssignment?.contractor_id);
+
+    if (preservedAssistantEngineerId && !findActiveWorkspaceUser(workspaceUsers, selectedWorkspace.id, preservedAssistantEngineerId, 'assistant_engineer')) {
+      setError('Selected Assistant Engineer must be an active assistant_engineer profile in this workspace.');
+      return;
+    }
+    if (preservedJuniorEngineerId && !findActiveWorkspaceUser(workspaceUsers, selectedWorkspace.id, preservedJuniorEngineerId, 'junior_engineer')) {
+      setError('Selected Junior Engineer must be an active junior_engineer profile in this workspace.');
+      return;
+    }
+    if (preservedContractorId && !findActiveWorkspaceUser(workspaceUsers, selectedWorkspace.id, preservedContractorId, 'contractor')) {
+      setError('Selected Contractor must be an active contractor profile in this workspace.');
+      return;
+    }
+
     setSaving(true);
     try {
-      const contractor = contractors.find((item) => item.id === contractorId);
+      const contractor = contractors.find((item) => item.id === preservedContractorId);
       const payload = {
         workspace_id: selectedWorkspace.id,
         project_id: selectedProject.id,
         project_table: selectedProject.table,
         executive_engineer_id: selectedWorkspace.executive_engineer_id,
-        assistant_engineer_id: assistantEngineerId || null,
-        junior_engineer_id: juniorEngineerId || null,
-        contractor_id: contractorId || null,
-        contractor_company_name: contractor?.label || selectedProject.contractorName || null,
+        assistant_engineer_id: preservedAssistantEngineerId,
+        junior_engineer_id: preservedJuniorEngineerId,
+        contractor_id: preservedContractorId,
+        contractor_company_name: contractor?.label || selectedProject.contractorName || existingAssignment?.contractor_company_name || null,
         access_status: status,
       };
 

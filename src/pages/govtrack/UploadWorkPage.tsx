@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Camera, Upload, X, MapPin,
   Zap
@@ -39,6 +40,8 @@ const reviewColors: Record<string, string> = {
 export function UploadWorkPage() {
   const { user } = useAuth();
   const toast = useToast();
+  const [searchParams] = useSearchParams();
+  const preselectedProjectId = searchParams.get('projectId');
   const [projects, setProjects] = useState<GovProject[]>([]);
   const [milestones, setMilestones] = useState<PaymentMilestone[]>([]);
   const [uploads, setUploads] = useState<WorkUpload[]>([]);
@@ -65,6 +68,11 @@ export function UploadWorkPage() {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+  useEffect(() => {
+    if (!preselectedProjectId || !projects.some((project) => project.id === preselectedProjectId)) return;
+    setForm((current) => current.project_id ? current : { ...current, project_id: preselectedProjectId });
+    setShowForm(true);
+  }, [preselectedProjectId, projects]);
 
   const loadMilestones = useCallback(async () => {
     if (!form.project_id) return;

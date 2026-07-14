@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ClipboardCheck, FileText, Ruler, UploadCloud } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { Card, StatCard } from '../../components/ui/Card';
@@ -5,6 +6,10 @@ import { Button } from '../../components/ui/Button';
 import { surveyQuantityDemo } from '../../services/executionDemoData';
 
 export function SurveyQuantityPage() {
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('projectId');
+  const projectTable = searchParams.get('projectTable');
+  const projectContext = projectId ? `${projectTable || 'gov_projects'}:${projectId}` : '';
   const warnings = surveyQuantityDemo.filter((row) => row.shortfallCum > 0);
 
   return (
@@ -21,7 +26,7 @@ export function SurveyQuantityPage() {
           <h3 className="text-sm font-bold text-[#12332D]">TBM Manual Entry</h3>
           <div className="mt-4 grid gap-3">
             {['Project', 'Chainage', 'TBM reference', 'Benchmark RL', 'Backsight', 'Intermediate sight', 'Foresight', 'Formation level', 'Design level', 'Layer/component type'].map((label) => (
-              <input key={label} aria-label={label} placeholder={label} className="rounded-lg border border-[#EFE8D4] bg-white px-3 py-2 text-sm outline-none focus:border-[#005F56]" />
+              <input key={label} aria-label={label} placeholder={label} defaultValue={label === 'Project' ? projectContext : ''} className="rounded-lg border border-[#EFE8D4] bg-white px-3 py-2 text-sm outline-none focus:border-[#005F56]" />
             ))}
             <textarea aria-label="Remarks" placeholder="Remarks" className="min-h-20 rounded-lg border border-[#EFE8D4] bg-white px-3 py-2 text-sm outline-none focus:border-[#005F56]" />
           </div>

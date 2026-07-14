@@ -103,19 +103,52 @@ export function GovProjectsPage() {
 
     const workspaceId = await getActiveWorkspaceId();
     if (workspaceId) {
-      const assignmentResult = await supabase.from('project_assignments').insert({
+      const assignmentPayload = {
         workspace_id: workspaceId,
         project_id: data.id,
         project_table: 'gov_projects',
         executive_engineer_id: user.id,
         access_status: 'active',
-      }).select().maybeSingle();
+      };
+      const existingAssignment = await supabase
+        .from('project_assignments')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('project_id', data.id)
+        .eq('project_table', 'gov_projects')
+        .maybeSingle();
+
+      if (existingAssignment.error) {
+        setSubmitting(false);
+        toast(`Project created, but assignment lookup failed. Project ID: ${data.id}`, 'error');
+        navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${data.id}&projectTable=gov_projects`);
+        return;
+      }
+
+      const assignmentResult = existingAssignment.data?.id
+        ? await supabase
+          .from('project_assignments')
+          .update(assignmentPayload)
+          .eq('id', existingAssignment.data.id)
+          .select()
+          .maybeSingle()
+        : await supabase
+          .from('project_assignments')
+          .insert(assignmentPayload)
+          .select()
+          .maybeSingle();
 
       if (assignmentResult.error) {
         setSubmitting(false);
-        toast('Project created, but workspace assignment failed', 'error');
+        toast(`Project created, but workspace assignment failed. Project ID: ${data.id}`, 'error');
+        navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${data.id}&projectTable=gov_projects`);
         return;
       }
+    } else {
+      setSubmitting(false);
+      toast(`Project created, but no active workspace was found. Project ID: ${data.id}`, 'error');
+      navigate(`/enterprise/assign-project?projectId=${data.id}&projectTable=gov_projects`);
+      return;
     }
 
     setSubmitting(false);
