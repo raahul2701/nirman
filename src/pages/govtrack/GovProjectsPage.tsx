@@ -45,7 +45,7 @@ const typeColors: Record<string, string> = {
 const GOV_PROJECT_SELECT = 'id, project_name, project_code, department, contractor_name, contractor_id, engineer_id, je_id, se_id, total_contract_value, start_date, end_date, contract_pdf_url, location, district, state, project_type, status, created_at';
 
 export function GovProjectsPage() {
-  const { user } = useAuth();
+  const { user, session, loading: authLoading, profile, profileLoading } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<GovProject[]>([]);
@@ -54,6 +54,8 @@ export function GovProjectsPage() {
   const [filterType, setFilterType] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const sessionReady = !authLoading && !profileLoading && Boolean(session && user && profile);
+  const secureSessionMessage = authLoading || profileLoading ? 'Restoring your secure session...' : !session ? 'Your session has expired. Please sign in again.' : null;
   const [form, setForm] = useState({
     project_name: '', project_code: '', department: 'PWD',
     contractor_name: '', total_contract_value: '', start_date: '',
@@ -61,11 +63,11 @@ export function GovProjectsPage() {
   });
 
   const loadProjects = useCallback(async () => {
-    if (!user) return;
+    if (authLoading || !session || !user) return;
     const data = await loadAssignedGovProjects(user.id);
     setProjects(data);
     setLoading(false);
-  }, [user]);
+  }, [authLoading, session, user]);
 
   useEffect(() => {
     void loadProjects();
@@ -75,17 +77,45 @@ export function GovProjectsPage() {
     if (!form.project_name || !form.project_code) {
       toast('Project name and code are required', 'warning'); return;
     }
-    if (!user) {
-      toast('You must be signed in to create a project', 'warning'); return;
+    if (authLoading || profileLoading) {
+      toast('Restoring your secure session...', 'warning'); return;
     }
+    if (!session || !user) {
+      toast('Your session has expired. Please sign in again.', 'warning'); return;
+    }
+
     setSubmitting(true);
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const activeSession = sessionData.session;
+    const activeUserId = activeSession?.user.id;
+
+    if (import.meta.env.DEV) {
+      console.info('[govtrack] create project auth check', {
+        sessionPresent: Boolean(activeSession),
+        contextUserMatchesSession: Boolean(activeUserId && user.id === activeUserId),
+      });
+    }
+
+    if (sessionError || !activeSession || !activeUserId) {
+      setSubmitting(false);
+      toast('Your session has expired. Please sign in again.', 'error');
+      return;
+    }
+
+    if (activeUserId !== user.id) {
+      setSubmitting(false);
+      toast('Secure session mismatch detected. Please sign in again.', 'error');
+      return;
+    }
+
     const code = form.project_code.toUpperCase();
     const payload = {
       project_name: form.project_name,
       project_code: code,
       department: form.department,
       contractor_name: form.contractor_name,
-      engineer_id: user.id,
+      engineer_id: activeUserId,
       total_contract_value: parseFloat(form.total_contract_value) || 0,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
@@ -114,7 +144,7 @@ export function GovProjectsPage() {
         workspace_id: workspaceId,
         project_id: data.id,
         project_table: 'gov_projects',
-        executive_engineer_id: user.id,
+        executive_engineer_id: activeUserId,
         access_status: 'active',
       };
       const existingAssignment = await supabase
@@ -213,9 +243,14 @@ export function GovProjectsPage() {
                 <Input label="Location" placeholder="Nagpur, Maharashtra" value={form.location} onChange={e => setForm(p => ({ ...p, location: e.target.value }))} icon={<MapPin size={13} />} />
               </div>
             </div>
+            {secureSessionMessage && (
+              <div className="mt-4 rounded-lg border border-[#CDBD82] bg-[#FFF8E1] px-3 py-2 text-xs text-[#6B5A1E]">
+                {secureSessionMessage}
+              </div>
+            )}
             <div className="flex gap-3 mt-5">
               <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button variant="primary" className="flex-1" loading={submitting} onClick={createProject}>Create Project</Button>
+              <Button variant="primary" className="flex-1" loading={submitting} disabled={!sessionReady} onClick={createProject}>Create Project</Button>
             </div>
             {featureFlags.pilotMode && (
               <div className="mt-4 rounded-lg border border-[#CDBD82] bg-[#FFF8E1] px-3 py-2 text-xs text-[#6B5A1E]">
