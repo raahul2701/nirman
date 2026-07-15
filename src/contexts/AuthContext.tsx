@@ -10,6 +10,7 @@ const SESSION_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const SESSION_REFRESH_LEAD = 60 * 1000; // refresh 1 minute before expiry
 const ACTIVITY_THROTTLE_MS = 1000;
 const REFRESH_FAILURE_COOLDOWN = 30 * 1000;
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 10000;
 const DEVICE_SESSION_KEY = 'nirman-device-id';
 type AuditLogInsert = {
   user_id?: string;
@@ -47,6 +48,21 @@ function isLikelyOffline(error: unknown) {
   return /Failed to fetch|NetworkError|Load failed|fetch/i.test(error.message);
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  });
+}
+
 function getDeviceId() {
   const existing = localStorage.getItem(DEVICE_SESSION_KEY);
   if (existing) return existing;
@@ -60,6 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const userId = user?.id;
   const sessionExpiresAt = session?.expires_at;
@@ -101,21 +120,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    if (!mountedRef.current) return;
+  const fetchProfile = useCallback(async (nextUserId: string) => {
+    if (!mountedRef.current) return null;
+    setProfileLoading(true);
+    setProfileError(null);
     try {
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-      if (mountedRef.current && data) {
-        setProfile(data as Profile);
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', nextUserId).maybeSingle();
+      if (error) throw error;
+      const nextProfile = (data as Profile | null) ?? null;
+      if (mountedRef.current) {
+        setProfile(nextProfile);
       }
+      return nextProfile;
     } catch (error) {
-      logger.error('Failed to fetch profile', { error, userId });
+      const message = getErrorMessage(error, 'Profile could not be loaded.');
+      if (mountedRef.current) {
+        setProfile(null);
+        setProfileError(message);
+      }
+      logger.error('Failed to fetch profile', { error, userId: nextUserId });
+      return null;
+    } finally {
+      if (mountedRef.current) {
+        setProfileLoading(false);
+      }
     }
   }, []);
 
   const logAudit = useCallback(async (action: string, details?: Record<string, unknown>, userId?: string) => {
     if (!mountedRef.current) return;
-    const auditUserId = userId ?? user?.id;
+    const auditUserId = userId ?? currentSessionRef.current?.user?.id;
     if (!auditUserId) return;
 
     try {
@@ -130,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       logger.error('Failed to log audit event', { error, action, userId: auditUserId });
     }
-  }, [user?.id]);
+  }, []);
 
   const trackDeviceSession = useCallback(async (nextUserId: string) => {
     try {
@@ -154,9 +188,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       await supabase.auth.signOut();
       if (mountedRef.current) {
+        currentSessionRef.current = null;
         setUser(null);
         setSession(null);
         setProfile(null);
+        setProfileLoading(false);
+        setAuthError(null);
+        setProfileError(null);
       }
       logger.info('User signed out successfully');
     } catch (error) {
@@ -176,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       if (data.session && mountedRef.current) {
         currentSessionRef.current = data.session;
+        setAuthError(null);
         setSession(data.session);
         setUser(data.session.user);
         void trackDeviceSession(data.session.user.id);
@@ -214,7 +253,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logger.warn('Failed login attempt', { email, error: error.message });
         return { error: error as Error };
       }
-      void logAudit('login', { table_name: 'auth' });
+      setAuthError(null);
+      void logAudit('login', { table_name: 'auth' }, data.user?.id);
       logLoginSuccess(data.user, data.user?.email || email);
       updateActivity();
       return { error: null };
@@ -270,29 +310,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    const applySession = async (nextSession: Session | null, event?: AuthChangeEvent) => {
+      if (!mountedRef.current || cancelled) return;
+
+      currentSessionRef.current = nextSession;
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      setAuthError(null);
+
+      if (nextSession?.user) {
+        setProfile(null);
+        await fetchProfile(nextSession.user.id);
+        void trackDeviceSession(nextSession.user.id);
+        void logAudit(event || 'session_init', { table_name: 'auth' }, nextSession.user.id);
+        if (event === 'SIGNED_IN' || !event) {
+          logLoginSuccess(nextSession.user, nextSession.user.email);
+        }
+        logger.info(event ? `Auth state changed: ${event}` : 'Initial auth session loaded', { userId: nextSession.user.id });
+      } else {
+        setProfile(null);
+        setProfileLoading(false);
+        setProfileError(null);
+        if (event === 'SIGNED_OUT') {
+          void logAudit('logout');
+          logger.info('User signed out');
+        }
+      }
+    };
+
     const initializeAuth = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await withTimeout(
+          supabase.auth.getSession(),
+          AUTH_BOOTSTRAP_TIMEOUT_MS,
+          'Secure session restoration timed out.'
+        );
         if (error) {
           logger.warn('Failed to retrieve initial session', { error });
+          setAuthError(error.message);
         }
 
-        const initialSession = data?.session ?? null;
-        currentSessionRef.current = initialSession;
-
-        if (mountedRef.current && !cancelled) {
-          setSession(initialSession);
-          setUser(initialSession?.user ?? null);
-        }
-
-        if (initialSession?.user && !cancelled) {
-          await fetchProfile(initialSession.user.id);
-          void trackDeviceSession(initialSession.user.id);
-          void logAudit('session_init', { table_name: 'auth' }, initialSession.user.id);
-          logLoginSuccess(initialSession.user, initialSession.user.email);
-          logger.info('Initial auth session loaded', { userId: initialSession.user.id });
-        }
+        await applySession(data?.session ?? null);
       } catch (error) {
+        const message = getErrorMessage(error, 'Secure session could not be restored.');
+        if (mountedRef.current && !cancelled) {
+          currentSessionRef.current = null;
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setProfileLoading(false);
+          setAuthError(message);
+        }
         logger.error('Auth initialization failed', { error });
       } finally {
         if (mountedRef.current && !cancelled) {
@@ -311,25 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      currentSessionRef.current = nextSession;
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-
-      if (nextSession?.user) {
-        await fetchProfile(nextSession.user.id);
-        void trackDeviceSession(nextSession.user.id);
-        void logAudit(event, { table_name: 'auth' }, nextSession.user.id);
-        if (event === 'SIGNED_IN') {
-          logLoginSuccess(nextSession.user, nextSession.user.email);
-        }
-        logger.info(`Auth state changed: ${event}`, { userId: nextSession.user.id });
-      } else {
-        setProfile(null);
-        if (event === 'SIGNED_OUT') {
-          void logAudit('logout');
-          logger.info('User signed out');
-        }
-      }
+      await applySession(nextSession, event);
     });
 
     return () => {
@@ -344,6 +394,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       profile,
       loading,
+      profileLoading,
+      authError,
+      profileError,
       signIn,
       signUp,
       signOut,
@@ -352,7 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       lastActivity,
       updateActivity,
     }),
-    [user, session, profile, loading, signIn, signUp, signOut, refreshProfile, refreshSession, lastActivity, updateActivity]
+    [user, session, profile, loading, profileLoading, authError, profileError, signIn, signUp, signOut, refreshProfile, refreshSession, lastActivity, updateActivity]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
