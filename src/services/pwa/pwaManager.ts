@@ -7,11 +7,14 @@ type BeforeInstallPromptEvent = Event & {
 
 class PwaManager {
   private installPrompt: BeforeInstallPromptEvent | null = null;
+  private initialized = false;
+  private controllerChangeNotified = false;
   private updateListeners = new Set<() => void>();
   private networkListeners = new Set<(online: boolean, effectiveType?: string) => void>();
 
   init() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || this.initialized) return;
+    this.initialized = true;
 
     window.addEventListener('beforeinstallprompt', (event) => {
       this.installPrompt = null;
@@ -24,6 +27,8 @@ class PwaManager {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (this.controllerChangeNotified) return;
+        this.controllerChangeNotified = true;
         this.updateListeners.forEach((listener) => listener());
       });
     }

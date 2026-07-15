@@ -1,5 +1,5 @@
 // Service Worker for NIRMAN AI PWA
-const CACHE_VERSION = 'v1.2.0';
+const CACHE_VERSION = 'v1.2.1';
 const STATIC_CACHE = `nirman-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `nirman-dynamic-${CACHE_VERSION}`;
 
@@ -51,6 +51,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request, DYNAMIC_CACHE, { cacheResponse: false }));
+    return;
+  }
+
   event.respondWith(networkFirst(request, DYNAMIC_CACHE));
 });
 
@@ -71,10 +76,10 @@ async function cacheFirst(request) {
   }
 }
 
-async function networkFirst(request, cacheName = DYNAMIC_CACHE) {
+async function networkFirst(request, cacheName = DYNAMIC_CACHE, options = { cacheResponse: true }) {
   try {
     const networkResponse = await fetch(request, { cache: 'no-store' });
-    if (networkResponse.ok) {
+    if (networkResponse.ok && options.cacheResponse) {
       const cache = await caches.open(cacheName);
       cache.put(request, networkResponse.clone());
     }

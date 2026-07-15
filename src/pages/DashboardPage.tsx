@@ -141,14 +141,14 @@ const ProblemRow = memo(function ProblemRow({ problem, onOpen }: ProblemRowProps
 });
 
 export function DashboardPage() {
-  const { user, profile } = useAuth();
+  const { user, profile, profileLoading, profileError } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ activeProjects: 0, openIssues: 0, workersPresent: 0, lowStockAlerts: 0, surveysCompleted: 0 });
   const [recentProblems, setRecentProblems] = useState<Problem[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [roleDashboardFailed, setRoleDashboardFailed] = useState(false);
-  const dashboardRole = getDashboardRole(profile?.role);
-  const shouldShowRoleDashboard = !roleDashboardFailed && !!dashboardRole;
+  const dashboardRole = profile ? getDashboardRole(profile.role) : null;
+  const shouldShowRoleDashboard = !roleDashboardFailed && !!dashboardRole && dashboardRole !== 'default';
   const dashboardTitle = dashboardRole === 'executive_engineer'
     ? 'Executive Engineer Project Command Center'
     : dashboardRole === 'assistant_engineer'
@@ -169,7 +169,7 @@ export function DashboardPage() {
   );
 
   useEffect(() => {
-    if (!user || shouldShowRoleDashboard) {
+    if (!user || profileLoading || !profile || shouldShowRoleDashboard) {
       setLoadingStats(false);
       return;
     }
@@ -223,7 +223,7 @@ export function DashboardPage() {
     return () => {
       isActive = false;
     };
-  }, [user, shouldShowRoleDashboard]);
+  }, [user, profile, profileLoading, shouldShowRoleDashboard]);
 
   const actionButtons = useMemo(
     () => QUICK_ACTIONS.map((action) => (
@@ -239,6 +239,35 @@ export function DashboardPage() {
     )),
     [navigate]
   );
+
+  if (user && profileLoading) {
+    return (
+      <AppLayout title="NIRMAN AI Dashboard" subtitle="Loading your verified role">
+        <DashboardSectionSkeleton />
+      </AppLayout>
+    );
+  }
+
+  if (user && profileError && !profile) {
+    return (
+      <AppLayout title="NIRMAN AI Dashboard" subtitle="Role resolution failed">
+        <div className="rounded-lg border border-[#EFE8D4] bg-white p-5 text-sm text-[#6C7568]">
+          <p className="font-bold text-[#12332D]">Your secure session is active, but your role could not be loaded.</p>
+          <p className="mt-2">{profileError}</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (user && !profile) {
+    return (
+      <AppLayout title="NIRMAN AI Dashboard" subtitle="Role unavailable">
+        <div className="rounded-lg border border-[#EFE8D4] bg-white p-5 text-sm text-[#6C7568]">
+          <p className="font-bold text-[#12332D]">Your secure session is active, but no profile role is available.</p>
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (shouldShowRoleDashboard) {
     return (
