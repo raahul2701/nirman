@@ -16,6 +16,9 @@ type ProjectRow = {
   project_type?: string;
 };
 
+const PROJECTS_SELECT = 'id,name,code,budget,progress_percent,status';
+const GOV_PROJECTS_SELECT = 'id,project_name,project_code,total_contract_value,project_type,status';
+
 type ComponentRow = {
   project_id: string;
   component_type: string;
@@ -31,7 +34,7 @@ function normalizeProjectRow(row?: ProjectRow | null): Omit<DashboardProject, 'i
     name: row?.project_name || row?.name || 'Assigned Project',
     code: row?.project_code || row?.code || 'PROJECT',
     budget: Number(row?.total_contract_value ?? row?.budget ?? 0),
-    progress: row?.table === 'projects' ? Number(row?.progress_percent ?? 0) : null,
+    progress: row?.table === 'projects' && row?.progress_percent != null ? Number(row.progress_percent) : null,
     category: (row?.project_type as ProjectCategory) || ProjectCategory.OTHER,
   };
 }
@@ -74,8 +77,8 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   const govIds = assignments.filter((assignment) => normalizeProjectTable(assignment.project_table) === 'gov_projects').map((assignment) => assignment.project_id);
 
   const [legacyProjects, govProjects, componentResult] = await Promise.all([
-    legacyIds.length > 0 ? supabase.from('projects').select('id,name,project_name,code,project_code,budget,progress_percent,status').in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
-    govIds.length > 0 ? supabase.from('gov_projects').select('id,project_name,project_code,total_contract_value,project_type,status').in('id', govIds) : Promise.resolve({ data: [], error: null }),
+    legacyIds.length > 0 ? supabase.from('projects').select(PROJECTS_SELECT).in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
+    govIds.length > 0 ? supabase.from('gov_projects').select(GOV_PROJECTS_SELECT).in('id', govIds) : Promise.resolve({ data: [], error: null }),
     supabase
       .from('project_components')
       .select('project_id,component_type,component_name,planned_quantity,executed_quantity,unit,progress_percent')
@@ -83,21 +86,47 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
       .in('project_id', assignments.map((assignment) => assignment.project_id)),
   ]);
 
-  if (legacyProjects.error) throw legacyProjects.error;
-  if (govProjects.error) throw govProjects.error;
-  if (componentResult.error) throw componentResult.error;
+  const failedProjectTables = new Set<'projects' | 'gov_projects'>();
+  const projectLoadErrors: string[] = [];
+
+  if (legacyProjects.error) {
+    failedProjectTables.add('projects');
+    projectLoadErrors.push(`projects: ${legacyProjects.error.message}`);
+    console.warn('[dashboard] projects query failed', legacyProjects.error);
+  }
+
+  if (govProjects.error) {
+    failedProjectTables.add('gov_projects');
+    projectLoadErrors.push(`gov_projects: ${govProjects.error.message}`);
+    console.warn('[dashboard] gov_projects query failed', govProjects.error);
+  }
+
+  if (
+    (legacyIds.length === 0 || failedProjectTables.has('projects'))
+    && (govIds.length === 0 || failedProjectTables.has('gov_projects'))
+    && projectLoadErrors.length > 0
+  ) {
+    throw new Error(`Dashboard project loading failed for ${projectLoadErrors.join('; ')}`);
+  }
+
+  if (componentResult.error) {
+    console.warn('[dashboard] component progress query failed', componentResult.error);
+  }
 
   const rows = new Map<string, ProjectRow>();
-  ((legacyProjects.data || []) as Omit<ProjectRow, 'table'>[]).forEach((project) => rows.set(project.id, { ...project, table: 'projects' }));
-  ((govProjects.data || []) as Omit<ProjectRow, 'table'>[]).forEach((project) => rows.set(project.id, { ...project, table: 'gov_projects' }));
+  (!legacyProjects.error ? ((legacyProjects.data || []) as Omit<ProjectRow, 'table'>[]) : []).forEach((project) => rows.set(project.id, { ...project, table: 'projects' }));
+  (!govProjects.error ? ((govProjects.data || []) as Omit<ProjectRow, 'table'>[]) : []).forEach((project) => rows.set(project.id, { ...project, table: 'gov_projects' }));
   const componentsByProject = new Map<string, ComponentRow[]>();
-  ((componentResult.data || []) as ComponentRow[]).forEach((component) => {
+  (!componentResult.error ? ((componentResult.data || []) as ComponentRow[]) : []).forEach((component) => {
     const list = componentsByProject.get(component.project_id) || [];
     list.push(component);
     componentsByProject.set(component.project_id, list);
   });
 
-  return assignments.map((assignment: ProjectAssignment): DashboardProject => {
+  return assignments.filter((assignment) => {
+    const projectTable = normalizeProjectTable(assignment.project_table) || 'gov_projects';
+    return !failedProjectTables.has(projectTable);
+  }).map((assignment: ProjectAssignment): DashboardProject => {
     const projectTable = normalizeProjectTable(assignment.project_table) || 'gov_projects';
     const projectRow = rows.get(assignment.project_id);
     const baseProject = projectRow ? normalizeProjectRow(projectRow) : { name: 'Project record unavailable', code: assignment.project_id.slice(0, 8), budget: 0, progress: null, category: ProjectCategory.OTHER };

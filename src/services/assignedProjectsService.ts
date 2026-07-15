@@ -17,8 +17,7 @@ type ProjectOptionAssignment = {
 type LegacyProjectOptionRow = {
   id: string;
   name?: string | null;
-  project_name?: string | null;
-  project_code?: string | null;
+  code?: string | null;
 };
 
 type GovProjectOptionRow = {
@@ -132,7 +131,7 @@ export async function loadProjectOptionsForAssignments(assignments: ProjectOptio
       ? supabase.from('gov_projects').select('id, project_name, project_code, contractor_name').in('id', govIds)
       : Promise.resolve({ data: [], error: null }),
     legacyIds.length > 0
-      ? supabase.from('projects').select('id, name, project_name, project_code').in('id', legacyIds)
+      ? supabase.from('projects').select('id, name, code').in('id', legacyIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -150,8 +149,8 @@ export async function loadProjectOptionsForAssignments(assignments: ProjectOptio
   const legacyOptions = ((legacyResult.data || []) as LegacyProjectOptionRow[]).map((project) => ({
     id: project.id,
     table: 'projects' as const,
-    label: project.project_name || project.name || project.project_code || project.id,
-    code: project.project_code || null,
+    label: project.name || project.code || project.id,
+    code: project.code || null,
     contractorName: null,
   }));
 
