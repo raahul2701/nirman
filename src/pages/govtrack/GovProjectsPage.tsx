@@ -94,6 +94,8 @@ export function GovProjectsPage() {
       console.info('[govtrack] create project auth check', {
         sessionPresent: Boolean(activeSession),
         contextUserMatchesSession: Boolean(activeUserId && user.id === activeUserId),
+        engineerIdMatchesSession: Boolean(activeUserId && user.id === activeUserId),
+        requestStage: 'session_validation',
       });
     }
 
@@ -123,18 +125,20 @@ export function GovProjectsPage() {
       project_type: form.project_type,
       status: 'active',
     };
+    const projectStage = 'project_insert_returning';
     const { data, error } = await supabase.from('gov_projects').insert(payload).select(GOV_PROJECT_SELECT).maybeSingle();
 
     if (error) {
       setSubmitting(false);
       const duplicateCode = error.code === '23505' || /duplicate|unique/i.test(error.message || '');
-      toast(duplicateCode ? `Project code ${code} is already in use` : error.message || 'Failed to create project', 'error');
+      if (import.meta.env.DEV) console.warn('[govtrack] create project failed', { requestStage: projectStage, code: error.code, message: error.message });
+      toast(duplicateCode ? `Project code ${code} is already in use` : `Project creation failed (${projectStage}): ${error.message || 'Unknown error'}`, 'error');
       return;
     }
 
     if (!data?.id) {
       setSubmitting(false);
-      toast('Failed to create project', 'error');
+      toast(`Project creation failed (${projectStage}): no project id returned`, 'error');
       return;
     }
 

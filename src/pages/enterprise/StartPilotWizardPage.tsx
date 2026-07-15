@@ -49,6 +49,7 @@ type ContractorOption = {
 type LegacyProjectRow = {
   id: string;
   name?: string | null;
+  code?: string | null;
 };
 
 type GovProjectRow = {
@@ -123,7 +124,7 @@ function preserveExistingSelection(selectedId: string, existingId: string | null
 }
 export function StartPilotWizardPage() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user, profile, session, loading: authLoading, profileLoading } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -168,39 +169,41 @@ export function StartPilotWizardPage() {
       if (workspaceResult.error) throw workspaceResult.error;
 
       const loadedWorkspaces = (workspaceResult.data || []) as WorkspaceRow[];
-      const resolvedWorkspaceId = nextWorkspaceId || workspaceId || loadedWorkspaces[0]?.id || '';
+      const resolvedWorkspaceId = nextWorkspaceId || loadedWorkspaces[0]?.id || '';
       setWorkspaces(loadedWorkspaces);
       setWorkspaceId(resolvedWorkspaceId);
 
-      let loadedProjects: ProjectOption[] = [];
-      const govResult = await supabase
-        .from('gov_projects')
-        .select('id, project_name, project_code, contractor_name')
-        .order('created_at', { ascending: false });
-      if (govResult.error) {
-        nextWarnings.push(`gov_projects unavailable: ${govResult.error.message}`);
-        const legacyResult = await supabase
+      const [govResult, legacyResult] = await Promise.all([
+        supabase
+          .from('gov_projects')
+          .select('id, project_name, project_code, contractor_name')
+          .order('created_at', { ascending: false }),
+        supabase
           .from('projects')
-          .select('id, name')
-          .order('created_at', { ascending: false });
-        if (legacyResult.error) {
-          nextWarnings.push(`projects fallback unavailable: ${legacyResult.error.message}`);
-        } else {
-          loadedProjects = ((legacyResult.data || []) as LegacyProjectRow[]).map((project) => ({
-            id: project.id,
-            table: 'projects',
-            label: project.name || project.id,
-          }));
-        }
-      } else {
-        loadedProjects = ((govResult.data || []) as GovProjectRow[]).map((project) => ({
-          id: project.id,
-          table: 'gov_projects',
-          label: project.project_name || project.project_code || project.id,
-          code: project.project_code || null,
-          contractorName: project.contractor_name || null,
-        }));
-      }
+          .select('id, name, code')
+          .order('created_at', { ascending: false }),
+      ]);
+
+      if (govResult.error) nextWarnings.push(`gov_projects unavailable: ${govResult.error.message}`);
+      if (legacyResult.error) nextWarnings.push(`projects unavailable: ${legacyResult.error.message}`);
+
+      const govProjects = govResult.error ? [] : ((govResult.data || []) as GovProjectRow[]).map((project) => ({
+        id: project.id,
+        table: 'gov_projects' as const,
+        label: project.project_name || project.project_code || project.id,
+        code: project.project_code || null,
+        contractorName: project.contractor_name || null,
+        workspaceId: resolvedWorkspaceId || null,
+      }));
+      const legacyProjects = legacyResult.error ? [] : ((legacyResult.data || []) as LegacyProjectRow[]).map((project) => ({
+        id: project.id,
+        table: 'projects' as const,
+        label: project.name || project.id,
+        code: project.code || null,
+        contractorName: null,
+        workspaceId: resolvedWorkspaceId || null,
+      }));
+      const loadedProjects: ProjectOption[] = [...govProjects, ...legacyProjects];
       setProjects(loadedProjects);
       setProjectKey((current) => current || (loadedProjects[0] ? `${loadedProjects[0].table}:${loadedProjects[0].id}` : ''));
 
@@ -278,18 +281,12 @@ export function StartPilotWizardPage() {
       setWarnings(nextWarnings);
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, []);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    if (workspaceId && !loading) {
-      void loadData(workspaceId);
-      setAllowUpdate(false);
-    }
-  }, [loadData, loading, workspaceId]);
 
   useEffect(() => {
     setAllowUpdate(false);
@@ -387,8 +384,25 @@ export function StartPilotWizardPage() {
     const results: string[] = [];
 
     try {
-      if (!user?.id) {
-        throw new Error('Demo pilot data requires a signed-in user so workspace and project ownership can be assigned.');
+      if (authLoading || profileLoading) {
+        throw new Error('Session expired: your secure session is still being restored. Try again in a moment.');
+      }
+      if (!session || !user?.id) {
+        throw new Error('Session expired: your secure session is no longer valid. Please sign in again.');
+      }
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const activeSession = sessionData.session;
+      const activeUserId = activeSession?.user.id;
+      if (import.meta.env.DEV) {
+        console.info('[start-pilot] create demo auth check', {
+          sessionPresent: Boolean(activeSession),
+          contextUserMatchesSession: Boolean(activeUserId && user.id === activeUserId),
+          engineerIdMatchesSession: Boolean(activeUserId && user.id === activeUserId),
+          requestStage: 'session_validation',
+        });
+      }
+      if (sessionError || !activeSession || !activeUserId || activeUserId !== user.id) {
+        throw new Error('Session expired: your secure session is no longer valid. Please sign in again.');
       }
 
       const workspaceName = 'NIRMAN Pilot Demo Workspace';
@@ -415,8 +429,8 @@ export function StartPilotWizardPage() {
             district: 'Demo District',
             division_code: 'DEMO-DIV-001',
             status: 'active',
-            executive_engineer_id: user.id,
-            storage_namespace: `demo_${user.id.replace(/-/g, '').slice(0, 16)}`,
+            executive_engineer_id: activeUserId,
+            storage_namespace: `demo_${activeUserId.replace(/-/g, '').slice(0, 16)}`,
           } as WorkspaceInsertPayload)
           .select('id, executive_engineer_id, workspace_name, division_code')
           .maybeSingle();
@@ -431,7 +445,7 @@ export function StartPilotWizardPage() {
         .from('workspace_users')
         .upsert({
           workspace_id: workspace.id,
-          user_id: user.id,
+          user_id: activeUserId,
           role: 'executive_engineer',
           parent_user_id: null,
           subdivision_name: null,
@@ -472,7 +486,7 @@ export function StartPilotWizardPage() {
               name: 'Demo Road Construction Pilot Project',
               project_name: 'Demo Road Construction Pilot Project',
               description: 'Demo pilot project for testing NIRMAN assignment workflow.',
-              owner_id: user.id,
+              owner_id: activeUserId,
               company: profile?.company || 'NIRMAN Demo',
               status: 'active',
               start_date: new Date().toISOString().slice(0, 10),
@@ -482,7 +496,7 @@ export function StartPilotWizardPage() {
             } as LegacyProjectInsertPayload)
             .select('id, name')
             .maybeSingle();
-          if (legacyInsert.error) throw new Error(`projects fallback insert failed: ${legacyInsert.error.message}`);
+          if (legacyInsert.error) throw new Error(`Project creation failed: projects fallback insert failed: ${legacyInsert.error.message}`);
           project = { id: legacyInsert.data.id, table: 'projects', label: legacyInsert.data.name };
           results.push('Demo fallback project created.');
         }
@@ -499,7 +513,7 @@ export function StartPilotWizardPage() {
         const govProjectInsert = await supabase
           .from('gov_projects')
           .insert({
-            engineer_id: user.id,
+            engineer_id: activeUserId,
             project_name: 'Demo Road Construction Pilot Project',
             project_code: projectCode,
             department: 'Demo Public Works Department',
@@ -512,7 +526,7 @@ export function StartPilotWizardPage() {
             } as GovProjectInsertPayload)
           .select('id, project_name, project_code, contractor_name')
           .maybeSingle();
-        if (govProjectInsert.error) throw new Error(`gov_projects insert failed: ${govProjectInsert.error.message}`);
+        if (govProjectInsert.error) throw new Error(`Project creation failed: gov_projects insert failed: ${govProjectInsert.error.message}`);
         project = {
           id: govProjectInsert.data.id,
           table: 'gov_projects',
@@ -553,7 +567,7 @@ export function StartPilotWizardPage() {
           } as AssignmentPayload)
           .select('id')
           .maybeSingle();
-        if (assignmentInsert.error) throw new Error(`project_assignments insert failed: ${assignmentInsert.error.message}`);
+        if (assignmentInsert.error) throw new Error(`Assignment creation failed: project_assignments insert failed: ${assignmentInsert.error.message}`);
         assignmentId = assignmentInsert.data?.id;
         results.push('Demo pilot assignment created.');
         logPilotStarted(user, profile?.email || user.email, {
@@ -614,9 +628,8 @@ export function StartPilotWizardPage() {
   }));
   const projectOptions = projects.map((project) => ({
     value: `${project.table}:${project.id}`,
-    label: `${project.code ? `${project.code} - ` : ''}${project.label}`,
+    label: `${project.table === 'gov_projects' ? 'Government Project' : 'Workspace Project'} - ${project.code ? `${project.code} - ` : ''}${project.label}`,
   }));
-
   const missingTeam = [
     !assistantEngineerId ? 'Assistant Engineer' : '',
     !juniorEngineerId ? 'Junior Engineer' : '',
@@ -714,7 +727,7 @@ export function StartPilotWizardPage() {
           <h2 className="mb-2 text-lg font-semibold text-[#12332D]">Step 1: Select Workspace</h2>
           <p className="mb-5 text-sm text-[#4D5B52]">Choose the Executive Engineer workspace that will own the pilot project.</p>
           {workspaces.length ? (
-            <Select label="Workspace" value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} options={workspaceOptions} />
+            <Select label="Workspace" value={workspaceId} onChange={(event) => { setWorkspaceId(event.target.value); setAllowUpdate(false); void loadData(event.target.value); }} options={workspaceOptions} />
           ) : (
             <div className="rounded-lg border border-[#CDBD82] bg-[#FFF8E1] p-4">
               <p className="text-sm text-[#6B5A1E]">No EE workspace found. Create or configure one first, then return here.</p>
