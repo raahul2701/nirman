@@ -55,6 +55,7 @@ type ContractorLicenseRow = {
 type LegacyProjectRow = {
   id: string;
   name?: string | null;
+  code?: string | null;
   contractor_id?: string | null;
 };
 
@@ -172,38 +173,37 @@ export function AssignProjectPage() {
       const nextWorkspaceId = preferredWorkspaceId || loadedWorkspaces[0]?.id || '';
       setWorkspaceId((current) => preferredWorkspaceId || current || loadedWorkspaces[0]?.id || '');
 
-      let loadedProjects: ProjectOption[] = [];
-      const govProjectsResult = await supabase
-        .from('gov_projects')
-        .select('id, project_name, project_code, contractor_name')
-        .order('created_at', { ascending: false });
-
-      if (govProjectsResult.error) {
-        nextWarnings.push(`gov_projects unavailable: ${govProjectsResult.error.message}`);
-        const legacyResult = await supabase
+      const [govProjectsResult, legacyProjectsResult] = await Promise.all([
+        supabase
+          .from('gov_projects')
+          .select('id, project_name, project_code, contractor_name')
+          .order('created_at', { ascending: false }),
+        supabase
           .from('projects')
-          .select('id, name, contractor_id')
-          .order('created_at', { ascending: false });
-        if (legacyResult.error) {
-          nextWarnings.push(`projects fallback unavailable: ${legacyResult.error.message}`);
-        } else {
-          loadedProjects = ((legacyResult.data || []) as LegacyProjectRow[]).map((project) => ({
-            id: project.id,
-            table: 'projects',
-            label: project.name || project.id,
-            code: null,
-            contractorName: null,
-          }));
-        }
-      } else {
-        loadedProjects = ((govProjectsResult.data || []) as GovProjectRow[]).map((project) => ({
-          id: project.id,
-          table: 'gov_projects',
-          label: project.project_name || project.project_code || project.id,
-          code: project.project_code || null,
-          contractorName: project.contractor_name || null,
-        }));
-      }
+          .select('id, name, code, contractor_id')
+          .order('created_at', { ascending: false }),
+      ]);
+
+      if (govProjectsResult.error) nextWarnings.push(`gov_projects unavailable: ${govProjectsResult.error.message}`);
+      if (legacyProjectsResult.error) nextWarnings.push(`projects unavailable: ${legacyProjectsResult.error.message}`);
+
+      const govProjects = govProjectsResult.error ? [] : ((govProjectsResult.data || []) as GovProjectRow[]).map((project) => ({
+        id: project.id,
+        table: 'gov_projects' as const,
+        label: project.project_name || project.project_code || project.id,
+        code: project.project_code || null,
+        contractorName: project.contractor_name || null,
+        workspaceId: nextWorkspaceId || null,
+      }));
+      const legacyProjects = legacyProjectsResult.error ? [] : ((legacyProjectsResult.data || []) as LegacyProjectRow[]).map((project) => ({
+        id: project.id,
+        table: 'projects' as const,
+        label: project.name || project.id,
+        code: project.code || null,
+        contractorName: null,
+        workspaceId: nextWorkspaceId || null,
+      }));
+      const loadedProjects: ProjectOption[] = [...govProjects, ...legacyProjects];
       setProjects(loadedProjects);
       setProjectKey((current) => current || (loadedProjects[0] ? `${loadedProjects[0].table}:${loadedProjects[0].id}` : ''));
 
@@ -280,10 +280,6 @@ export function AssignProjectPage() {
     loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    if (!workspaceId || loading) return;
-    loadData(workspaceId);
-  }, [loadData, loading, workspaceId]);
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
   const selectedProject = projects.find((project) => `${project.table}:${project.id}` === projectKey);
@@ -429,9 +425,21 @@ export function AssignProjectPage() {
 
   const projectOptions = projects.map((project) => ({
     value: `${project.table}:${project.id}`,
-    label: `${project.code ? `${project.code} - ` : ''}${project.label}`,
+    label: `${project.table === 'gov_projects' ? 'Government Project' : 'Workspace Project'} - ${project.code ? `${project.code} - ` : ''}${project.label}`,
   }));
 
+  const canManageAssignment = Boolean(user?.id && selectedWorkspace && (selectedWorkspace.executive_engineer_id === user.id || profile?.role === 'admin' || profile?.role === 'super_admin'));
+  const assignmentBlockReason = loading
+    ? 'Assignment data is still loading.'
+    : saving
+      ? 'Assignment is saving.'
+      : !workspaceId
+        ? 'Select a valid workspace.'
+        : !projectKey || !selectedProject
+          ? 'Select a valid project.'
+          : !canManageAssignment
+            ? 'Your role cannot update this assignment.'
+            : null;
   return (
     <AppLayout title="Assign Pilot Project" subtitle="Map one project to EE workspace, AE, JE, and Contractor">
       {loading && (
@@ -501,7 +509,7 @@ export function AssignProjectPage() {
             <Select
               label="Workspace"
               value={workspaceId}
-              onChange={(event) => setWorkspaceId(event.target.value)}
+              onChange={(event) => { setWorkspaceId(event.target.value); void loadData(event.target.value); }}
               options={workspaceOptions.length ? workspaceOptions : [{ value: '', label: 'No workspace available' }]}
               disabled={loading || workspaceOptions.length === 0}
             />
@@ -551,10 +559,11 @@ export function AssignProjectPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <Button variant="primary" icon={<Save size={14} />} loading={saving} disabled={loading || !workspaceId || !projectKey} onClick={saveAssignment}>
+            <Button variant="primary" icon={<Save size={14} />} loading={saving} disabled={Boolean(assignmentBlockReason)} onClick={saveAssignment}>
               {editingId ? 'Update Assignment' : 'Save Assignment'}
             </Button>
             <Button variant="outline" onClick={resetForm}>Clear</Button>
+            {assignmentBlockReason && <p className="basis-full text-xs text-[#6C7568]">{assignmentBlockReason}</p>}
           </div>
         </Card>
 
