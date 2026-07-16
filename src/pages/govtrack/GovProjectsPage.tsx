@@ -42,7 +42,6 @@ const typeColors: Record<string, string> = {
   dam: '#0891B2', irrigation: '#00D4AA', railway: '#F59E0B', other: '#6B7280',
 };
 
-const GOV_PROJECT_SELECT = 'id, project_name, project_code, department, contractor_name, contractor_id, engineer_id, je_id, se_id, total_contract_value, start_date, end_date, contract_pdf_url, location, district, state, project_type, status, created_at';
 
 export function GovProjectsPage() {
   const { user, session, loading: authLoading, profile, profileLoading } = useAuth();
@@ -112,7 +111,9 @@ export function GovProjectsPage() {
     }
 
     const code = form.project_code.toUpperCase();
+    const projectId = crypto.randomUUID();
     const payload = {
+      id: projectId,
       project_name: form.project_name,
       project_code: code,
       department: form.department,
@@ -125,8 +126,8 @@ export function GovProjectsPage() {
       project_type: form.project_type,
       status: 'active',
     };
-    const projectStage = 'project_insert_returning';
-    const { data, error } = await supabase.from('gov_projects').insert(payload).select(GOV_PROJECT_SELECT).maybeSingle();
+    const projectStage = 'project_insert';
+    const { error } = await supabase.from('gov_projects').insert(payload);
 
     if (error) {
       setSubmitting(false);
@@ -136,17 +137,11 @@ export function GovProjectsPage() {
       return;
     }
 
-    if (!data?.id) {
-      setSubmitting(false);
-      toast(`Project creation failed (${projectStage}): no project id returned`, 'error');
-      return;
-    }
-
     const workspaceId = await getActiveWorkspaceId();
     if (workspaceId) {
       const assignmentPayload = {
         workspace_id: workspaceId,
-        project_id: data.id,
+        project_id: projectId,
         project_table: 'gov_projects',
         executive_engineer_id: activeUserId,
         access_status: 'active',
@@ -155,14 +150,14 @@ export function GovProjectsPage() {
         .from('project_assignments')
         .select('id')
         .eq('workspace_id', workspaceId)
-        .eq('project_id', data.id)
+        .eq('project_id', projectId)
         .eq('project_table', 'gov_projects')
         .maybeSingle();
 
       if (existingAssignment.error) {
         setSubmitting(false);
-        toast(`Project created, but assignment lookup failed. Project ID: ${data.id}`, 'error');
-        navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${data.id}&projectTable=gov_projects`);
+        toast(`Project created, but assignment lookup failed. Project ID: ${projectId}`, 'error');
+        navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${projectId}&projectTable=gov_projects`);
         return;
       }
 
@@ -181,19 +176,19 @@ export function GovProjectsPage() {
 
       if (assignmentResult.error) {
         setSubmitting(false);
-        toast(`Project created, but workspace assignment failed. Project ID: ${data.id}`, 'error');
-        navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${data.id}&projectTable=gov_projects`);
+        toast(`Project created, but workspace assignment failed. Project ID: ${projectId}`, 'error');
+        navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${projectId}&projectTable=gov_projects`);
         return;
       }
     } else {
       setSubmitting(false);
-      toast(`Project created, but no active workspace was found. Project ID: ${data.id}`, 'error');
-      navigate(`/enterprise/assign-project?projectId=${data.id}&projectTable=gov_projects`);
+      toast(`Project created, but no active workspace was found. Project ID: ${projectId}`, 'error');
+      navigate(`/enterprise/assign-project?projectId=${projectId}&projectTable=gov_projects`);
       return;
     }
 
     setSubmitting(false);
-    setProjects(prev => [data as GovProject, ...prev]);
+    setProjects(prev => [{ ...payload, id: projectId, created_at: new Date().toISOString() } as GovProject, ...prev]);
     setShowForm(false);
     toast(`Project ${code} created!`, 'success');
   }

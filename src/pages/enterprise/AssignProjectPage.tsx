@@ -55,7 +55,8 @@ type ContractorLicenseRow = {
 type LegacyProjectRow = {
   id: string;
   name?: string | null;
-  code?: string | null;
+  project_name?: string | null;
+  project_code?: string | null;
   contractor_id?: string | null;
 };
 
@@ -180,7 +181,7 @@ export function AssignProjectPage() {
           .order('created_at', { ascending: false }),
         supabase
           .from('projects')
-          .select('id, name, code, contractor_id')
+          .select('id, name, project_name, project_code, contractor_id')
           .order('created_at', { ascending: false }),
       ]);
 
@@ -198,8 +199,8 @@ export function AssignProjectPage() {
       const legacyProjects = legacyProjectsResult.error ? [] : ((legacyProjectsResult.data || []) as LegacyProjectRow[]).map((project) => ({
         id: project.id,
         table: 'projects' as const,
-        label: project.name || project.id,
-        code: project.code || null,
+        label: project.project_name || project.name || project.project_code || project.id,
+        code: project.project_code || null,
         contractorName: null,
         workspaceId: nextWorkspaceId || null,
       }));

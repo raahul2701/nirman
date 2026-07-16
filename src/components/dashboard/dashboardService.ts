@@ -8,7 +8,7 @@ type ProjectRow = {
   table: 'projects' | 'gov_projects';
   name?: string;
   project_name?: string;
-  code?: string;
+
   project_code?: string;
   budget?: number;
   total_contract_value?: number;
@@ -16,7 +16,7 @@ type ProjectRow = {
   project_type?: string;
 };
 
-const PROJECTS_SELECT = 'id,name,code,budget,progress_percent,status';
+const PROJECTS_SELECT = 'id,name,project_name,project_code,budget,progress_percent,status';
 const GOV_PROJECTS_SELECT = 'id,project_name,project_code,total_contract_value,project_type,status';
 
 type ComponentRow = {
@@ -32,7 +32,7 @@ type ComponentRow = {
 function normalizeProjectRow(row?: ProjectRow | null): Omit<DashboardProject, 'id' | 'projectTable' | 'workspaceId' | 'assignmentRole' | 'aeId' | 'ae' | 'jeId' | 'je' | 'contractorId' | 'contractor' | 'issues' | 'pendingInspections' | 'components'> {
   return {
     name: row?.project_name || row?.name || 'Assigned Project',
-    code: row?.project_code || row?.code || 'PROJECT',
+    code: row?.project_code || 'PROJECT',
     budget: Number(row?.total_contract_value ?? row?.budget ?? 0),
     progress: row?.table === 'projects' && row?.progress_percent != null ? Number(row.progress_percent) : null,
     category: (row?.project_type as ProjectCategory) || ProjectCategory.OTHER,

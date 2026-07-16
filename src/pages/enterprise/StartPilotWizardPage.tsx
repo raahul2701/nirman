@@ -49,7 +49,8 @@ type ContractorOption = {
 type LegacyProjectRow = {
   id: string;
   name?: string | null;
-  code?: string | null;
+  project_name?: string | null;
+  project_code?: string | null;
 };
 
 type GovProjectRow = {
@@ -75,11 +76,14 @@ type AssignmentStatus = 'pilot' | 'active' | 'paused';
 type AssignmentPayload = Omit<AssignmentRow, 'id'>;
 type WorkspaceInsertPayload = {
   workspace_name: string;
+  workspace_code: string;
   department: string;
   district: string;
   division_code: string;
   status: string;
   executive_engineer_id: string;
+  executive_engineer_name: string;
+  executive_engineer_email: string | null;
   storage_namespace: string;
 };
 type WorkspaceUserUpsertPayload = {
@@ -104,6 +108,10 @@ function shortId(value: string | null | undefined, fallback = '-') {
 
 function profileName(profile: ProfileRow | undefined, fallback: string) {
   return profile?.full_name || profile?.company || profile?.email || fallback;
+}
+
+function resolveEngineerName(profile: ProfileRow | null | undefined, email?: string | null) {
+  return profile?.full_name || email?.split('@')[0] || 'Executive Engineer';
 }
 
 function selectValue(value: string) {
@@ -180,7 +188,7 @@ export function StartPilotWizardPage() {
           .order('created_at', { ascending: false }),
         supabase
           .from('projects')
-          .select('id, name, code')
+          .select('id, name, project_name, project_code')
           .order('created_at', { ascending: false }),
       ]);
 
@@ -198,8 +206,8 @@ export function StartPilotWizardPage() {
       const legacyProjects = legacyResult.error ? [] : ((legacyResult.data || []) as LegacyProjectRow[]).map((project) => ({
         id: project.id,
         table: 'projects' as const,
-        label: project.name || project.id,
-        code: project.code || null,
+        label: project.project_name || project.name || project.project_code || project.id,
+        code: project.project_code || null,
         contractorName: null,
         workspaceId: resolvedWorkspaceId || null,
       }));
@@ -425,11 +433,14 @@ export function StartPilotWizardPage() {
           .from('executive_engineer_workspaces')
           .insert({
             workspace_name: workspaceName,
+            workspace_code: 'DEMO-DIV-001',
             department: 'Demo Public Works Department',
             district: 'Demo District',
             division_code: 'DEMO-DIV-001',
             status: 'active',
             executive_engineer_id: activeUserId,
+            executive_engineer_name: resolveEngineerName(profile, activeSession.user.email),
+            executive_engineer_email: activeSession.user.email || null,
             storage_namespace: `demo_${activeUserId.replace(/-/g, '').slice(0, 16)}`,
           } as WorkspaceInsertPayload)
           .select('id, executive_engineer_id, workspace_name, division_code')
@@ -510,9 +521,11 @@ export function StartPilotWizardPage() {
         };
         results.push('Demo GovTrack project already exists.');
       } else {
+        const projectId = crypto.randomUUID();
         const govProjectInsert = await supabase
           .from('gov_projects')
           .insert({
+            id: projectId,
             engineer_id: activeUserId,
             project_name: 'Demo Road Construction Pilot Project',
             project_code: projectCode,
@@ -523,16 +536,14 @@ export function StartPilotWizardPage() {
             location: 'Demo District',
             project_type: 'highway',
             status: 'active',
-            } as GovProjectInsertPayload)
-          .select('id, project_name, project_code, contractor_name')
-          .maybeSingle();
+          } as GovProjectInsertPayload);
         if (govProjectInsert.error) throw new Error(`Project creation failed: gov_projects insert failed: ${govProjectInsert.error.message}`);
         project = {
-          id: govProjectInsert.data.id,
+          id: projectId,
           table: 'gov_projects',
-          label: govProjectInsert.data.project_name,
-          code: govProjectInsert.data.project_code,
-          contractorName: govProjectInsert.data.contractor_name,
+          label: 'Demo Road Construction Pilot Project',
+          code: projectCode,
+          contractorName: contractorCompany,
         };
         results.push('Demo GovTrack project created.');
       }
@@ -667,7 +678,7 @@ export function StartPilotWizardPage() {
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => setStep(0)}>View Wizard</Button>
                 <Button size="sm" variant="outline" onClick={() => navigate('/enterprise/access')}>View Access Control</Button>
-                <Button size="sm" variant="outline" onClick={() => navigate('/enterprise/assign-project')}>View Assign Project</Button>
+                <Button size="sm" variant="outline" onClick={() => navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${projectKey.split(':')[1] || ''}&projectTable=${projectKey.split(':')[0] || 'gov_projects'}`)}>Open Assignment Page</Button>
                 <Button size="sm" variant="outline" onClick={() => navigate('/dashboard')}>View Dashboard</Button>
               </div>
             </div>
@@ -824,9 +835,9 @@ export function StartPilotWizardPage() {
           </div>
           <div className="mb-6 flex flex-wrap gap-2">
             <Button variant="primary" onClick={() => navigate('/enterprise/access')}>View Access Control</Button>
-            <Button variant="outline" onClick={() => navigate('/enterprise/assign-project')}>Open Assignment Page</Button>
+            <Button variant="outline" onClick={() => navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${selectedProject?.id || ''}&projectTable=${selectedProject?.table || 'gov_projects'}`)}>Open Assignment Page</Button>
             <Button variant="outline" onClick={() => navigate('/dashboard')}>Open Dashboard</Button>
-            <Button variant="outline" onClick={() => navigate('/enterprise/pilot-guide')}>Read Pilot Guide</Button>
+            <Button variant="outline" onClick={() => navigate(selectedProject?.table === 'projects' ? `/projects?workspaceId=${workspaceId}&projectId=${selectedProject.id}` : `/govtrack/projects/${selectedProject?.id || ''}?workspaceId=${workspaceId}`)}>Back to Project</Button>
           </div>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             {['Contractor uploads site photo/document', 'JE verifies field data', 'AE reviews QC/progress', 'EE monitors dashboard/reports'].map((item) => (
