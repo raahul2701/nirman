@@ -11,6 +11,7 @@ import { featureFlags } from '../../lib/featureFlags';
 import { supabase } from '../../lib/supabase';
 import { logAssignmentCreated, logPilotStarted } from '../../services/activityLogger';
 import { GOV_PROJECT_IDENTITY_BLOCKED_MESSAGE, resolveGovProjectEngineerIdentity } from '../../services/govProjectIdentity';
+import { resolveActiveWorkspaceForWrite } from '../../services/businessHierarchyService';
 
 type WorkspaceRow = {
   id: string;
@@ -243,17 +244,15 @@ export function StartPilotWizardPage() {
     setError(null);
     const nextWarnings: string[] = [];
     try {
-      const workspaceResult = await supabase
-        .from('executive_engineer_workspaces')
-        .select('id, executive_engineer_id, workspace_name, division_code')
-        .order('created_at', { ascending: false });
-      if (workspaceResult.error) throw workspaceResult.error;
+      const activeWorkspace = await resolveActiveWorkspaceForWrite(nextWorkspaceId);
+      if (nextWorkspaceId && !activeWorkspace.requestedWorkspaceMatched) {
+        nextWarnings.push('The selected workspace does not belong to your active Executive Engineer account.');
+      }
 
-      const loadedWorkspaces = (workspaceResult.data || []) as WorkspaceRow[];
-      const resolvedWorkspaceId = nextWorkspaceId || loadedWorkspaces[0]?.id || '';
+      const loadedWorkspaces = [activeWorkspace.workspace as WorkspaceRow];
+      const resolvedWorkspaceId = activeWorkspace.workspace.id;
       setWorkspaces(loadedWorkspaces);
       setWorkspaceId(resolvedWorkspaceId);
-
       const [govResult, legacyResult] = await Promise.all([
         supabase
           .from('gov_projects')
@@ -398,6 +397,10 @@ export function StartPilotWizardPage() {
 
     setSaving(true);
     try {
+      const activeWorkspace = await resolveActiveWorkspaceForWrite(selectedWorkspace.id);
+      if (!activeWorkspace.requestedWorkspaceMatched) {
+        throw new Error('The selected workspace does not belong to your active Executive Engineer account.');
+      }
       const contractor = contractors.find((item) => item.id === preservedContractorId);
       const payload = {
         workspace_id: selectedWorkspace.id,

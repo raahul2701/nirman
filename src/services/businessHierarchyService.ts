@@ -112,7 +112,12 @@ type WorkspaceSummaryInput = {
   googleConnection?: WorkspaceGoogleConnection | null;
 };
 type WorkspaceMembershipRow = {
+  id?: string;
   workspace_id?: string;
+  user_id?: string | null;
+  role?: string | null;
+  full_name?: string | null;
+  active?: boolean | null;
 };
 type WorkspaceGoogleConnectionUpsert = Partial<WorkspaceGoogleConnection> & {
   workspace_id: string;
@@ -238,16 +243,57 @@ function workspaceCodeFromUserId(userId: string) {
   return `EE-${userId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
 }
 
-async function resolveWorkspaceForUser(userId: string, authEmail?: string | null): Promise<ExecutiveEngineerWorkspace | null> {
-  const memberResult = await supabase
-    .from('workspace_users')
-    .select('workspace_id, full_name')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .limit(1);
-  if (memberResult.error) throw memberResult.error;
+function preferWorkspaceMembership(rows: WorkspaceMembershipRow[]) {
+  return rows.find((row) => row.role === 'executive_engineer') || rows[0] || null;
+}
 
-  const membership = memberResult.data?.[0] as (WorkspaceMembershipRow & { full_name?: string | null }) | undefined;
+async function getActiveWorkspaceMembership(userId: string, requestedWorkspaceId?: string | null): Promise<WorkspaceMembershipRow | null> {
+  let query = supabase
+    .from('workspace_users')
+    .select('id, workspace_id, user_id, role, full_name, active, created_at')
+    .eq('user_id', userId)
+    .eq('active', true);
+
+  if (requestedWorkspaceId) {
+    query = query.eq('workspace_id', requestedWorkspaceId);
+  }
+
+  const result = await query.order('created_at', { ascending: false }).limit(10);
+  if (result.error) throw result.error;
+
+  return preferWorkspaceMembership((result.data || []) as WorkspaceMembershipRow[]);
+}
+
+export async function resolveActiveWorkspaceForWrite(requestedWorkspaceId?: string | null) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  const user = userData.user;
+  if (!user?.id) throw new Error('Your session has expired. Please sign in again.');
+
+  const requestedMembership = requestedWorkspaceId ? await getActiveWorkspaceMembership(user.id, requestedWorkspaceId) : null;
+  const membership = requestedMembership || await getActiveWorkspaceMembership(user.id);
+  if (!membership?.workspace_id) {
+    throw new Error('The selected workspace does not belong to your active Executive Engineer account.');
+  }
+
+  const workspaceResult = await supabase
+    .from('executive_engineer_workspaces')
+    .select('*')
+    .eq('id', membership.workspace_id)
+    .maybeSingle();
+  if (workspaceResult.error) throw workspaceResult.error;
+  if (!workspaceResult.data) throw new Error('The selected workspace does not belong to your active Executive Engineer account.');
+
+  return {
+    userId: user.id,
+    authEmail: user.email ?? null,
+    workspace: workspaceResult.data as ExecutiveEngineerWorkspace,
+    membership,
+    requestedWorkspaceMatched: !requestedWorkspaceId || membership.workspace_id === requestedWorkspaceId,
+  };
+}
+async function resolveWorkspaceForUser(userId: string, authEmail?: string | null): Promise<ExecutiveEngineerWorkspace | null> {
+  const membership = await getActiveWorkspaceMembership(userId);
   if (membership?.workspace_id) {
     const workspaceResult = await supabase.from('executive_engineer_workspaces').select('*').eq('id', membership.workspace_id).maybeSingle();
     if (workspaceResult.error) throw workspaceResult.error;
@@ -351,13 +397,8 @@ export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
 }
 
 export async function upsertWorkspaceGoogleConnection(workspaceId: string, values: Partial<WorkspaceGoogleConnection>) {
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw userError;
-  if (!userData.user?.id) throw new Error('Your session has expired. Please sign in again.');
-
-  const workspace = await resolveWorkspaceForUser(userData.user.id, userData.user.email);
-  const resolvedWorkspaceId = workspace?.id || workspaceId;
-  if (!resolvedWorkspaceId) throw new Error('Executive Engineer workspace could not be resolved.');
+  const active = await resolveActiveWorkspaceForWrite(workspaceId);
+  const resolvedWorkspaceId = active.workspace.id;
 
   const workspaceUpdate = await supabase
     .from('executive_engineer_workspaces')
@@ -371,24 +412,36 @@ export async function upsertWorkspaceGoogleConnection(workspaceId: string, value
     .eq('id', resolvedWorkspaceId);
   if (workspaceUpdate.error) throw workspaceUpdate.error;
 
-  const { data, error } = await supabase
-    .from('workspace_google_connections')
-    .upsert({
-      workspace_id: resolvedWorkspaceId,
-      google_project_id: values.google_project_id,
-      drive_root_folder_id: values.drive_root_folder_id,
-      maps_api_status: values.maps_api_status || 'not_configured',
-      gemini_api_status: values.gemini_api_status || 'not_configured',
-      drive_api_status: values.drive_api_status || 'not_configured',
-      setup_status: values.setup_status || 'manual_pending',
-      updated_at: new Date().toISOString(),
-    } as WorkspaceGoogleConnectionUpsert, { onConflict: 'workspace_id' })
-    .select()
-    .single();
-  if (error) throw error;
-  return data as WorkspaceGoogleConnection;
-}
+  const payload: WorkspaceGoogleConnectionUpsert = {
+    workspace_id: resolvedWorkspaceId,
+    google_project_id: values.google_project_id,
+    drive_root_folder_id: values.drive_root_folder_id,
+    maps_api_status: values.maps_api_status || 'not_configured',
+    gemini_api_status: values.gemini_api_status || 'not_configured',
+    drive_api_status: values.drive_api_status || 'not_configured',
+    setup_status: values.setup_status || 'manual_pending',
+    updated_at: new Date().toISOString(),
+  };
 
+  const existing = await supabase
+    .from('workspace_google_connections')
+    .select('id')
+    .eq('workspace_id', resolvedWorkspaceId)
+    .limit(2);
+  if (existing.error) throw existing.error;
+
+  const existingRows = (existing.data || []) as Array<{ id: string }>;
+  if (existingRows.length > 1 && import.meta.env.DEV) {
+    console.warn('[workspace-google] duplicate connection rows detected', { workspaceId: resolvedWorkspaceId, rowCount: existingRows.length });
+  }
+
+  const result = existingRows[0]?.id
+    ? await supabase.from('workspace_google_connections').update(payload).eq('id', existingRows[0].id).select().maybeSingle()
+    : await supabase.from('workspace_google_connections').insert(payload).select().maybeSingle();
+
+  if (result.error) throw result.error;
+  return result.data as WorkspaceGoogleConnection;
+}
 export async function recommendContractor(input: {
   workspaceId: string;
   recommendedByExecutiveEngineerId: string;
@@ -447,4 +500,3 @@ export async function activateContractorLicense(input: {
   if (error) throw error;
   return data as ContractorLicense;
 }
-

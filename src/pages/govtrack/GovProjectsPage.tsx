@@ -15,7 +15,7 @@ import { GovProject } from '../../types';
 import { formatCurrency } from '../../lib/utils';
 import { featureFlags } from '../../lib/featureFlags';
 import { loadAssignedGovProjects } from '../../services/assignedProjectsService';
-import { getActiveWorkspaceId } from '../../services/businessHierarchyService';
+import { resolveActiveWorkspaceForWrite } from '../../services/businessHierarchyService';
 import { GOV_PROJECT_IDENTITY_BLOCKED_MESSAGE, resolveGovProjectEngineerIdentity } from '../../services/govProjectIdentity';
 
 const projectTypes = [
@@ -153,7 +153,16 @@ export function GovProjectsPage() {
       return;
     }
 
-    const workspaceId = await getActiveWorkspaceId();
+    let activeWorkspace;
+    try {
+      activeWorkspace = await resolveActiveWorkspaceForWrite();
+    } catch (workspaceError) {
+      setSubmitting(false);
+      toast(workspaceError instanceof Error ? workspaceError.message : `Project created, but no active workspace was found. Project ID: ${projectId}`, 'error');
+      navigate(`/enterprise/assign-project?projectId=${projectId}&projectTable=gov_projects`);
+      return;
+    }
+    const workspaceId = activeWorkspace.workspace.id;
     if (workspaceId) {
       const assignmentPayload = {
         workspace_id: workspaceId,

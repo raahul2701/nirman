@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../components/ui/useToast';
 import { Project } from '../types';
 import { formatCurrency } from '../lib/utils';
+import { resolveActiveWorkspaceForWrite } from '../services/businessHierarchyService';
 
 const statusOptions = [
   { value: 'active', label: 'Active' },
@@ -74,19 +75,15 @@ export function ProjectsPage() {
     if (error) { toast('Failed to create project', 'error'); return; }
     if (!data?.id) { toast('Failed to create project', 'error'); return; }
 
-    const { data: workspaceUsers, error: workspaceError } = await supabase
-      .from('workspace_users')
-      .select('workspace_id')
-      .eq('user_id', userId)
-      .eq('active', true)
-      .limit(1);
-    const workspaceId = workspaceUsers?.[0]?.workspace_id;
-    if (workspaceError || !workspaceId) {
-      toast(`Project created, but workspace assignment failed. Project ID: ${data.id}`, 'error');
+    let activeWorkspace;
+    try {
+      activeWorkspace = await resolveActiveWorkspaceForWrite();
+    } catch (workspaceError) {
+      toast(workspaceError instanceof Error ? workspaceError.message : `Project created, but workspace assignment failed. Project ID: ${data.id}`, 'error');
       navigate(`/enterprise/assign-project?projectId=${data.id}&projectTable=projects`);
       return;
     }
-
+    const workspaceId = activeWorkspace.workspace.id;
     const assignmentPayload = {
       workspace_id: workspaceId,
       project_id: data.id,
@@ -121,30 +118,7 @@ export function ProjectsPage() {
         .insert(assignmentPayload)
         .select()
         .maybeSingle();
-    const assignmentErrorDetails = assignmentResult.error as {
-      code?: string;
-      message?: string;
-      details?: string;
-      hint?: string;
-    } | null;
-    console.log('[project_assignments save trace]', {
-      authenticatedUserId: userId,
-      insertedProjectId: data.id,
-      workspaceId,
-      assignmentPayload,
-      responseData: assignmentResult.data,
-      errorCode: assignmentErrorDetails?.code,
-      errorMessage: assignmentErrorDetails?.message,
-      errorDetails: assignmentErrorDetails?.details,
-      errorHint: assignmentErrorDetails?.hint,
-    });
     if (assignmentResult.error) {
-      console.error('[project_assignments save failed]', {
-        code: assignmentErrorDetails?.code,
-        message: assignmentErrorDetails?.message,
-        details: assignmentErrorDetails?.details,
-        hint: assignmentErrorDetails?.hint,
-      });
       toast(`Project created, but assignment failed. Project ID: ${data.id}`, 'error');
       navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${data.id}&projectTable=projects`);
       return;
