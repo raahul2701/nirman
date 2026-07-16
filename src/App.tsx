@@ -13,10 +13,18 @@ import { pwaManager } from './services/pwa/pwaManager';
 function AppContent() {
   const [staleAssets, setStaleAssets] = useState(false);
   const [recovering, setRecovering] = useState(false);
+  const [manualRecovery, setManualRecovery] = useState(false);
 
   useEffect(() => {
     initializeDataServices().catch(err => console.error('Failed to initialize data services:', err));
-    const showStaleAssets = () => setStaleAssets(true);
+    const showStaleAssets = () => {
+      if (pwaManager.shouldShowManualRecoveryMessage()) {
+        setManualRecovery(true);
+        setStaleAssets(false);
+        return;
+      }
+      setStaleAssets(true);
+    };
     window.addEventListener('nirman:stale-assets', showStaleAssets);
     const unsubscribe = pwaManager.onUpdate(showStaleAssets);
 
@@ -28,6 +36,12 @@ function AppContent() {
 
   return (
     <Suspense fallback={<LoadingFallback />}>
+      {manualRecovery && (
+        <div className="fixed bottom-4 left-1/2 z-[1000] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-lg border border-[#CDBD82] bg-[#FFF8E1] p-4 shadow-lg">
+          <p className="mb-2 text-sm font-semibold text-[#12332D]">Application assets were refreshed once.</p>
+          <p className="text-xs text-[#6B5A1E]">Sign in normally. If this page still looks stale, close all NIRMAN tabs and reopen the app.</p>
+        </div>
+      )}
       {staleAssets && (
         <div className="fixed bottom-4 left-1/2 z-[1000] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-lg border border-[#CDBD82] bg-[#FFF8E1] p-4 shadow-lg">
           <p className="mb-3 text-sm font-semibold text-[#12332D]">A newer application version is available. Reload securely.</p>

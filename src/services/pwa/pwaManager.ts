@@ -5,6 +5,51 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
+type RecoveryMarker = {
+  startedAt: number;
+  path: string;
+};
+
+const RECOVERY_STARTED_KEY = 'nirman:pwa:recoveryStarted';
+const RECOVERY_CONSUMED_KEY = 'nirman:pwa:recoveryConsumed';
+const RECOVERY_TTL_MS = 10 * 60 * 1000;
+const STALE_ASSET_KEYS = ['nirman:stale-assets', 'nirman:chunk-failure', 'nirman:pwa:update-available'];
+
+function readRecoveryMarker(key: string): RecoveryMarker | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(key) || window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<RecoveryMarker>;
+    if (typeof parsed.startedAt !== 'number') return null;
+    if (Date.now() - parsed.startedAt > RECOVERY_TTL_MS) return null;
+    return { startedAt: parsed.startedAt, path: parsed.path || '/' };
+  } catch {
+    return null;
+  }
+}
+
+function writeRecoveryMarker(key: string, marker: RecoveryMarker) {
+  if (typeof window === 'undefined') return;
+  const value = JSON.stringify(marker);
+  window.sessionStorage.setItem(key, value);
+  window.localStorage.setItem(key, value);
+}
+
+function clearRecoveryMarker(key: string) {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.removeItem(key);
+  window.localStorage.removeItem(key);
+}
+
+function clearStaleAssetFlags() {
+  if (typeof window === 'undefined') return;
+  STALE_ASSET_KEYS.forEach((key) => {
+    window.sessionStorage.removeItem(key);
+    window.localStorage.removeItem(key);
+  });
+}
+
 class PwaManager {
   private installPrompt: BeforeInstallPromptEvent | null = null;
   private initialized = false;
@@ -16,6 +61,7 @@ class PwaManager {
   init() {
     if (typeof window === 'undefined' || this.initialized) return;
     this.initialized = true;
+    this.consumeRecoveryMarker();
 
     window.addEventListener('beforeinstallprompt', (event) => {
       this.installPrompt = null;
@@ -28,7 +74,7 @@ class PwaManager {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (this.controllerChangeNotified) return;
+        if (this.controllerChangeNotified || this.hasActiveRecoveryMarker() || this.wasRecoveryConsumedRecently()) return;
         this.controllerChangeNotified = true;
         this.updateListeners.forEach((listener) => listener());
       });
@@ -82,14 +128,48 @@ class PwaManager {
     return { online: navigator.onLine, effectiveType: connection?.effectiveType };
   }
 
+  hasActiveRecoveryMarker() {
+    return Boolean(readRecoveryMarker(RECOVERY_STARTED_KEY));
+  }
+
+  wasRecoveryConsumedRecently() {
+    return Boolean(readRecoveryMarker(RECOVERY_CONSUMED_KEY));
+  }
+
+  isAuthRoute(pathname = typeof window === 'undefined' ? '' : window.location.pathname) {
+    return pathname === '/login' || pathname.startsWith('/auth/callback');
+  }
+
+  shouldShowManualRecoveryMessage(pathname = typeof window === 'undefined' ? '' : window.location.pathname) {
+    return this.isAuthRoute(pathname) && this.wasRecoveryConsumedRecently();
+  }
+
+  consumeRecoveryMarker() {
+    const marker = readRecoveryMarker(RECOVERY_STARTED_KEY);
+    if (!marker) {
+      clearRecoveryMarker(RECOVERY_STARTED_KEY);
+      return false;
+    }
+
+    clearRecoveryMarker(RECOVERY_STARTED_KEY);
+    writeRecoveryMarker(RECOVERY_CONSUMED_KEY, { startedAt: Date.now(), path: marker.path });
+    clearStaleAssetFlags();
+    return true;
+  }
 
   async recoverFromStaleAssets() {
     if (this.recoveryInProgress || typeof window === 'undefined') return;
+    if (this.hasActiveRecoveryMarker()) return;
     this.recoveryInProgress = true;
+    writeRecoveryMarker(RECOVERY_STARTED_KEY, { startedAt: Date.now(), path: window.location.pathname });
+    clearRecoveryMarker(RECOVERY_CONSUMED_KEY);
 
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.unregister()));
+      const origin = window.location.origin;
+      await Promise.all(registrations
+        .filter((registration) => registration.scope.startsWith(origin))
+        .map((registration) => registration.unregister()));
     }
 
     if ('caches' in window) {
@@ -97,6 +177,7 @@ class PwaManager {
       await Promise.all(cacheNames.filter((name) => name.startsWith('nirman-')).map((name) => caches.delete(name)));
     }
 
+    clearStaleAssetFlags();
     window.location.reload();
   }
 
