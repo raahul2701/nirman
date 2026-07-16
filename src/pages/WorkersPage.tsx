@@ -157,7 +157,7 @@ export function WorkersPage() {
                     <p className="text-[#606060] text-[10px]">{w.phone}</p>
                   </div>
                 </div>
-                <button onClick={() => toggleStatus(w)} className="transition-all">
+                <button onClick={() => toggleStatus()} className="transition-all">
                   {w.status === 'active'
                     ? <CheckCircle size={16} style={{ color: '#22c55e' }} />
                     : <XCircle size={16} style={{ color: '#606060' }} />}
