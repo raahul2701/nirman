@@ -31,6 +31,11 @@ export function ProjectAccessControlPage() {
   }, []);
 
   const safeSummary = normalizeWorkspaceSummary(summary || EMPTY_WORKSPACE_SUMMARY);
+  const memberNameByUserId = new Map(safeSummary.members.map((member) => {
+    const namedMember = member as typeof member & { full_name?: string | null; email?: string | null };
+    return [member.user_id, namedMember.full_name || namedMember.email || shortId(member.user_id)] as const;
+  }));
+  const assignedName = (userId: string | null | undefined) => (userId ? memberNameByUserId.get(userId) || shortId(userId) : '-');
 
   return (
     <AppLayout title="Project Access Control" subtitle="Project-level RBAC, licence locking, and document boundaries">
@@ -100,9 +105,9 @@ export function ProjectAccessControlPage() {
               {safeSummary.projects.map((project) => (
                 <tr key={project.id} className="border-b border-[#232323] text-[#D0D0D0]">
                   <td className="py-3 pr-4 text-white">{shortId(project.project_id)}</td>
-                  <td className="py-3 pr-4">{shortId(project.assistant_engineer_id)}</td>
-                  <td className="py-3 pr-4">{shortId(project.junior_engineer_id)}</td>
-                  <td className="py-3 pr-4">{project.contractor_company_name || shortId(project.contractor_id)}</td>
+                  <td className="py-3 pr-4">{assignedName(project.assistant_engineer_id)}</td>
+                  <td className="py-3 pr-4">{assignedName(project.junior_engineer_id)}</td>
+                  <td className="py-3 pr-4">{project.contractor_company_name || assignedName(project.contractor_id)}</td>
                   <td className="py-3 pr-4"><StatusBadge status={project.access_status || 'unknown'} /></td>
                 </tr>
               ))}

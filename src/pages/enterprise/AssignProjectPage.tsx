@@ -9,6 +9,7 @@ import { Select } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
 import { logAssignmentCreated } from '../../services/activityLogger';
 import { useAuth } from '../../contexts/useAuth';
+import { resolveActiveWorkspaceForWrite } from '../../services/businessHierarchyService';
 
 type WorkspaceRow = {
   id: string;
@@ -26,6 +27,9 @@ type WorkspaceUserRow = {
   user_id: string;
   role: 'executive_engineer' | 'assistant_engineer' | 'junior_engineer' | 'contractor' | 'admin_viewer' | string;
   active?: boolean | null;
+  full_name?: string | null;
+  email?: string | null;
+  contractor_company?: string | null;
   parent_user_id?: string | null;
   subdivision_name?: string | null;
 };
@@ -102,7 +106,11 @@ const statusOptions = [
 function displayName(profile: ProfileRow | undefined, fallback: string) {
   return profile?.full_name || profile?.company || profile?.email || fallback;
 }
-
+function memberLabel(member: WorkspaceUserRow, profile?: ProfileRow) {
+  const name = member.full_name || profile?.full_name || profile?.company || member.contractor_company || profile?.email || member.email || shortId(member.user_id);
+  const email = member.email || profile?.email || null;
+  return email && !name.includes(email) ? `${name} - ${email}` : name;
+}
 function shortId(value: string | null | undefined, fallback = '-') {
   return value ? String(value).slice(0, 8) : fallback;
 }
@@ -155,18 +163,16 @@ export function AssignProjectPage() {
     setSuccess(null);
     const nextWarnings: string[] = [];
     try {
-      const workspaceResult = await supabase
-        .from('executive_engineer_workspaces')
-        .select('id, executive_engineer_id, workspace_name, division_code, department, district, status')
-        .order('created_at', { ascending: false });
+      const activeWorkspace = await resolveActiveWorkspaceForWrite(preferredWorkspaceId);
+      if (preferredWorkspaceId && !activeWorkspace.requestedWorkspaceMatched) {
+        nextWarnings.push('The selected workspace does not belong to your active Executive Engineer account.');
+      }
 
-      if (workspaceResult.error) throw workspaceResult.error;
-      const loadedWorkspaces = (workspaceResult.data || []) as WorkspaceRow[];
+      const loadedWorkspaces = [activeWorkspace.workspace as WorkspaceRow];
       setWorkspaces(loadedWorkspaces);
 
-      const nextWorkspaceId = preferredWorkspaceId || loadedWorkspaces[0]?.id || '';
-      setWorkspaceId((current) => preferredWorkspaceId || current || loadedWorkspaces[0]?.id || '');
-
+      const nextWorkspaceId = activeWorkspace.workspace.id;
+      setWorkspaceId(nextWorkspaceId);
       const [govProjectsResult, legacyProjectsResult] = await Promise.all([
         supabase
           .from('gov_projects')
@@ -205,7 +211,7 @@ export function AssignProjectPage() {
         const [usersResult, assignmentsResult] = await Promise.all([
           supabase
             .from('workspace_users')
-            .select('id, workspace_id, user_id, role, active, parent_user_id, subdivision_name')
+            .select('id, workspace_id, user_id, role, active, full_name, email, contractor_company, parent_user_id, subdivision_name')
             .eq('workspace_id', nextWorkspaceId)
             .eq('active', true),
           supabase
@@ -291,7 +297,7 @@ export function AssignProjectPage() {
   const contractorOptions = useMemo(() => {
     const byId = new Map<string, { id: string; label: string; status?: string | null }>();
     workspaceUsers.filter((user) => user.role === 'contractor').forEach((user) => {
-      byId.set(user.user_id, { id: user.user_id, label: displayName(profiles[user.user_id], shortId(user.user_id)) });
+      byId.set(user.user_id, { id: user.user_id, label: memberLabel(user, profiles[user.user_id]) });
     });
     return Array.from(byId.values());
   }, [profiles, workspaceUsers]);
@@ -504,7 +510,7 @@ export function AssignProjectPage() {
               onChange={(event) => setAssistantEngineerId(event.target.value === EMPTY_VALUE ? '' : event.target.value)}
               options={[
                 { value: EMPTY_VALUE, label: aeOptions.length ? 'Not assigned' : 'No AE found in workspace' },
-                ...aeOptions.map((user) => ({ value: user.user_id, label: displayName(profiles[user.user_id], shortId(user.user_id)) })),
+                ...aeOptions.map((user) => ({ value: user.user_id, label: memberLabel(user, profiles[user.user_id]) })),
               ]}
             />
             <Select
@@ -513,7 +519,7 @@ export function AssignProjectPage() {
               onChange={(event) => setJuniorEngineerId(event.target.value === EMPTY_VALUE ? '' : event.target.value)}
               options={[
                 { value: EMPTY_VALUE, label: jeOptions.length ? 'Not assigned' : 'No JE found in workspace' },
-                ...jeOptions.map((user) => ({ value: user.user_id, label: displayName(profiles[user.user_id], shortId(user.user_id)) })),
+                ...jeOptions.map((user) => ({ value: user.user_id, label: memberLabel(user, profiles[user.user_id]) })),
               ]}
             />
             <Select
