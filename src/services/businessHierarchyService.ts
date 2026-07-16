@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { isCapabilityUnavailable, isMissingBackendCapabilityError, markCapabilityUnavailable } from '../lib/backendCapabilities';
 
 export type WorkspaceRole = 'executive_engineer' | 'assistant_engineer' | 'junior_engineer' | 'contractor' | 'admin_viewer';
 export type LicenseStatus = 'active' | 'trial' | 'expired' | 'suspended';
@@ -206,10 +207,8 @@ type WorkspaceUpdatePayload = Partial<Pick<ExecutiveEngineerWorkspace, 'drive_ro
   updated_at: string;
 };
 
-let recommendationsUnavailable = false;
-
 export function isContractorRecommendationStorageUnavailable() {
-  return recommendationsUnavailable;
+  return isCapabilityUnavailable('contractorRecommendations');
 }
 
 function isOptionalSupabaseError(error?: SupabaseErrorLike | null) {
@@ -225,11 +224,6 @@ function isOptionalSupabaseError(error?: SupabaseErrorLike | null) {
     (hint.includes('relation') && hint.includes('does not exist')) ||
     String(error.status) === '404'
   );
-}
-function isMissingRecommendationsTable(error?: SupabaseErrorLike | null) {
-  if (!error) return false;
-  const hint = [error.code, error.message, error.details, error.status].filter(Boolean).join(' ').toLowerCase();
-  return hint.includes('pgrst205') || hint.includes('contractor_recommendations') || String(error.status) === '404';
 }
 
 function emailLocalPart(email?: string | null) {
@@ -327,15 +321,15 @@ export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
     : (licensesResult.data as ContractorLicense[] | null) ?? [];
 
   let recommendations: ContractorRecommendation[] = [];
-  if (!recommendationsUnavailable) {
+  if (!isCapabilityUnavailable('contractorRecommendations')) {
     const recommendationsResult = await supabase
       .from('contractor_recommendations')
       .select('*')
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
     if (recommendationsResult.error) {
-      if (isMissingRecommendationsTable(recommendationsResult.error)) {
-        recommendationsUnavailable = true;
+      if (isMissingBackendCapabilityError(recommendationsResult.error)) {
+        markCapabilityUnavailable('contractorRecommendations');
       } else {
         throw recommendationsResult.error;
       }
@@ -419,8 +413,8 @@ export async function recommendContractor(input: {
     .select()
     .single();
   if (error) {
-    if (isMissingRecommendationsTable(error)) {
-      recommendationsUnavailable = true;
+    if (isMissingBackendCapabilityError(error)) {
+      markCapabilityUnavailable('contractorRecommendations');
       throw new Error('Contractor recommendation storage is not configured.');
     }
     throw error;

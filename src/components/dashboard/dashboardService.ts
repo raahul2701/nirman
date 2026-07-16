@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase';
+import { isCapabilityUnavailable, isMissingBackendCapabilityError, markCapabilityUnavailable, warnCapabilityUnavailableOnce } from '../../lib/backendCapabilities';
 import { getMyWorkspaceSummary, type ProjectAssignment } from '../../services/businessHierarchyService';
 import { getDashboardRole, type DashboardIdentity } from '../../services/executionDemoData';
 import { ProjectCategory, type ComponentProgress, type DashboardProject } from './dashboard';
@@ -76,16 +77,20 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   const legacyIds = assignments.filter((assignment) => normalizeProjectTable(assignment.project_table) === 'projects').map((assignment) => assignment.project_id);
   const govIds = assignments.filter((assignment) => normalizeProjectTable(assignment.project_table) === 'gov_projects').map((assignment) => assignment.project_id);
 
-  const [legacyProjects, govProjects, componentResult] = await Promise.all([
-    legacyIds.length > 0 ? supabase.from('projects').select(PROJECTS_SELECT).in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
-    govIds.length > 0 ? supabase.from('gov_projects').select(GOV_PROJECTS_SELECT).in('id', govIds) : Promise.resolve({ data: [], error: null }),
-    supabase
+  const shouldLoadComponents = !isCapabilityUnavailable('projectComponents');
+  const componentPromise = shouldLoadComponents
+    ? supabase
       .from('project_components')
       .select('project_id,component_type,component_name,planned_quantity,executed_quantity,unit,progress_percent')
       .eq('workspace_id', summary.workspace.id)
-      .in('project_id', assignments.map((assignment) => assignment.project_id)),
-  ]);
+      .in('project_id', assignments.map((assignment) => assignment.project_id))
+    : Promise.resolve({ data: [], error: null });
 
+  const [legacyProjects, govProjects, componentResult] = await Promise.all([
+    legacyIds.length > 0 ? supabase.from('projects').select(PROJECTS_SELECT).in('id', legacyIds) : Promise.resolve({ data: [], error: null }),
+    govIds.length > 0 ? supabase.from('gov_projects').select(GOV_PROJECTS_SELECT).in('id', govIds) : Promise.resolve({ data: [], error: null }),
+    componentPromise,
+  ]);
   const failedProjectTables = new Set<'projects' | 'gov_projects'>();
   const projectLoadErrors: string[] = [];
 
@@ -109,8 +114,15 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
     throw new Error(`Dashboard project loading failed for ${projectLoadErrors.join('; ')}`);
   }
 
+  let componentProgressUnavailable = isCapabilityUnavailable('projectComponents');
   if (componentResult.error) {
-    console.warn('[dashboard] component progress query failed', componentResult.error);
+    if (isMissingBackendCapabilityError(componentResult.error)) {
+      markCapabilityUnavailable('projectComponents');
+      componentProgressUnavailable = true;
+      warnCapabilityUnavailableOnce('projectComponents', '[dashboard] component progress backend is not configured.');
+    } else {
+      console.warn('[dashboard] component progress query failed', componentResult.error);
+    }
   }
 
   const rows = new Map<string, ProjectRow>();
@@ -131,9 +143,11 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
     const projectRow = rows.get(assignment.project_id);
     const baseProject = projectRow ? normalizeProjectRow(projectRow) : { name: 'Project record unavailable', code: assignment.project_id.slice(0, 8), budget: 0, progress: null, category: ProjectCategory.OTHER };
     const components = componentsByProject.get(assignment.project_id);
-    const componentProgress = components && components.length > 0
-      ? components.reduce((total, component) => total + Number(component.progress_percent || 0), 0) / components.length
-      : baseProject.progress;
+    const componentProgress = componentProgressUnavailable
+      ? null
+      : components && components.length > 0
+        ? components.reduce((total, component) => total + Number(component.progress_percent || 0), 0) / components.length
+        : baseProject.progress;
     const project = { ...baseProject, progress: componentProgress };
     return {
       id: assignment.project_id,
@@ -149,7 +163,7 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
       contractor: assignment.contractor_company_name || 'Contractor',
       issues: 0,
       pendingInspections: 0,
-      components: components && components.length > 0
+      components: !componentProgressUnavailable && components && components.length > 0
         ? components.map((c): ComponentProgress => ({ id: `${assignment.project_id}-${c.component_name}`, name: c.component_name, progress: Number(c.progress_percent || 0), plannedQty: Number(c.planned_quantity || 0), executedQty: Number(c.executed_quantity || 0), unit: c.unit || 'unit' }))
         : [{ id: `${assignment.project_id}-default`, name: 'Progress', progress: project.progress, plannedQty: 0, executedQty: 0, unit: 'unit' }],
     };

@@ -108,6 +108,9 @@ export function ContractorOnboardingPage() {
               <input id="contractorPhone" value={contractorPhone} onChange={(event) => setContractorPhone(event.target.value)} className="w-full rounded-lg border border-[#2A2A2A] bg-[#111111] px-3 py-2 text-white outline-none focus:border-[#FF6B00]" />
             </div>
             <Button type="submit" variant="primary" loading={saving} disabled={!safeSummary.workspace || !user || recommendationsUnavailable} icon={<Send size={14} />}>Create Recommendation</Button>
+            {recommendationsUnavailable && (
+              <p className="text-xs text-[#CDBD82]">Disabled reason: Recommendation storage is not configured.</p>
+            )}
           </form>
         </Card>
 
