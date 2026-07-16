@@ -3,6 +3,7 @@ import { AuthChangeEvent, User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types';
 import { logger } from '../lib/logger';
+import { isCapabilityUnavailable, isMissingBackendCapabilityError, markCapabilityUnavailable, warnCapabilityUnavailableOnce } from '../lib/backendCapabilities';
 import { AuthContext } from './authContextCore';
 import { logLoginSuccess, logLogout } from '../services/activityLogger';
 
@@ -52,6 +53,21 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+type SupabaseRuntimeError = {
+  code?: string | null;
+  status?: number | string | null;
+  message?: string | null;
+};
+
+function supabaseErrorInfo(error: unknown): SupabaseRuntimeError {
+  return typeof error === 'object' && error !== null ? error as SupabaseRuntimeError : {};
+}
+
+function isAuditWriteUnavailable(error: unknown) {
+  const info = supabaseErrorInfo(error);
+  return info.code === '42501' || String(info.status) === '401' || String(info.status) === '403';
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timeoutId: number | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -88,6 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastRefreshFailureRef = useRef(0);
   const mountedRef = useRef(true);
   const currentSessionRef = useRef<Session | null>(null);
+  const auditUnavailableRef = useRef(false);
+  const auditWarningLoggedRef = useRef(false);
 
   const updateActivity = useCallback(() => {
     setLastActivity(Date.now());
@@ -148,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logAudit = useCallback(async (action: string, details?: Record<string, unknown>, userId?: string) => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || auditUnavailableRef.current) return;
     const auditUserId = userId ?? currentSessionRef.current?.user?.id;
     if (!auditUserId) return;
 
@@ -160,13 +178,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user_agent: navigator.userAgent,
         ...details,
       };
-      await supabase.from('audit_logs').insert(auditLog);
+      const { error } = await supabase.from('audit_logs').insert(auditLog);
+      if (error) throw error;
     } catch (error) {
-      logger.error('Failed to log audit event', { error, action, userId: auditUserId });
+      const info = supabaseErrorInfo(error);
+      if (isAuditWriteUnavailable(error)) {
+        auditUnavailableRef.current = true;
+        if (!auditWarningLoggedRef.current) {
+          auditWarningLoggedRef.current = true;
+          logger.warn('Audit logging unavailable from browser context', { action, userId: auditUserId, code: info.code || null, status: info.status || null });
+        }
+        return;
+      }
+      logger.warn('Audit logging failed', { action, userId: auditUserId, code: info.code || null, status: info.status || null });
     }
   }, []);
 
   const trackDeviceSession = useCallback(async (nextUserId: string) => {
+    if (isCapabilityUnavailable('deviceSessions')) return;
     try {
       const deviceSession: DeviceSessionUpsert = {
         user_id: nextUserId,
@@ -174,9 +203,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user_agent: navigator.userAgent,
         last_seen_at: new Date().toISOString(),
       };
-      await supabase.from('device_sessions').upsert(deviceSession, { onConflict: 'user_id,device_id' });
+      const { error } = await supabase.from('device_sessions').upsert(deviceSession, { onConflict: 'user_id,device_id' });
+      if (error) throw error;
     } catch (error) {
-      logger.warn('Failed to update device session', { error, userId: nextUserId });
+      const info = supabaseErrorInfo(error);
+      if (isMissingBackendCapabilityError(supabaseErrorInfo(error))) {
+        markCapabilityUnavailable('deviceSessions');
+        warnCapabilityUnavailableOnce('deviceSessions', '[auth] device session tracking backend is not configured.');
+        return;
+      }
+      logger.warn('Device session tracking failed', { userId: nextUserId, code: info.code || null, status: info.status || null });
     }
   }, []);
 
@@ -244,12 +280,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        await supabase.from('audit_logs').insert({
-          action: 'failed_login',
-          ip_address: null,
-          user_agent: navigator.userAgent,
-          new_values: { email },
-        });
+        if (!auditUnavailableRef.current) {
+          try {
+            const auditResult = await supabase.from('audit_logs').insert({
+              action: 'failed_login',
+              ip_address: null,
+              user_agent: navigator.userAgent,
+              new_values: { email },
+            });
+            if (auditResult.error) throw auditResult.error;
+          } catch (auditError) {
+            const info = supabaseErrorInfo(auditError);
+            if (isAuditWriteUnavailable(auditError)) {
+              auditUnavailableRef.current = true;
+              if (!auditWarningLoggedRef.current) {
+                auditWarningLoggedRef.current = true;
+                logger.warn('Audit logging unavailable from browser context', { action: 'failed_login', code: info.code || null, status: info.status || null });
+              }
+            } else {
+              logger.warn('Audit logging failed', { action: 'failed_login', code: info.code || null, status: info.status || null });
+            }
+          }
+        }
         logger.warn('Failed login attempt', { email, error: error.message });
         return { error: error as Error };
       }
