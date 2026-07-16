@@ -1,27 +1,17 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 
-const lazyReloadKey = 'nirman:lazy-reload';
 const staleChunkPattern = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk \d+ failed|ChunkLoadError/i;
 
 function isStaleChunkError(error: unknown): boolean {
   return error instanceof Error && staleChunkPattern.test(error.message);
 }
 
-function reloadOnceForStaleChunk(): void {
+function notifyStaleChunk(): void {
   if (typeof window === 'undefined') {
     return;
   }
 
-  const currentPath = window.location.pathname + window.location.search + window.location.hash;
-  const previousPath = window.sessionStorage.getItem(lazyReloadKey);
-
-  if (previousPath === currentPath) {
-    window.sessionStorage.removeItem(lazyReloadKey);
-    return;
-  }
-
-  window.sessionStorage.setItem(lazyReloadKey, currentPath);
-  window.location.reload();
+  window.dispatchEvent(new CustomEvent('nirman:stale-assets'));
 }
 
 export function lazyWithRetry<T extends ComponentType<object>>(
@@ -35,7 +25,7 @@ export function lazyWithRetry<T extends ComponentType<object>>(
       } catch (error) {
         lastError = error;
         if (isStaleChunkError(error)) {
-          reloadOnceForStaleChunk();
+          notifyStaleChunk();
         }
 
         if (attempt === 0) {

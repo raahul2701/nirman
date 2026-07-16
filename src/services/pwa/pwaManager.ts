@@ -11,6 +11,7 @@ class PwaManager {
   private controllerChangeNotified = false;
   private updateListeners = new Set<() => void>();
   private networkListeners = new Set<(online: boolean, effectiveType?: string) => void>();
+  private recoveryInProgress = false;
 
   init() {
     if (typeof window === 'undefined' || this.initialized) return;
@@ -79,6 +80,24 @@ class PwaManager {
   getNetworkState() {
     const connection = (navigator as Navigator & { connection?: { effectiveType?: string } }).connection;
     return { online: navigator.onLine, effectiveType: connection?.effectiveType };
+  }
+
+
+  async recoverFromStaleAssets() {
+    if (this.recoveryInProgress || typeof window === 'undefined') return;
+    this.recoveryInProgress = true;
+
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.filter((name) => name.startsWith('nirman-')).map((name) => caches.delete(name)));
+    }
+
+    window.location.reload();
   }
 
   private emitNetworkState() {

@@ -40,7 +40,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   if (url.hostname.includes('supabase.co')) {
-    event.respondWith(fetch(request));
+    event.respondWith(fetch(request, { cache: 'no-store' }));
     return;
   }
 
@@ -52,7 +52,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirst(request, DYNAMIC_CACHE, { cacheResponse: false }));
+    event.respondWith(networkFirst(request, DYNAMIC_CACHE, { cacheResponse: false, fallbackToCache: false }));
     return;
   }
 
@@ -76,7 +76,7 @@ async function cacheFirst(request) {
   }
 }
 
-async function networkFirst(request, cacheName = DYNAMIC_CACHE, options = { cacheResponse: true }) {
+async function networkFirst(request, cacheName = DYNAMIC_CACHE, options = { cacheResponse: true, fallbackToCache: true }) {
   try {
     const networkResponse = await fetch(request, { cache: 'no-store' });
     if (networkResponse.ok && options.cacheResponse) {
@@ -86,6 +86,9 @@ async function networkFirst(request, cacheName = DYNAMIC_CACHE, options = { cach
     return networkResponse;
   } catch (error) {
     console.log('[SW] Network-first failed, trying cache:', error);
+    if (!options.fallbackToCache) {
+      return caches.match('/offline.html') || new Response('Offline', { status: 503 });
+    }
     const cachedResponse = await caches.match(request);
     if (cachedResponse) return cachedResponse;
     return caches.match('/offline.html') || new Response('Offline', { status: 503 });
