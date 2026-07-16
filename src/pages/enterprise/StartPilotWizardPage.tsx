@@ -223,16 +223,12 @@ export function StartPilotWizardPage() {
         return;
       }
 
-      const [usersResult, licensesResult, assignmentsResult] = await Promise.all([
+      const [usersResult, assignmentsResult] = await Promise.all([
         supabase
           .from('workspace_users')
           .select('workspace_id, user_id, role, active')
           .eq('workspace_id', resolvedWorkspaceId)
           .eq('active', true),
-        supabase
-          .from('contractor_licenses')
-          .select('contractor_id, contractor_company_name, license_status')
-          .eq('workspace_id', resolvedWorkspaceId),
         supabase
           .from('project_assignments')
           .select('id, workspace_id, project_id, project_table, assistant_engineer_id, junior_engineer_id, contractor_id, contractor_company_name, access_status')
@@ -241,19 +237,15 @@ export function StartPilotWizardPage() {
       ]);
 
       if (usersResult.error) nextWarnings.push(`workspace_users unavailable: ${usersResult.error.message}`);
-      if (licensesResult.error) nextWarnings.push(`contractor_licenses unavailable: ${licensesResult.error.message}`);
       if (assignmentsResult.error) nextWarnings.push(`project_assignments unavailable: ${assignmentsResult.error.message}`);
 
       const loadedUsers = (usersResult.data || []) as WorkspaceUserRow[];
       const loadedAssignments = (assignmentsResult.data || []) as AssignmentRow[];
-      const licenseContractors = (licensesResult.data || []) as Array<{ contractor_id: string; contractor_company_name?: string | null; license_status?: string | null }>;
-
       setWorkspaceUsers(loadedUsers);
       setAssignments(loadedAssignments);
 
       const profileIds = Array.from(new Set([
         ...loadedUsers.map((user) => user.user_id),
-        ...licenseContractors.map((license) => license.contractor_id),
         ...loadedAssignments.flatMap((assignment) => [assignment.assistant_engineer_id, assignment.junior_engineer_id, assignment.contractor_id]),
       ].filter(Boolean) as string[]));
 
@@ -274,13 +266,6 @@ export function StartPilotWizardPage() {
       const contractorMap = new Map<string, ContractorOption>();
       loadedUsers.filter((user) => user.role === 'contractor').forEach((user) => {
         contractorMap.set(user.user_id, { id: user.user_id, label: profileName(profileMap[user.user_id], shortId(user.user_id)) });
-      });
-      licenseContractors.forEach((license) => {
-        contractorMap.set(license.contractor_id, {
-          id: license.contractor_id,
-          label: license.contractor_company_name || profileName(profileMap[license.contractor_id], shortId(license.contractor_id)),
-          status: license.license_status,
-        });
       });
       setContractors(Array.from(contractorMap.values()));
     } catch (err) {
@@ -416,6 +401,11 @@ export function StartPilotWizardPage() {
       const workspaceName = 'NIRMAN Pilot Demo Workspace';
       const projectCode = 'DEMO-PILOT-001';
       const contractorCompany = 'Demo Contractor Pvt Ltd';
+      const today = new Date();
+      const startDate = today.toISOString().slice(0, 10);
+      const demoEndDate = new Date(today);
+      demoEndDate.setFullYear(demoEndDate.getFullYear() + 1);
+      const endDate = demoEndDate.toISOString().slice(0, 10);
 
       let workspace = null as WorkspaceRow | null;
       const workspaceLookup = await supabase
@@ -500,7 +490,7 @@ export function StartPilotWizardPage() {
               owner_id: activeUserId,
               company: profile?.company || 'NIRMAN Demo',
               status: 'active',
-              start_date: new Date().toISOString().slice(0, 10),
+              start_date: startDate,
               budget: 2500000,
               location: 'Demo District',
               progress_percent: 0,
@@ -532,7 +522,8 @@ export function StartPilotWizardPage() {
             department: 'Demo Public Works Department',
             contractor_name: contractorCompany,
             total_contract_value: 2500000,
-            start_date: new Date().toISOString().slice(0, 10),
+            start_date: startDate,
+            end_date: endDate,
             location: 'Demo District',
             project_type: 'highway',
             status: 'active',

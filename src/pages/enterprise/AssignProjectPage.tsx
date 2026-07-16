@@ -46,18 +46,12 @@ type ProjectOption = {
   contractorName?: string | null;
 };
 
-type ContractorLicenseRow = {
-  contractor_id: string;
-  contractor_company_name?: string | null;
-  license_status?: string | null;
-};
 
 type LegacyProjectRow = {
   id: string;
   name?: string | null;
   project_name?: string | null;
   project_code?: string | null;
-  contractor_id?: string | null;
 };
 
 type GovProjectRow = {
@@ -143,7 +137,6 @@ export function AssignProjectPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUserRow[]>([]);
   const [profiles, setProfiles] = useState<Record<string, ProfileRow>>({});
-  const [licenses, setLicenses] = useState<ContractorLicenseRow[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [workspaceId, setWorkspaceId] = useState('');
   const [projectKey, setProjectKey] = useState('');
@@ -181,7 +174,7 @@ export function AssignProjectPage() {
           .order('created_at', { ascending: false }),
         supabase
           .from('projects')
-          .select('id, name, project_name, project_code, contractor_id')
+          .select('id, name, project_name, project_code')
           .order('created_at', { ascending: false }),
       ]);
 
@@ -209,16 +202,12 @@ export function AssignProjectPage() {
       setProjectKey((current) => current || (loadedProjects[0] ? `${loadedProjects[0].table}:${loadedProjects[0].id}` : ''));
 
       if (nextWorkspaceId) {
-        const [usersResult, licensesResult, assignmentsResult] = await Promise.all([
+        const [usersResult, assignmentsResult] = await Promise.all([
           supabase
             .from('workspace_users')
             .select('id, workspace_id, user_id, role, active, parent_user_id, subdivision_name')
             .eq('workspace_id', nextWorkspaceId)
             .eq('active', true),
-          supabase
-            .from('contractor_licenses')
-            .select('contractor_id, contractor_company_name, license_status')
-            .eq('workspace_id', nextWorkspaceId),
           supabase
             .from('project_assignments')
             .select('id, workspace_id, project_id, project_table, executive_engineer_id, assistant_engineer_id, junior_engineer_id, contractor_id, contractor_company_name, access_status')
@@ -227,20 +216,16 @@ export function AssignProjectPage() {
         ]);
 
         if (usersResult.error) nextWarnings.push(`workspace_users unavailable: ${usersResult.error.message}`);
-        if (licensesResult.error) nextWarnings.push(`contractor_licenses unavailable: ${licensesResult.error.message}`);
         if (assignmentsResult.error) nextWarnings.push(`project_assignments unavailable: ${assignmentsResult.error.message}`);
 
         const loadedUsers = (usersResult.data || []) as WorkspaceUserRow[];
-        const loadedLicenses = (licensesResult.data || []) as ContractorLicenseRow[];
         const loadedAssignments = (assignmentsResult.data || []) as AssignmentRow[];
 
         setWorkspaceUsers(loadedUsers);
-        setLicenses(loadedLicenses);
         setAssignments(loadedAssignments);
 
         const profileIds = Array.from(new Set([
           ...loadedUsers.map((user) => user.user_id),
-          ...loadedLicenses.map((license) => license.contractor_id),
           ...loadedAssignments.flatMap((assignment) => [
             assignment.executive_engineer_id,
             assignment.assistant_engineer_id,
@@ -265,7 +250,6 @@ export function AssignProjectPage() {
         }
       } else {
         setWorkspaceUsers([]);
-        setLicenses([]);
         setAssignments([]);
         setProfiles({});
       }
@@ -309,15 +293,8 @@ export function AssignProjectPage() {
     workspaceUsers.filter((user) => user.role === 'contractor').forEach((user) => {
       byId.set(user.user_id, { id: user.user_id, label: displayName(profiles[user.user_id], shortId(user.user_id)) });
     });
-    licenses.forEach((license) => {
-      byId.set(license.contractor_id, {
-        id: license.contractor_id,
-        label: license.contractor_company_name || displayName(profiles[license.contractor_id], shortId(license.contractor_id)),
-        status: license.license_status,
-      });
-    });
     return Array.from(byId.values());
-  }, [licenses, profiles, workspaceUsers]);
+  }, [profiles, workspaceUsers]);
 
   function resetForm() {
     setEditingId(null);
