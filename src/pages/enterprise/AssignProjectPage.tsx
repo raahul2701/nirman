@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CheckCircle2, Edit3, FolderTree, RefreshCw, Save, ShieldCheck } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AlertTriangle, CheckCircle2, Copy, Download, Edit3, FolderTree, RefreshCw, Save, Send, ShieldCheck } from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Select } from '../../components/ui/Input';
+import { Input, Select } from '../../components/ui/Input';
 import { supabase } from '../../lib/supabase';
 import { logAssignmentCreated } from '../../services/activityLogger';
 import { useAuth } from '../../contexts/useAuth';
 import { resolveActiveWorkspaceForWrite } from '../../services/businessHierarchyService';
+import { downloadAccessLetterPdf, normalizeProvisionEmail, provisionProjectTeam, roleLabel, type ProvisionTeamMemberInput, type ProvisionTeamMemberResult, type ProvisionTeamRole } from '../../services/projectTeamProvisioningService';
 
 type WorkspaceRow = {
   id: string;
@@ -103,6 +104,16 @@ const statusOptions = [
   { value: 'archived', label: 'Archived' },
 ];
 
+const defaultProvisionMembers: ProvisionTeamMemberInput[] = [
+  { role: 'assistant_engineer', fullName: '', email: '', phone: '', employeeCode: '', companyName: '' },
+  { role: 'junior_engineer', fullName: '', email: '', phone: '', employeeCode: '', companyName: '' },
+  { role: 'contractor', fullName: '', email: '', phone: '', licenceNumber: '', companyName: '' },
+];
+
+function statusText(value: boolean) {
+  return value ? 'yes' : 'no';
+}
+
 function displayName(profile: ProfileRow | undefined, fallback: string) {
   return profile?.full_name || profile?.company || profile?.email || fallback;
 }
@@ -137,6 +148,7 @@ function preserveExistingSelection(selectedId: string, existingId: string | null
   return selectedId || existingId || null;
 }
 export function AssignProjectPage() {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -156,6 +168,9 @@ export function AssignProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [teamMembers, setTeamMembers] = useState<ProvisionTeamMemberInput[]>(defaultProvisionMembers);
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisionResults, setProvisionResults] = useState<ProvisionTeamMemberResult[]>([]);
 
   const loadData = useCallback(async (preferredWorkspaceId?: string) => {
     setLoading(true);
@@ -322,6 +337,67 @@ export function AssignProjectPage() {
     setStatus(toUiStatus(assignment.access_status));
     setSuccess(null);
     setError(null);
+  }
+
+  function updateTeamMember(role: ProvisionTeamRole, field: keyof ProvisionTeamMemberInput, value: string) {
+    setTeamMembers((current) => current.map((member) => (member.role === role ? { ...member, [field]: value } : member)));
+  }
+
+  function validateTeamMembers(members: ProvisionTeamMemberInput[]) {
+    const completeMembers = members
+      .map((member) => ({ ...member, email: normalizeProvisionEmail(member.email), fullName: member.fullName.trim() }))
+      .filter((member) => member.fullName || member.email || member.phone || member.employeeCode || member.licenceNumber || member.companyName);
+    const missingRequired = completeMembers.find((member) => !member.fullName || !member.email);
+    if (missingRequired) return { error: `${roleLabel(missingRequired.role)} requires full name and email.`, members: [] as ProvisionTeamMemberInput[] };
+    const duplicateEmail = completeMembers.find((member, index) => completeMembers.findIndex((other) => other.email === member.email) !== index)?.email;
+    if (duplicateEmail) return { error: `Duplicate email in team submission: ${duplicateEmail}`, members: [] as ProvisionTeamMemberInput[] };
+    return { error: null, members: completeMembers };
+  }
+
+  async function provisionTeam(membersOverride?: ProvisionTeamMemberInput[]) {
+    setError(null);
+    setSuccess(null);
+    if (!selectedWorkspace || !selectedProject) {
+      setError('Select a workspace and project before provisioning team access.');
+      return;
+    }
+    const validation = validateTeamMembers(membersOverride || teamMembers);
+    if (validation.error) {
+      setError(validation.error);
+      return;
+    }
+    if (validation.members.length === 0) {
+      setError('Enter at least one AE, JE, or Contractor before provisioning.');
+      return;
+    }
+
+    setProvisioning(true);
+    try {
+      const results = await provisionProjectTeam({
+        workspaceId: selectedWorkspace.id,
+        projectId: selectedProject.id,
+        projectTable: selectedProject.table,
+        members: validation.members,
+      });
+      setProvisionResults(results);
+      const failed = results.filter((result) => result.statuses.delivery_failed || !result.statuses.assigned);
+      setSuccess(failed.length ? `Provisioning completed with ${failed.length} member issue(s).` : 'Project team provisioned successfully.');
+      await loadData(selectedWorkspace.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Project team provisioning failed');
+    } finally {
+      setProvisioning(false);
+    }
+  }
+
+  async function retryProvision(result: ProvisionTeamMemberResult) {
+    const source = teamMembers.find((member) => member.role === result.role && normalizeProvisionEmail(member.email) === result.email);
+    await provisionTeam([source || { role: result.role, fullName: result.fullName, email: result.email }]);
+  }
+
+  async function copyLoginId(loginId: string) {
+    await navigator.clipboard.writeText(loginId);
+    setSuccess(`Copied login ID ${loginId}`);
   }
 
   async function saveAssignment() {
@@ -551,6 +627,97 @@ export function AssignProjectPage() {
           </div>
         </Card>
 
+        <Card className="xl:col-span-3">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="font-semibold text-[#12332D]">Project Team Provisioning</h2>
+              <p className="text-xs text-[#6C7568]">Invite or reuse AE, JE, and Contractor users for the selected project.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" icon={<Send size={14} />} loading={provisioning} disabled={Boolean(assignmentBlockReason)} onClick={() => provisionTeam()}>
+                Provision Team
+              </Button>
+              <Button variant="outline" onClick={() => navigate('/dashboard')}>Open Dashboard</Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {teamMembers.map((member) => (
+              <div key={member.role} className="rounded-lg border border-[#D9D0B5] p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="font-semibold text-[#12332D]">{roleLabel(member.role)}</p>
+                  <span className="rounded-full bg-[#005F56]/10 px-2 py-1 text-[11px] font-medium text-[#005F56]">{member.role}</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <Input label="Full Name" value={member.fullName} onChange={(event) => updateTeamMember(member.role, 'fullName', event.target.value)} />
+                  <Input label="Email" type="email" value={member.email} onChange={(event) => updateTeamMember(member.role, 'email', event.target.value)} />
+                  <Input label="Phone" value={member.phone || ''} onChange={(event) => updateTeamMember(member.role, 'phone', event.target.value)} />
+                  {member.role === 'contractor' ? (
+                    <>
+                      <Input label="Licence Number" value={member.licenceNumber || ''} onChange={(event) => updateTeamMember(member.role, 'licenceNumber', event.target.value)} />
+                      <Input label="Company Name" value={member.companyName || ''} onChange={(event) => updateTeamMember(member.role, 'companyName', event.target.value)} />
+                    </>
+                  ) : (
+                    <Input label="Employee Code" value={member.employeeCode || ''} onChange={(event) => updateTeamMember(member.role, 'employeeCode', event.target.value)} />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {provisionResults.length > 0 && (
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[980px] text-sm">
+                <thead>
+                  <tr className="border-b border-[#D9D0B5] text-left text-[#6C7568]">
+                    <th className="py-3 pr-4 font-medium">Member</th>
+                    <th className="py-3 pr-4 font-medium">Account</th>
+                    <th className="py-3 pr-4 font-medium">Assigned</th>
+                    <th className="py-3 pr-4 font-medium">Letter</th>
+                    <th className="py-3 pr-4 font-medium">Delivery</th>
+                    <th className="py-3 pr-4 font-medium">Stages</th>
+                    <th className="py-3 pr-4 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {provisionResults.map((result) => (
+                    <tr key={`${result.role}:${result.email}`} className="border-b border-[#E8DFC6] text-[#4D5B52]">
+                      <td className="py-3 pr-4">
+                        <p className="font-medium text-[#12332D]">{result.fullName}</p>
+                        <p className="text-xs text-[#6C7568]">{roleLabel(result.role)} - {result.email}</p>
+                      </td>
+                      <td className="py-3 pr-4">{result.identityStatus}</td>
+                      <td className="py-3 pr-4">{statusText(result.statuses.assigned)}</td>
+                      <td className="py-3 pr-4">{statusText(result.statuses.letter_created)}</td>
+                      <td className="py-3 pr-4">
+                        <p>email: {statusText(result.statuses.email_sent)}</p>
+                        <p>sms: {statusText(result.statuses.sms_sent)}</p>
+                        {result.statuses.delivery_failed && <p className="text-red-500">needs review</p>}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex max-w-xs flex-wrap gap-1">
+                          {result.stages.map((stage) => (
+                            <span key={`${result.email}:${stage.stage}:${stage.status}`} title={stage.message} className="rounded-full border border-[#D9D0B5] px-2 py-0.5 text-[11px]">
+                              {stage.stage}: {stage.status}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" icon={<Download size={12} />} disabled={!result.letter} onClick={() => result.letter && downloadAccessLetterPdf(result.letter)}>Download Letter</Button>
+                          <Button size="sm" variant="outline" icon={<Send size={12} />} onClick={() => retryProvision(result)}>Resend Activation</Button>
+                          <Button size="sm" variant="outline" icon={<Copy size={12} />} onClick={() => copyLoginId(result.email)}>Copy Login ID</Button>
+                          <Button size="sm" variant="outline" onClick={() => navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${selectedProject?.id || ''}&projectTable=${selectedProject?.table || 'gov_projects'}`)}>Open Assignment</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
         <Card className="xl:col-span-2">
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
