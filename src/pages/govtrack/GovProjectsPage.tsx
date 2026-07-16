@@ -16,6 +16,7 @@ import { formatCurrency } from '../../lib/utils';
 import { featureFlags } from '../../lib/featureFlags';
 import { loadAssignedGovProjects } from '../../services/assignedProjectsService';
 import { getActiveWorkspaceId } from '../../services/businessHierarchyService';
+import { GOV_PROJECT_IDENTITY_BLOCKED_MESSAGE, resolveGovProjectEngineerIdentity } from '../../services/govProjectIdentity';
 
 const projectTypes = [
   { value: 'highway', label: 'Highway' },
@@ -73,8 +74,8 @@ export function GovProjectsPage() {
   }, [loadProjects]);
 
   async function createProject() {
-    if (!form.project_name || !form.project_code) {
-      toast('Project name and code are required', 'warning'); return;
+    if (!form.project_name || !form.project_code || !form.department || !form.contractor_name || !form.total_contract_value || !form.start_date || !form.end_date) {
+      toast('Project name, code, department, contractor, value, start date, and end date are required', 'warning'); return;
     }
     if (authLoading || profileLoading) {
       toast('Restoring your secure session...', 'warning'); return;
@@ -110,6 +111,21 @@ export function GovProjectsPage() {
       return;
     }
 
+    let engineerIdentity;
+    try {
+      engineerIdentity = await resolveGovProjectEngineerIdentity(activeUserId);
+    } catch (identityError) {
+      setSubmitting(false);
+      toast(identityError instanceof Error ? identityError.message : 'Government project identity lookup failed.', 'error');
+      return;
+    }
+
+    if (!engineerIdentity.engineerId || !engineerIdentity.compatibleWithAuthRls) {
+      setSubmitting(false);
+      toast(engineerIdentity.reason || GOV_PROJECT_IDENTITY_BLOCKED_MESSAGE, 'error');
+      return;
+    }
+
     const code = form.project_code.toUpperCase();
     const projectId = crypto.randomUUID();
     const payload = {
@@ -118,10 +134,10 @@ export function GovProjectsPage() {
       project_code: code,
       department: form.department,
       contractor_name: form.contractor_name,
-      engineer_id: activeUserId,
+      engineer_id: engineerIdentity.engineerId,
       total_contract_value: parseFloat(form.total_contract_value) || 0,
-      start_date: form.start_date || null,
-      end_date: form.end_date || null,
+      start_date: form.start_date,
+      end_date: form.end_date,
       location: form.location,
       project_type: form.project_type,
       status: 'active',
