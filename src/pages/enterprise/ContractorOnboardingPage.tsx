@@ -5,7 +5,7 @@ import { Badge, StatusBadge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/useAuth';
-import { EMPTY_WORKSPACE_SUMMARY, getMyWorkspaceSummary, normalizeWorkspaceSummary, recommendContractor, WorkspaceSummary } from '../../services/businessHierarchyService';
+import { EMPTY_WORKSPACE_SUMMARY, getMyWorkspaceSummary, isContractorRecommendationStorageUnavailable, normalizeWorkspaceSummary, recommendContractor, WorkspaceSummary } from '../../services/businessHierarchyService';
 
 export function ContractorOnboardingPage() {
   const { user } = useAuth();
@@ -17,10 +17,12 @@ export function ContractorOnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recommendationsUnavailable, setRecommendationsUnavailable] = useState(false);
 
   async function load() {
     const data = await getMyWorkspaceSummary();
     setSummary(normalizeWorkspaceSummary(data));
+    setRecommendationsUnavailable(isContractorRecommendationStorageUnavailable());
   }
 
   useEffect(() => {
@@ -48,7 +50,9 @@ export function ContractorOnboardingPage() {
       setContractorCompany('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to recommend contractor');
+      const message = err instanceof Error ? err.message : 'Failed to recommend contractor';
+      setRecommendationsUnavailable(message === 'Contractor recommendation storage is not configured.' || isContractorRecommendationStorageUnavailable());
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -103,7 +107,7 @@ export function ContractorOnboardingPage() {
               <label className="block text-xs text-[#808080] mb-2" htmlFor="contractorPhone">Phone</label>
               <input id="contractorPhone" value={contractorPhone} onChange={(event) => setContractorPhone(event.target.value)} className="w-full rounded-lg border border-[#2A2A2A] bg-[#111111] px-3 py-2 text-white outline-none focus:border-[#FF6B00]" />
             </div>
-            <Button type="submit" variant="primary" loading={saving} disabled={!safeSummary.workspace || !user} icon={<Send size={14} />}>Create Recommendation</Button>
+            <Button type="submit" variant="primary" loading={saving} disabled={!safeSummary.workspace || !user || recommendationsUnavailable} icon={<Send size={14} />}>Create Recommendation</Button>
           </form>
         </Card>
 
@@ -132,7 +136,7 @@ export function ContractorOnboardingPage() {
               </div>
             ))}
             {recommendations.length === 0 && (
-              <p className="text-[#808080] text-sm">No contractor recommendations found.</p>
+              <p className="text-[#808080] text-sm">{recommendationsUnavailable ? 'Contractor recommendation storage is not configured.' : 'No contractor recommendations found.'}</p>
             )}
           </div>
         </Card>

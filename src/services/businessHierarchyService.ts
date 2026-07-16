@@ -6,7 +6,10 @@ export type LicenseStatus = 'active' | 'trial' | 'expired' | 'suspended';
 export interface ExecutiveEngineerWorkspace {
   id: string;
   executive_engineer_id: string;
+  executive_engineer_name: string;
+  executive_engineer_email: string | null;
   workspace_name: string;
+  workspace_code: string | null;
   division_code: string | null;
   department: string | null;
   district: string | null;
@@ -176,6 +179,38 @@ type SupabaseErrorLike = {
   details?: string | null;
   status?: number | string;
 };
+type ProfileIdentityRow = {
+  id: string;
+  full_name?: string | null;
+  email?: string | null;
+  company?: string | null;
+};
+
+type WorkspaceInsertPayload = {
+  executive_engineer_id: string;
+  executive_engineer_name: string;
+  executive_engineer_email: string | null;
+  workspace_name: string;
+  workspace_code: string;
+  division_code: string;
+  department: string;
+  district: string;
+  storage_namespace: string;
+  status: string;
+};
+
+type WorkspaceUpdatePayload = Partial<Pick<ExecutiveEngineerWorkspace, 'drive_root_folder_id'>> & {
+  google_drive_root_folder_id?: string | null;
+  gemini_enabled?: boolean | null;
+  maps_enabled?: boolean | null;
+  updated_at: string;
+};
+
+let recommendationsUnavailable = false;
+
+export function isContractorRecommendationStorageUnavailable() {
+  return recommendationsUnavailable;
+}
 
 function isOptionalSupabaseError(error?: SupabaseErrorLike | null) {
   if (!error) return false;
@@ -191,28 +226,92 @@ function isOptionalSupabaseError(error?: SupabaseErrorLike | null) {
     String(error.status) === '404'
   );
 }
+function isMissingRecommendationsTable(error?: SupabaseErrorLike | null) {
+  if (!error) return false;
+  const hint = [error.code, error.message, error.details, error.status].filter(Boolean).join(' ').toLowerCase();
+  return hint.includes('pgrst205') || hint.includes('contractor_recommendations') || String(error.status) === '404';
+}
+
+function emailLocalPart(email?: string | null) {
+  return email?.split('@')[0] || null;
+}
+
+function resolveEngineerName(workspaceUserName?: string | null, profile?: ProfileIdentityRow | null, authEmail?: string | null) {
+  return workspaceUserName || profile?.full_name || emailLocalPart(authEmail) || 'Executive Engineer';
+}
+
+function workspaceCodeFromUserId(userId: string) {
+  return `EE-${userId.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+}
+
+async function resolveWorkspaceForUser(userId: string, authEmail?: string | null): Promise<ExecutiveEngineerWorkspace | null> {
+  const memberResult = await supabase
+    .from('workspace_users')
+    .select('workspace_id, full_name')
+    .eq('user_id', userId)
+    .eq('active', true)
+    .limit(1);
+  if (memberResult.error) throw memberResult.error;
+
+  const membership = memberResult.data?.[0] as (WorkspaceMembershipRow & { full_name?: string | null }) | undefined;
+  if (membership?.workspace_id) {
+    const workspaceResult = await supabase.from('executive_engineer_workspaces').select('*').eq('id', membership.workspace_id).maybeSingle();
+    if (workspaceResult.error) throw workspaceResult.error;
+    if (workspaceResult.data) return workspaceResult.data as ExecutiveEngineerWorkspace;
+  }
+
+  const existingByEngineer = await supabase
+    .from('executive_engineer_workspaces')
+    .select('*')
+    .eq('executive_engineer_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingByEngineer.error) throw existingByEngineer.error;
+  if (existingByEngineer.data) return existingByEngineer.data as ExecutiveEngineerWorkspace;
+
+  const profileResult = await supabase
+    .from('profiles')
+    .select('id, full_name, email, company')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profileResult.error) throw profileResult.error;
+
+  const profile = profileResult.data as ProfileIdentityRow | null;
+  const workspaceCode = workspaceCodeFromUserId(userId);
+  const insertPayload: WorkspaceInsertPayload = {
+    executive_engineer_id: userId,
+    executive_engineer_name: resolveEngineerName(membership?.full_name, profile, authEmail),
+    executive_engineer_email: profile?.email || authEmail || null,
+    workspace_name: profile?.company ? `${profile.company} Workspace` : `${workspaceCode} Workspace`,
+    workspace_code: workspaceCode,
+    division_code: workspaceCode,
+    department: profile?.company || 'Unassigned Department',
+    district: 'Unassigned District',
+    storage_namespace: `ee_${userId.replace(/-/g, '').slice(0, 16)}`,
+    status: 'active',
+  };
+
+  const insertResult = await supabase
+    .from('executive_engineer_workspaces')
+    .insert(insertPayload)
+    .select('*')
+    .maybeSingle();
+  if (insertResult.error) throw insertResult.error;
+  return insertResult.data as ExecutiveEngineerWorkspace | null;
+}
 
 export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
   if (!userData.user?.id) return EMPTY_WORKSPACE_SUMMARY;
 
-  const memberResult = await supabase
-    .from('workspace_users')
-    .select('*')
-    .eq('user_id', userData.user.id)
-    .eq('active', true)
-    .limit(1);
-  const { data: memberships, error: memberError } = memberResult;
-  if (memberError) throw memberError;
-
-  const workspaceId = (memberships?.[0] as WorkspaceMembershipRow | undefined)?.workspace_id;
-  if (!workspaceId) {
+  const workspace = await resolveWorkspaceForUser(userData.user.id, userData.user.email);
+  if (!workspace?.id) {
     return EMPTY_WORKSPACE_SUMMARY;
   }
 
-  const workspaceResult = await supabase.from('executive_engineer_workspaces').select('*').eq('id', workspaceId).maybeSingle();
-  if (workspaceResult.error) throw workspaceResult.error;
+  const workspaceId = workspace.id;
 
   const membersResult = await supabase.from('workspace_users').select('*').eq('workspace_id', workspaceId).eq('active', true);
   if (membersResult.error) throw membersResult.error;
@@ -227,21 +326,28 @@ export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
       : (() => { throw licensesResult.error; })()
     : (licensesResult.data as ContractorLicense[] | null) ?? [];
 
-  const recommendationsResult = await supabase
-    .from('contractor_recommendations')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false });
-  const recommendations = recommendationsResult.error
-    ? isOptionalSupabaseError(recommendationsResult.error)
-      ? []
-      : (() => { throw recommendationsResult.error; })()
-    : (recommendationsResult.data as ContractorRecommendation[] | null) ?? [];
+  let recommendations: ContractorRecommendation[] = [];
+  if (!recommendationsUnavailable) {
+    const recommendationsResult = await supabase
+      .from('contractor_recommendations')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
+    if (recommendationsResult.error) {
+      if (isMissingRecommendationsTable(recommendationsResult.error)) {
+        recommendationsUnavailable = true;
+      } else {
+        throw recommendationsResult.error;
+      }
+    } else {
+      recommendations = (recommendationsResult.data as ContractorRecommendation[] | null) ?? [];
+    }
+  }
 
   const googleResult = await supabase.from('workspace_google_connections').select('*').eq('workspace_id', workspaceId).maybeSingle();
 
   return normalizeWorkspaceSummary({
-    workspace: workspaceResult.data as ExecutiveEngineerWorkspace | null,
+    workspace,
     members: membersResult.data as WorkspaceUser[] | null,
     projects: projectsResult.data as ProjectAssignment[] | null,
     licenses,
@@ -251,10 +357,30 @@ export async function getMyWorkspaceSummary(): Promise<WorkspaceSummary> {
 }
 
 export async function upsertWorkspaceGoogleConnection(workspaceId: string, values: Partial<WorkspaceGoogleConnection>) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user?.id) throw new Error('Your session has expired. Please sign in again.');
+
+  const workspace = await resolveWorkspaceForUser(userData.user.id, userData.user.email);
+  const resolvedWorkspaceId = workspace?.id || workspaceId;
+  if (!resolvedWorkspaceId) throw new Error('Executive Engineer workspace could not be resolved.');
+
+  const workspaceUpdate = await supabase
+    .from('executive_engineer_workspaces')
+    .update({
+      drive_root_folder_id: values.drive_root_folder_id ?? null,
+      google_drive_root_folder_id: values.drive_root_folder_id ?? null,
+      gemini_enabled: values.gemini_api_status === 'manual_configured',
+      maps_enabled: values.maps_api_status === 'manual_configured',
+      updated_at: new Date().toISOString(),
+    } as WorkspaceUpdatePayload)
+    .eq('id', resolvedWorkspaceId);
+  if (workspaceUpdate.error) throw workspaceUpdate.error;
+
   const { data, error } = await supabase
     .from('workspace_google_connections')
     .upsert({
-      workspace_id: workspaceId,
+      workspace_id: resolvedWorkspaceId,
       google_project_id: values.google_project_id,
       drive_root_folder_id: values.drive_root_folder_id,
       maps_api_status: values.maps_api_status || 'not_configured',
@@ -292,7 +418,13 @@ export async function recommendContractor(input: {
     } as ContractorRecommendationInsert)
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    if (isMissingRecommendationsTable(error)) {
+      recommendationsUnavailable = true;
+      throw new Error('Contractor recommendation storage is not configured.');
+    }
+    throw error;
+  }
   return data as ContractorRecommendation;
 }
 
