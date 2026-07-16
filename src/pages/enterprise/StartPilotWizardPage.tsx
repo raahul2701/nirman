@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/useAuth';
 import { featureFlags } from '../../lib/featureFlags';
 import { supabase } from '../../lib/supabase';
 import { logAssignmentCreated, logPilotStarted } from '../../services/activityLogger';
+import { GOV_PROJECT_IDENTITY_BLOCKED_MESSAGE, resolveGovProjectEngineerIdentity } from '../../services/govProjectIdentity';
 
 type WorkspaceRow = {
   id: string;
@@ -86,17 +87,25 @@ type WorkspaceInsertPayload = {
   executive_engineer_email: string | null;
   storage_namespace: string;
 };
-type WorkspaceUserUpsertPayload = {
+type WorkspaceUserPayload = {
   workspace_id: string;
   user_id: string;
   role: WorkspaceRole;
+  full_name: string;
+  email: string | null;
   parent_user_id: string | null;
   subdivision_name: string | null;
   free_lifetime: boolean;
   active: boolean;
 };
 type WorkspaceRole = 'executive_engineer' | 'assistant_engineer' | 'junior_engineer' | 'contractor';
-type LegacyProjectInsertPayload = Record<string, string | number>;
+type WorkspaceMembershipRow = WorkspaceUserPayload & { id: string; created_at?: string | null };
+type PilotCreationStage = {
+  workspaceResolved: boolean;
+  membershipResolved: boolean;
+  projectCreated: boolean;
+  assignmentCreated: boolean;
+};
 type GovProjectInsertPayload = Record<string, string | number>;
 
 const EMPTY_VALUE = '__none__';
@@ -130,6 +139,70 @@ function findActiveWorkspaceUser(users: WorkspaceUserRow[], workspaceId: string,
 function preserveExistingSelection(selectedId: string, existingId: string | null | undefined) {
   return selectedId || existingId || null;
 }
+
+async function resolveWorkspaceMembership(payload: WorkspaceUserPayload): Promise<string> {
+  const lookup = await supabase
+    .from('workspace_users')
+    .select('id, workspace_id, user_id, role, full_name, email, parent_user_id, subdivision_name, free_lifetime, active, created_at')
+    .eq('workspace_id', payload.workspace_id)
+    .eq('user_id', payload.user_id)
+    .order('active', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (lookup.error) {
+    throw new Error(`membership_lookup failed: ${lookup.error.message}`);
+  }
+
+  const rows = (lookup.data || []) as WorkspaceMembershipRow[];
+  if (rows.length > 1 && import.meta.env.DEV) {
+    console.warn('[start-pilot] duplicate workspace membership rows detected', {
+      workspaceId: payload.workspace_id,
+      userId: payload.user_id,
+      rowCount: rows.length,
+      requestStage: 'membership_lookup',
+    });
+  }
+
+  const existing = rows.find((row) => row.active) || rows[0];
+  if (existing?.id) {
+    const update = await supabase
+      .from('workspace_users')
+      .update({
+        active: true,
+        free_lifetime: existing.free_lifetime ?? payload.free_lifetime,
+        full_name: existing.full_name || payload.full_name,
+        email: existing.email || payload.email,
+      })
+      .eq('id', existing.id)
+      .select('id')
+      .maybeSingle();
+
+    if (update.error) {
+      throw new Error(`membership_update failed: ${update.error.message}`);
+    }
+
+    return existing.id;
+  }
+
+  const insert = await supabase
+    .from('workspace_users')
+    .insert(payload)
+    .select('id')
+    .maybeSingle();
+
+  if (insert.error) {
+    throw new Error(`membership_insert failed: ${insert.error.message}`);
+  }
+
+  const insertedId = (insert.data as { id?: string } | null)?.id;
+  if (!insertedId) {
+    throw new Error('membership_insert failed: workspace_users did not return an id.');
+  }
+
+  return insertedId;
+}
+
 export function StartPilotWizardPage() {
   const navigate = useNavigate();
   const { user, profile, session, loading: authLoading, profileLoading } = useAuth();
@@ -375,6 +448,12 @@ export function StartPilotWizardPage() {
     setError(null);
     setDemoResults([]);
     const results: string[] = [];
+    const creationStage: PilotCreationStage = {
+      workspaceResolved: false,
+      membershipResolved: false,
+      projectCreated: false,
+      assignmentCreated: false,
+    };
 
     try {
       if (authLoading || profileLoading) {
@@ -417,6 +496,7 @@ export function StartPilotWizardPage() {
 
       if (workspaceLookup.data) {
         workspace = workspaceLookup.data as WorkspaceRow;
+        creationStage.workspaceResolved = true;
         results.push('Demo workspace already exists.');
       } else {
         const workspaceInsert = await supabase
@@ -437,29 +517,24 @@ export function StartPilotWizardPage() {
           .maybeSingle();
         if (workspaceInsert.error) throw new Error(`executive_engineer_workspaces insert failed: ${workspaceInsert.error.message}`);
         workspace = workspaceInsert.data as WorkspaceRow;
+        creationStage.workspaceResolved = true;
         results.push('Demo workspace created.');
       }
 
       if (!workspace) throw new Error('Demo workspace could not be created or loaded.');
-
-      const eeMembership = await supabase
-        .from('workspace_users')
-        .upsert({
-          workspace_id: workspace.id,
-          user_id: activeUserId,
-          role: 'executive_engineer',
-          parent_user_id: null,
-          subdivision_name: null,
-          free_lifetime: true,
-          active: true,
-        } as WorkspaceUserUpsertPayload, { onConflict: 'workspace_id,user_id' })
-        .select('id')
-        .maybeSingle();
-      if (eeMembership.error) {
-        results.push(`EE workspace membership not created: ${eeMembership.error.message}`);
-      } else {
-        results.push('Current user linked as Executive Engineer.');
-      }
+      const membershipId = await resolveWorkspaceMembership({
+        workspace_id: workspace.id,
+        user_id: activeUserId,
+        role: 'executive_engineer',
+        full_name: resolveEngineerName(profile, activeSession.user.email),
+        email: activeSession.user.email || null,
+        parent_user_id: null,
+        subdivision_name: null,
+        free_lifetime: true,
+        active: true,
+      });
+      creationStage.membershipResolved = true;
+      results.push(`Current user linked as Executive Engineer membership ${shortId(membershipId)}.`);
 
       let project = null as ProjectOption | null;
       const govProjectLookup = await supabase
@@ -469,38 +544,7 @@ export function StartPilotWizardPage() {
         .maybeSingle();
 
       if (govProjectLookup.error) {
-        results.push(`gov_projects lookup unavailable: ${govProjectLookup.error.message}`);
-        const legacyLookup = await supabase
-          .from('projects')
-          .select('id, name')
-          .eq('name', 'Demo Road Construction Pilot Project')
-          .maybeSingle();
-        if (legacyLookup.error) throw new Error(`projects fallback lookup failed: ${legacyLookup.error.message}`);
-
-        if (legacyLookup.data) {
-          project = { id: legacyLookup.data.id, table: 'projects', label: legacyLookup.data.name };
-          results.push('Demo fallback project already exists.');
-        } else {
-          const legacyInsert = await supabase
-            .from('projects')
-            .insert({
-              name: 'Demo Road Construction Pilot Project',
-              project_name: 'Demo Road Construction Pilot Project',
-              description: 'Demo pilot project for testing NIRMAN assignment workflow.',
-              owner_id: activeUserId,
-              company: profile?.company || 'NIRMAN Demo',
-              status: 'active',
-              start_date: startDate,
-              budget: 2500000,
-              location: 'Demo District',
-              progress_percent: 0,
-            } as LegacyProjectInsertPayload)
-            .select('id, name')
-            .maybeSingle();
-          if (legacyInsert.error) throw new Error(`Project creation failed: projects fallback insert failed: ${legacyInsert.error.message}`);
-          project = { id: legacyInsert.data.id, table: 'projects', label: legacyInsert.data.name };
-          results.push('Demo fallback project created.');
-        }
+        throw new Error(`Project creation failed: gov_projects lookup failed: ${govProjectLookup.error.message}`);
       } else if (govProjectLookup.data) {
         project = {
           id: govProjectLookup.data.id,
@@ -509,14 +553,20 @@ export function StartPilotWizardPage() {
           code: govProjectLookup.data.project_code,
           contractorName: govProjectLookup.data.contractor_name,
         };
+        creationStage.projectCreated = true;
         results.push('Demo GovTrack project already exists.');
       } else {
+        const engineerIdentity = await resolveGovProjectEngineerIdentity(activeUserId);
+        if (!engineerIdentity.engineerId || !engineerIdentity.compatibleWithAuthRls) {
+          throw new Error(engineerIdentity.reason || GOV_PROJECT_IDENTITY_BLOCKED_MESSAGE);
+        }
+
         const projectId = crypto.randomUUID();
         const govProjectInsert = await supabase
           .from('gov_projects')
           .insert({
             id: projectId,
-            engineer_id: activeUserId,
+            engineer_id: engineerIdentity.engineerId,
             project_name: 'Demo Road Construction Pilot Project',
             project_code: projectCode,
             department: 'Demo Public Works Department',
@@ -536,6 +586,7 @@ export function StartPilotWizardPage() {
           code: projectCode,
           contractorName: contractorCompany,
         };
+        creationStage.projectCreated = true;
         results.push('Demo GovTrack project created.');
       }
 
@@ -552,6 +603,7 @@ export function StartPilotWizardPage() {
 
       let assignmentId = assignmentLookup.data?.id as string | undefined;
       if (assignmentId) {
+        creationStage.assignmentCreated = true;
         results.push('Demo assignment already exists.');
       } else {
         const assignmentInsert = await supabase
@@ -571,6 +623,7 @@ export function StartPilotWizardPage() {
           .maybeSingle();
         if (assignmentInsert.error) throw new Error(`Assignment creation failed: project_assignments insert failed: ${assignmentInsert.error.message}`);
         assignmentId = assignmentInsert.data?.id;
+        creationStage.assignmentCreated = true;
         results.push('Demo pilot assignment created.');
         logPilotStarted(user, profile?.email || user.email, {
           assignment_id: assignmentId || null,
@@ -589,6 +642,7 @@ export function StartPilotWizardPage() {
         }, '/enterprise/start-pilot');
       }
 
+      results.push(`Pilot stages: workspaceResolved=${creationStage.workspaceResolved}, membershipResolved=${creationStage.membershipResolved}, projectCreated=${creationStage.projectCreated}, assignmentCreated=${creationStage.assignmentCreated}.`);
       results.push('Demo AE/JE/Contractor users are placeholders only. Invite real users before role-based team selection testing.');
       setDemoAssignmentId(assignmentId || null);
       setWorkspaceId(workspace.id);
@@ -598,6 +652,7 @@ export function StartPilotWizardPage() {
       setDemoResults(results);
       await loadData(workspace.id);
     } catch (err) {
+      results.push(`Pilot stages: workspaceResolved=${creationStage.workspaceResolved}, membershipResolved=${creationStage.membershipResolved}, projectCreated=${creationStage.projectCreated}, assignmentCreated=${creationStage.assignmentCreated}.`);
       setError(err instanceof Error ? err.message : 'Failed to create demo pilot data');
       setDemoResults(results);
     } finally {
