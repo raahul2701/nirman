@@ -37,21 +37,20 @@ const severityData = [
 export function ReportsPage() {
   const { user } = useAuth();
   const userId = user?.id;
-  const [stats, setStats] = useState({ totalProblems: 0, resolvedProblems: 0, totalWorkers: 0, activeMaterials: 0 });
+  const [stats, setStats] = useState<{ totalProblems: number; resolvedProblems: number; totalWorkers: string | number; activeMaterials: number }>({ totalProblems: 0, resolvedProblems: 0, totalWorkers: 'Not available', activeMaterials: 0 });
   const [loading, setLoading] = useState(true);
 
   const loadStats = useCallback(async () => {
     if (!userId) return;
-    const [problems, resolved, workers, materials] = await Promise.all([
+    const [problems, resolved, materials] = await Promise.all([
       supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', userId),
       supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', userId).eq('status', 'resolved'),
-      supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', userId),
       supabase.from('materials').select('id', { count: 'exact' }).eq('owner_id', userId),
     ]);
     setStats({
       totalProblems: problems.count || 0,
       resolvedProblems: resolved.count || 0,
-      totalWorkers: workers.count || 0,
+      totalWorkers: 'Not available',
       activeMaterials: materials.count || 0,
     });
     setLoading(false);

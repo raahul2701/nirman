@@ -7,7 +7,6 @@ import { AppLayout } from '../components/layout/AppLayout';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Input';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../components/ui/useToast';
 import { Worker, WorkerSkill } from '../types';
@@ -30,6 +29,8 @@ const skillColors: Record<string, string> = {
   general: '#6B7280', supervisor: '#22c55e', driver: '#14B8A6',
 };
 
+const WORKER_OWNERSHIP_UNAVAILABLE = 'Worker ownership mapping is not available.';
+
 interface WorkerForm {
   name: string;
   phone: string;
@@ -47,47 +48,24 @@ export function WorkersPage() {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
   const [filterSkill, setFilterSkill] = useState('all');
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting] = useState(false);
   const [form, setForm] = useState<WorkerForm>({ name: '', phone: '', skill: 'general', daily_wage: '', aadhaar: '' });
 
   const loadWorkers = useCallback(async () => {
-    if (!userId) return;
-    const { data } = await supabase.from('workers').select('*').eq('owner_id', userId).order('created_at', { ascending: false });
-    if (data) setWorkers(data as Worker[]);
+    setWorkers([]);
     setLoading(false);
-  }, [userId]);
+  }, []);
 
   useEffect(() => {
     if (userId) loadWorkers();
   }, [loadWorkers, userId]);
 
   async function addWorker() {
-    if (!userId) return;
-    if (!form.name) { toast('Worker name is required', 'warning'); return; }
-    setSubmitting(true);
-    const { data, error } = await supabase.from('workers').insert({
-      owner_id: userId,
-      name: form.name,
-      phone: form.phone,
-      skill: form.skill,
-      daily_wage: parseFloat(form.daily_wage) || 0,
-      aadhaar: form.aadhaar,
-      status: 'active',
-      performance_score: 0,
-    }).select().maybeSingle();
-    setSubmitting(false);
-    if (error) { toast('Failed to add worker', 'error'); return; }
-    if (data) setWorkers(prev => [data as Worker, ...prev]);
-    setShowForm(false);
-    setForm({ name: '', phone: '', skill: 'general', daily_wage: '', aadhaar: '' });
-    toast(`${form.name} added successfully!`, 'success');
+    toast(WORKER_OWNERSHIP_UNAVAILABLE, 'warning');
   }
 
-  async function toggleStatus(worker: Worker) {
-    const newStatus = worker.status === 'active' ? 'inactive' : 'active';
-    await supabase.from('workers').update({ status: newStatus }).eq('id', worker.id);
-    setWorkers(prev => prev.map(w => w.id === worker.id ? { ...w, status: newStatus } : w));
-    toast(`${worker.name} marked as ${newStatus}`, 'info');
+  async function toggleStatus() {
+    toast(WORKER_OWNERSHIP_UNAVAILABLE, 'warning');
   }
 
   const filtered = workers.filter(w => {
@@ -104,7 +82,7 @@ export function WorkersPage() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Total Workers', value: workers.length, color: '#FF6B00' },
+          { label: 'Total Workers', value: 'Not available', color: '#FF6B00' },
           { label: 'Active Today', value: activeCount, color: '#22c55e' },
           { label: 'Daily Wage Budget', value: `₹${totalWage.toLocaleString('en-IN')}`, color: '#00D4AA' },
         ].map(s => (
@@ -125,8 +103,10 @@ export function WorkersPage() {
           <option value="all">All Skills</option>
           {skillOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
-        <Button variant="primary" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>Add Worker</Button>
+        <Button variant="primary" icon={<Plus size={14} />} disabled onClick={() => setShowForm(true)}>Add Worker</Button>
       </div>
+
+      <p className="mb-5 rounded-lg border border-[#CDBD82] bg-[#FFF8E1] px-3 py-2 text-sm text-[#6B5A1E]">{WORKER_OWNERSHIP_UNAVAILABLE}</p>
 
       {/* Add Worker Modal */}
       {showForm && (
@@ -145,7 +125,7 @@ export function WorkersPage() {
             </div>
             <div className="flex gap-3 mt-5">
               <Button variant="secondary" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button variant="primary" className="flex-1" loading={submitting} onClick={addWorker}>Add Worker</Button>
+              <Button variant="primary" className="flex-1" loading={submitting} disabled onClick={addWorker}>Add Worker</Button>
             </div>
           </div>
         </div>
@@ -159,9 +139,9 @@ export function WorkersPage() {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Users size={48} className="text-[#2A2A2A] mb-4" />
-          <p className="text-white font-semibold mb-1">No workers found</p>
-          <p className="text-[#606060] text-sm mb-4">{search || filterSkill !== 'all' ? 'Try adjusting filters' : 'Add your first worker to get started'}</p>
-          {!search && <Button variant="primary" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>Add Worker</Button>}
+          <p className="text-white font-semibold mb-1">Worker records unavailable</p>
+          <p className="text-[#606060] text-sm mb-4">{search || filterSkill !== 'all' ? 'Try adjusting filters' : WORKER_OWNERSHIP_UNAVAILABLE}</p>
+          {!search && <Button variant="primary" icon={<Plus size={14} />} disabled onClick={() => setShowForm(true)}>Add Worker</Button>}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

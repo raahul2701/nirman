@@ -66,7 +66,7 @@ class RoleDashboardBoundary extends Component<RoleDashboardBoundaryProps, { hasE
 
 const QUICK_ACTIONS = [
   { label: 'Report Problem', icon: AlertTriangle, color: '#B42318', to: '/problems' },
-  { label: 'Add Worker', icon: Users, color: '#0B8B7D', to: '/workers' },
+  { label: 'Add Worker', icon: Users, color: '#0B8B7D', to: '/workers', disabled: true, disabledReason: 'Worker ownership mapping is not available.' },
   { label: 'Drone Survey', icon: Plane, color: '#2F6B9A', to: '/surveys' },
   { label: 'AI Design', icon: Brain, color: '#C89B3C', to: '/design' },
   { label: 'Inventory', icon: Package, color: '#C89B3C', to: '/inventory' },
@@ -143,7 +143,7 @@ const ProblemRow = memo(function ProblemRow({ problem, onOpen }: ProblemRowProps
 export function DashboardPage() {
   const { user, profile, profileLoading, profileError } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState({ activeProjects: 0, openIssues: 0, workersPresent: 0, lowStockAlerts: 0, surveysCompleted: 0 });
+  const [stats, setStats] = useState<{ activeProjects: number; openIssues: number; workersPresent: string | number; lowStockAlerts: number; surveysCompleted: number }>({ activeProjects: 0, openIssues: 0, workersPresent: 'Not available', lowStockAlerts: 0, surveysCompleted: 0 });
   const [recentProblems, setRecentProblems] = useState<Problem[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
   const [roleDashboardFailed, setRoleDashboardFailed] = useState(false);
@@ -179,10 +179,9 @@ export function DashboardPage() {
 
     async function loadDashboard() {
       try {
-        const [proj, probs, workers, materials, surveys] = await Promise.all([
+        const [proj, probs, materials, surveys] = await Promise.all([
           supabase.from('projects').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
           supabase.from('problems').select('id', { count: 'exact' }).eq('reported_by', currentUserId).eq('status', 'open'),
-          supabase.from('workers').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'active'),
           supabase.from('materials').select('id, current_qty, threshold_qty').eq('owner_id', currentUserId),
           supabase.from('surveys').select('id', { count: 'exact' }).eq('owner_id', currentUserId).eq('status', 'complete'),
         ]);
@@ -195,7 +194,7 @@ export function DashboardPage() {
         setStats({
           activeProjects: proj.error ? 0 : proj.count || 0,
           openIssues: probs.error ? 0 : probs.count || 0,
-          workersPresent: workers.error ? 0 : workers.count || 0,
+          workersPresent: 'Not available',
           lowStockAlerts: materials.error ? 0 : lowStock,
           surveysCompleted: surveys.error ? 0 : surveys.count || 0,
         });
@@ -227,15 +226,19 @@ export function DashboardPage() {
 
   const actionButtons = useMemo(
     () => QUICK_ACTIONS.map((action) => (
-      <button
-        key={action.label}
-        onClick={() => navigate(action.to)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all hover:shadow-enterprise"
-        style={{ background: `${action.color}12`, border: `1px solid ${action.color}28`, color: action.color }}
-      >
-        <action.icon size={13} />
-        {action.label}
-      </button>
+      <div key={action.label}>
+        <button
+          type="button"
+          disabled={'disabled' in action && action.disabled}
+          onClick={() => { if (!('disabled' in action && action.disabled)) navigate(action.to); }}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-all hover:shadow-enterprise disabled:cursor-not-allowed disabled:opacity-70"
+          style={{ background: `${action.color}12`, border: `1px solid ${action.color}28`, color: action.color }}
+        >
+          <action.icon size={13} />
+          {action.label}
+        </button>
+        {'disabledReason' in action && action.disabledReason && <p className="mt-1 max-w-40 text-[10px] text-[#6B5A1E]">{action.disabledReason}</p>}
+      </div>
     )),
     [navigate]
   );
