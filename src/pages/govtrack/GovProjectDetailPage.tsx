@@ -15,11 +15,19 @@ import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../../components/ui/useToast';
 import { GovProject, PaymentMilestone, AIRiskLevel } from '../../types';
 import { formatCurrency } from '../../lib/utils';
+import { resolveActiveWorkspaceForWrite } from '../../services/businessHierarchyService';
 
 const RISK_COLORS: Record<string, string> = { high: '#ef4444', medium: '#f97316', low: '#eab308', safe: '#22c55e' };
 const MILESTONE_STATUS_COLORS: Record<string, string> = { locked: '#606060', active: '#FF6B00', submitted: '#3B82F6', approved: '#00D4AA', paid: '#22c55e' };
-const GOV_PROJECT_SELECT = 'id, project_name, project_code, department, contractor_name, contractor_id, engineer_id, je_id, se_id, total_contract_value, start_date, end_date, contract_pdf_url, location, district, state, project_type, status, created_at';
+const GOV_PROJECT_SELECT = 'id, project_name, project_code, department, contractor_name, engineer_id, je_id, se_id, total_contract_value, start_date, end_date, contract_pdf_url, location, district, state, project_type, status, created_at';
+type SupabaseErrorInfo = { code?: string; message?: string; details?: string; status?: string | number };
 
+function stageError(stage: 'project_access_validation' | 'milestone_insert' | 'milestone_returning', error: unknown) {
+  const info = error as SupabaseErrorInfo | null;
+  const code = info?.code ? ` ${info.code}` : '';
+  const message = info?.message || (error instanceof Error ? error.message : 'Unknown error');
+  return `${stage} failed${code}: ${message}`;
+}
 export function GovProjectDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -49,8 +57,39 @@ export function GovProjectDetailPage() {
 
   async function addMilestone() {
     if (!mForm.milestone_name) { toast('Milestone name required', 'warning'); return; }
+    if (!id || !project) { toast(stageError('project_access_validation', new Error('project is not loaded.')), 'error'); return; }
     setSubmitting(true);
     const num = milestones.length + 1;
+
+    let activeWorkspace;
+    try {
+      activeWorkspace = await resolveActiveWorkspaceForWrite();
+    } catch (error) {
+      setSubmitting(false);
+      toast(stageError('project_access_validation', error), 'error');
+      return;
+    }
+
+    const assignment = await supabase
+      .from('project_assignments')
+      .select('id')
+      .eq('workspace_id', activeWorkspace.workspace.id)
+      .eq('project_id', id)
+      .eq('project_table', 'gov_projects')
+      .in('access_status', ['active', 'pilot'])
+      .limit(1)
+      .maybeSingle();
+    if (assignment.error) {
+      setSubmitting(false);
+      toast(stageError('project_access_validation', assignment.error), 'error');
+      return;
+    }
+    if (!assignment.data) {
+      setSubmitting(false);
+      toast(stageError('project_access_validation', new Error('project is not linked to the active workspace.')), 'error');
+      return;
+    }
+
     const { data, error } = await supabase.from('payment_milestones').insert({
       project_id: id,
       milestone_number: num,
@@ -61,13 +100,13 @@ export function GovProjectDetailPage() {
       status: 'locked',
     }).select().maybeSingle();
     setSubmitting(false);
-    if (error) { toast('Failed to add milestone', 'error'); return; }
-    if (data) setMilestones(prev => [...prev, data as PaymentMilestone]);
+    if (error) { toast(stageError('milestone_insert', error), 'error'); return; }
+    if (!data) { toast(stageError('milestone_returning', new Error('payment_milestones did not return the inserted row.')), 'error'); return; }
+    setMilestones(prev => [...prev, data as PaymentMilestone]);
     setShowMilestone(false);
     setMForm({ milestone_name: '', description: '', payment_amount: '', payment_percentage: '', due_date: '' });
     toast(`Milestone ${num} added`, 'success');
   }
-
   async function activateMilestone(m: PaymentMilestone) {
     await supabase.from('payment_milestones').update({ status: 'active' }).eq('id', m.id);
     setMilestones(prev => prev.map(ms => ms.id === m.id ? { ...ms, status: 'active' } : ms));
