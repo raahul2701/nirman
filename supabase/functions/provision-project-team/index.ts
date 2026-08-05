@@ -3,7 +3,14 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 type TeamRole = 'assistant_engineer' | 'junior_engineer' | 'contractor';
 type StageName = 'identity_lookup' | 'auth_invitation' | 'profile_creation' | 'workspace_membership' | 'project_assignment' | 'letter_generation' | 'notification_delivery';
-type StageStatus = 'pending' | 'success' | 'skipped' | 'failed' | 'not_configured' | 'email' | 'manual_link';
+type ProvisionStageStatus =
+  | 'pending'
+  | 'success'
+  | 'skipped'
+  | 'failed'
+  | 'not_configured'
+  | 'email'
+  | 'manual_link';
 
 type TeamMemberInput = {
   role: TeamRole;
@@ -23,7 +30,7 @@ type RequestBody = {
   resendInvitation?: boolean;
 };
 
-type StageResult = { stage: StageName; status: StageStatus; message?: string };
+type StageResult = { stage: StageName; status: ProvisionStageStatus; message?: string };
 type ProjectDetails = {
   id: string;
   projectName: string;
@@ -62,7 +69,7 @@ function normalizeEmail(email: string) {
   return String(email || '').trim().toLowerCase();
 }
 
-function stage(stage: StageName, status: StageStatus, message?: string): StageResult {
+function stage(stage: StageName, status: ProvisionStageStatus, message?: string): StageResult {
   return { stage, status, ...(message ? { message } : {}) };
 }
 
@@ -113,7 +120,7 @@ async function logProvisionEvent(supabase: ReturnType<typeof createClient>, inpu
   member: ReturnType<typeof sanitizeMember>;
   action: string;
   stage: StageName;
-  status: StageStatus;
+  status: ProvisionStageStatus;
   message: string;
 }) {
   const { error } = await supabase.from('audit_logs').insert({
@@ -533,7 +540,7 @@ Deno.serve(async (req: Request) => {
 
         const letter = letterFor({ workspace, project, member, userId, activationLink });
         stages.push(stage('letter_generation', 'success'));
-        const notificationStatus: StageStatus = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'not_configured';
+        const notificationStatus: ProvisionStageStatus = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'not_configured';
         const notificationMessage = identityStatus === 'invited'
           ? 'Supabase Auth invite email requested.'
           : activationLink
@@ -605,6 +612,8 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, message: safeError(error) }, 500);
   }
 });
+
+
 
 
 
