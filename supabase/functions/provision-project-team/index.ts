@@ -20,6 +20,7 @@ type RequestBody = {
   projectId?: string;
   projectTable?: 'gov_projects' | 'projects';
   members?: TeamMemberInput[];
+  resendInvitation?: boolean;
 };
 
 type StageResult = { stage: StageName; status: StageStatus; message?: string };
@@ -69,6 +70,79 @@ function safeError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error';
 }
 
+function logProvisionDebug(event: string, details: Record<string, unknown>) {
+  console.info('[provision-project-team]', event, details);
+}
+
+function temporaryPassword() {
+  const random = crypto.getRandomValues(new Uint32Array(2));
+  return `Nirman-${random[0].toString(36)}-${random[1].toString(36)}!`;
+}
+
+async function logProvisionFailure(supabase: ReturnType<typeof createClient>, input: {
+  callerId: string;
+  workspaceId: string;
+  projectId: string;
+  member: ReturnType<typeof sanitizeMember>;
+  stage: StageName;
+  error: unknown;
+}) {
+  const { error } = await supabase.from('audit_logs').insert({
+    user_id: input.callerId,
+    action: 'team_provisioning_failed',
+    table_name: 'auth.users',
+    record_id: null,
+    new_values: {
+      workspace_id: input.workspaceId,
+      project_id: input.projectId,
+      email: input.member.email,
+      role: input.member.role,
+      stage: input.stage,
+      error: safeError(input.error),
+    },
+    metadata: {
+      workspace_id: input.workspaceId,
+      project_id: input.projectId,
+      provisioning_stage: input.stage,
+    },
+  });
+  if (error) console.warn('Provisioning audit log failed', error.message);
+}
+
+
+async function logProvisionEvent(supabase: ReturnType<typeof createClient>, input: {
+  callerId: string;
+  workspaceId: string;
+  projectId: string;
+  member: ReturnType<typeof sanitizeMember>;
+  action: string;
+  stage: StageName;
+  status: StageStatus;
+  message: string;
+}) {
+  const { error } = await supabase.from('audit_logs').insert({
+    user_id: input.callerId,
+    action: input.action,
+    table_name: 'auth.users',
+    record_id: null,
+    new_values: {
+      workspace_id: input.workspaceId,
+      project_id: input.projectId,
+      email: input.member.email,
+      role: input.member.role,
+      stage: input.stage,
+      status: input.status,
+      message: input.message,
+    },
+    metadata: {
+      workspace_id: input.workspaceId,
+      project_id: input.projectId,
+      provisioning_stage: input.stage,
+      provisioning_status: input.status,
+    },
+  });
+  if (error) console.warn('Provisioning audit event failed', error.message);
+}
 function nextFailureStage(stages: StageResult[]): StageName {
   const completed = new Set(stages.filter((item) => item.status === 'success' || item.status === 'skipped').map((item) => item.stage));
   const order: StageName[] = ['identity_lookup', 'auth_invitation', 'profile_creation', 'workspace_membership', 'project_assignment', 'letter_generation', 'notification_delivery'];
@@ -280,6 +354,7 @@ Deno.serve(async (req: Request) => {
     const workspaceId = body.workspaceId || '';
     const projectId = body.projectId || '';
     const projectTable = body.projectTable || 'gov_projects';
+    const resendInvitation = body.resendInvitation === true;
     const members = (body.members || []).map(sanitizeMember).filter((member) => member.fullName && member.email && allowedRoles.has(member.role));
 
     if (!workspaceId || !projectId) return json({ ok: false, message: 'workspaceId and projectId are required.' }, 400);
@@ -326,7 +401,8 @@ Deno.serve(async (req: Request) => {
     for (const member of members) {
       const stages: StageResult[] = [];
       let userId: string | null = null;
-      let activationLink: string | null = null;
+      const activationLink: string | null = null;
+      let tempPassword: string | null = null;
       let identityStatus: 'existing' | 'invited' | 'created' = 'existing';
       let assignmentId: string | null = null;
 
@@ -335,23 +411,104 @@ Deno.serve(async (req: Request) => {
         const profileByEmail = await supabase.from('profiles').select('id').eq('email', member.email).maybeSingle();
         if (profileByEmail.error) throw profileByEmail.error;
         userId = authUser?.id || (profileByEmail.data as { id?: string } | null)?.id || null;
+        logProvisionDebug('identity_lookup', {
+          workspaceId,
+          projectId,
+          email: member.email,
+          role: member.role,
+          authUserExists: Boolean(authUser?.id),
+          profileExists: Boolean(profileByEmail.data?.id),
+          resolvedUserId: userId,
+          resendInvitation,
+        });
         stages.push(stage('identity_lookup', 'success', userId ? 'Existing identity found.' : 'No existing identity found.'));
 
-        if (!userId) {
-          const link = await supabase.auth.admin.generateLink({
-            type: 'invite',
+        if (!userId || resendInvitation) {
+          logProvisionDebug('invite_attempted', {
+            workspaceId,
+            projectId,
             email: member.email,
-            options: {
-              data: { full_name: member.fullName, role: member.role },
-              redirectTo: Deno.env.get('TEAM_INVITE_REDIRECT_URL') || undefined,
-            },
+            role: member.role,
+            existingAuthUser: Boolean(authUser?.id),
+            resendInvitation,
+            redirectConfigured: Boolean(Deno.env.get('TEAM_INVITE_REDIRECT_URL')),
           });
-          if (link.error) throw link.error;
-          userId = link.data.user?.id || null;
-          activationLink = link.data.properties?.action_link || null;
-          identityStatus = 'invited';
-          stages.push(stage('auth_invitation', 'success', 'One-time invitation link created.'));
+          const invite = await supabase.auth.admin.inviteUserByEmail(member.email, {
+            data: { full_name: member.fullName, role: member.role },
+            redirectTo: Deno.env.get('TEAM_INVITE_REDIRECT_URL') || undefined,
+          });
+          if (invite.error) {
+            const inviteError = invite.error;
+            logProvisionDebug('invite_failed', {
+              workspaceId,
+              projectId,
+              email: member.email,
+              role: member.role,
+              existingAuthUser: Boolean(authUser?.id),
+              resendInvitation,
+              smtpUnavailable: true,
+              error: safeError(inviteError),
+            });
+            if (userId) throw inviteError;
+            tempPassword = temporaryPassword();
+            const created = await supabase.auth.admin.createUser({
+              email: member.email,
+              password: tempPassword,
+              email_confirm: true,
+              user_metadata: {
+                full_name: member.fullName,
+                role: member.role,
+                must_change_password: true,
+              },
+            });
+            if (created.error) throw new Error(`Invitation email failed (${safeError(inviteError)}); temporary auth user creation also failed (${safeError(created.error)}).`);
+            userId = created.data.user?.id || null;
+            identityStatus = 'created';
+            await logProvisionEvent(supabase, {
+              callerId,
+              workspaceId,
+              projectId,
+              member,
+              action: 'team_invitation_email_unavailable',
+              stage: 'auth_invitation',
+              status: 'not_configured',
+              message: `Invitation email failed; temporary password generated. ${safeError(inviteError)}`,
+            });
+            stages.push(stage('auth_invitation', 'not_configured', `Invitation email failed; temporary password generated. ${safeError(inviteError)}`));
+          } else {
+            userId = invite.data.user?.id || userId;
+            identityStatus = 'invited';
+            logProvisionDebug('invite_success', {
+              workspaceId,
+              projectId,
+              email: member.email,
+              role: member.role,
+              userId,
+              existingAuthUser: Boolean(authUser?.id),
+              resendInvitation,
+            });
+            await logProvisionEvent(supabase, {
+              callerId,
+              workspaceId,
+              projectId,
+              member,
+              action: resendInvitation ? 'team_invitation_resent' : 'team_invitation_sent',
+              stage: 'auth_invitation',
+              status: 'success',
+              message: resendInvitation ? 'Supabase Auth invite email resent.' : 'Supabase Auth invite email requested.',
+            });
+            stages.push(stage('auth_invitation', 'success', resendInvitation ? 'Supabase invitation email resent.' : 'Supabase invitation email requested.'));
+          }
         } else {
+          logProvisionDebug('invite_skipped', {
+            workspaceId,
+            projectId,
+            email: member.email,
+            role: member.role,
+            authUserExists: Boolean(authUser?.id),
+            profileExists: Boolean(profileByEmail.data?.id),
+            reason: 'existing_identity_without_resend',
+          });
           stages.push(stage('auth_invitation', 'skipped', 'Existing user credentials were preserved.'));
         }
 
@@ -374,7 +531,18 @@ Deno.serve(async (req: Request) => {
 
         const letter = letterFor({ workspace, project, member, userId, activationLink });
         stages.push(stage('letter_generation', 'success'));
-        stages.push(stage('notification_delivery', 'not_configured', 'No email/SMS provider confirmation is configured.'));
+        const notificationStatus = identityStatus === 'invited' ? 'success' : 'not_configured';
+        const notificationMessage = identityStatus === 'invited' ? 'Supabase Auth invite email requested.' : 'Temporary password must be shared one time by EE.';
+        logProvisionDebug('notification_status', {
+          workspaceId,
+          projectId,
+          email: member.email,
+          role: member.role,
+          identityStatus,
+          notificationStatus,
+          emailSent: identityStatus === 'invited',
+        });
+        stages.push(stage('notification_delivery', notificationStatus, notificationMessage));
 
         results.push({
           role: member.role,
@@ -388,18 +556,20 @@ Deno.serve(async (req: Request) => {
             invitation_created: identityStatus === 'invited',
             assigned: true,
             letter_created: true,
-            email_sent: false,
+            email_sent: identityStatus === 'invited',
             sms_sent: false,
-            activation_pending: Boolean(activationLink),
+            activation_pending: identityStatus !== 'existing',
             activated: identityStatus === 'existing',
             delivery_failed: false,
           },
           activationLink,
+          tempPassword,
           letter,
           stages,
         });
       } catch (error) {
         const failedStage: StageName = nextFailureStage(stages);
+        await logProvisionFailure(supabase, { callerId, workspaceId, projectId, member, stage: failedStage, error });
         results.push({
           role: member.role,
           email: member.email,
@@ -419,6 +589,7 @@ Deno.serve(async (req: Request) => {
             delivery_failed: true,
           },
           activationLink: null,
+          tempPassword: null,
           letter: null,
           stages: [...stages, stage(failedStage, 'failed', safeError(error))],
         });
@@ -430,3 +601,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, message: safeError(error) }, 500);
   }
 });
+
+
+
+

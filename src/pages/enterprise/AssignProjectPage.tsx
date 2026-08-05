@@ -378,6 +378,7 @@ export function AssignProjectPage() {
         projectId: selectedProject.id,
         projectTable: selectedProject.table,
         members: validation.members,
+        resendInvitation: Boolean(membersOverride),
       });
       setProvisionResults(results);
       const failed = results.filter((result) => result.statuses.delivery_failed || !result.statuses.assigned);
@@ -708,6 +709,7 @@ export function AssignProjectPage() {
                           <Button size="sm" variant="outline" icon={<Download size={12} />} disabled={!result.letter} onClick={() => result.letter && downloadAccessLetterPdf(result.letter)}>Download Letter</Button>
                           <Button size="sm" variant="outline" icon={<Send size={12} />} onClick={() => retryProvision(result)}>Resend Activation</Button>
                           <Button size="sm" variant="outline" icon={<Copy size={12} />} onClick={() => copyLoginId(result.email)}>Copy Login ID</Button>
+                          {result.tempPassword && <Button size="sm" variant="outline" icon={<Copy size={12} />} onClick={() => copyLoginId(result.tempPassword || '')}>Copy Temp Password</Button>}
                           <Button size="sm" variant="outline" onClick={() => navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${selectedProject?.id || ''}&projectTable=${selectedProject?.table || 'gov_projects'}`)}>Open Assignment</Button>
                         </div>
                       </td>
@@ -780,3 +782,4 @@ export function AssignProjectPage() {
     </AppLayout>
   );
 }
+
