@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { corsHeaders } from '../_shared/cors.ts';
 
 type TeamRole = 'assistant_engineer' | 'junior_engineer' | 'contractor';
@@ -612,6 +612,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, message: safeError(error) }, 500);
   }
 });
+
 
 
 
