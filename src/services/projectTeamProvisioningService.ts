@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 
 export type ProvisionTeamRole = 'assistant_engineer' | 'junior_engineer' | 'contractor';
 export type ProvisionStageName = 'identity_lookup' | 'auth_invitation' | 'profile_creation' | 'workspace_membership' | 'project_assignment' | 'letter_generation' | 'notification_delivery';
-export type ProvisionStageStatus = 'pending' | 'success' | 'skipped' | 'failed' | 'not_configured';
+export type ProvisionStageStatus = 'pending' | 'success' | 'skipped' | 'failed' | 'not_configured' | 'email' | 'manual_link';
 
 export type ProvisionTeamMemberInput = {
   role: ProvisionTeamRole;
@@ -26,7 +26,6 @@ export type AccessLetterPayload = {
   company: string | null;
   loginId: string;
   activationLink: string | null;
-  tempPassword?: string | null;
   activationExpiry: string | null;
   eeName: string;
   eeContact: string | null;
@@ -58,7 +57,6 @@ export type ProvisionTeamMemberResult = {
     delivery_failed: boolean;
   };
   activationLink: string | null;
-  tempPassword?: string | null;
   letter: AccessLetterPayload | null;
   stages: ProvisionStageResult[];
 };
@@ -139,5 +137,7 @@ export async function downloadAccessLetterPdf(letter: AccessLetterPayload) {
   doc.text('This authorization grants project-specific access only. No permanent password is included in this letter.', margin, y, { maxWidth: 170 });
   doc.save(`${letter.reference}.pdf`);
 }
+
+
 
 

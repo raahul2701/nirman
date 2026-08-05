@@ -3,7 +3,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 type TeamRole = 'assistant_engineer' | 'junior_engineer' | 'contractor';
 type StageName = 'identity_lookup' | 'auth_invitation' | 'profile_creation' | 'workspace_membership' | 'project_assignment' | 'letter_generation' | 'notification_delivery';
-type StageStatus = 'pending' | 'success' | 'skipped' | 'failed' | 'not_configured';
+type StageStatus = 'pending' | 'success' | 'skipped' | 'failed' | 'not_configured' | 'email' | 'manual_link';
 
 type TeamMemberInput = {
   role: TeamRole;
@@ -74,10 +74,6 @@ function logProvisionDebug(event: string, details: Record<string, unknown>) {
   console.info('[provision-project-team]', event, details);
 }
 
-function temporaryPassword() {
-  const random = crypto.getRandomValues(new Uint32Array(2));
-  return `Nirman-${random[0].toString(36)}-${random[1].toString(36)}!`;
-}
 
 async function logProvisionFailure(supabase: ReturnType<typeof createClient>, input: {
   callerId: string;
@@ -401,8 +397,7 @@ Deno.serve(async (req: Request) => {
     for (const member of members) {
       const stages: StageResult[] = [];
       let userId: string | null = null;
-      const activationLink: string | null = null;
-      let tempPassword: string | null = null;
+      let activationLink: string | null = null;
       let identityStatus: 'existing' | 'invited' | 'created' = 'existing';
       let assignmentId: string | null = null;
 
@@ -449,32 +444,39 @@ Deno.serve(async (req: Request) => {
               smtpUnavailable: true,
               error: safeError(inviteError),
             });
-            if (userId) throw inviteError;
-            tempPassword = temporaryPassword();
-            const created = await supabase.auth.admin.createUser({
+            const existingIdentityBeforeManualLink = Boolean(userId);
+            const manualLink = await supabase.auth.admin.generateLink({
+              type: existingIdentityBeforeManualLink ? 'recovery' : 'invite',
               email: member.email,
-              password: tempPassword,
-              email_confirm: true,
-              user_metadata: {
-                full_name: member.fullName,
-                role: member.role,
-                must_change_password: true,
+              options: {
+                data: { full_name: member.fullName, role: member.role },
+                redirectTo: Deno.env.get('TEAM_INVITE_REDIRECT_URL') || undefined,
               },
             });
-            if (created.error) throw new Error(`Invitation email failed (${safeError(inviteError)}); temporary auth user creation also failed (${safeError(created.error)}).`);
-            userId = created.data.user?.id || null;
+            if (manualLink.error) throw new Error(`Invitation email failed (${safeError(inviteError)}); manual activation link generation also failed (${safeError(manualLink.error)}).`);
+            userId = manualLink.data.user?.id || userId;
+            activationLink = manualLink.data.properties?.action_link || null;
             identityStatus = 'created';
+            logProvisionDebug('manual_link_created', {
+              workspaceId,
+              projectId,
+              email: member.email,
+              role: member.role,
+              userId,
+              linkType: existingIdentityBeforeManualLink ? 'recovery' : 'invite',
+              activationLinkCreated: Boolean(activationLink),
+            });
             await logProvisionEvent(supabase, {
               callerId,
               workspaceId,
               projectId,
               member,
-              action: 'team_invitation_email_unavailable',
+              action: 'team_invitation_manual_link_created',
               stage: 'auth_invitation',
-              status: 'not_configured',
-              message: `Invitation email failed; temporary password generated. ${safeError(inviteError)}`,
+              status: 'manual_link',
+              message: `Invitation email failed; manual activation link generated. ${safeError(inviteError)}`,
             });
-            stages.push(stage('auth_invitation', 'not_configured', `Invitation email failed; temporary password generated. ${safeError(inviteError)}`));
+            stages.push(stage('auth_invitation', 'manual_link', `Invitation email failed; manual activation link generated. ${safeError(inviteError)}`));
           } else {
             userId = invite.data.user?.id || userId;
             identityStatus = 'invited';
@@ -531,8 +533,12 @@ Deno.serve(async (req: Request) => {
 
         const letter = letterFor({ workspace, project, member, userId, activationLink });
         stages.push(stage('letter_generation', 'success'));
-        const notificationStatus = identityStatus === 'invited' ? 'success' : 'not_configured';
-        const notificationMessage = identityStatus === 'invited' ? 'Supabase Auth invite email requested.' : 'Temporary password must be shared one time by EE.';
+        const notificationStatus: StageStatus = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'not_configured';
+        const notificationMessage = identityStatus === 'invited'
+          ? 'Supabase Auth invite email requested.'
+          : activationLink
+            ? 'Manual activation link generated for EE delivery.'
+            : 'No email or manual activation link was created.';
         logProvisionDebug('notification_status', {
           workspaceId,
           projectId,
@@ -563,7 +569,6 @@ Deno.serve(async (req: Request) => {
             delivery_failed: false,
           },
           activationLink,
-          tempPassword,
           letter,
           stages,
         });
@@ -589,7 +594,6 @@ Deno.serve(async (req: Request) => {
             delivery_failed: true,
           },
           activationLink: null,
-          tempPassword: null,
           letter: null,
           stages: [...stages, stage(failedStage, 'failed', safeError(error))],
         });
@@ -601,6 +605,8 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, message: safeError(error) }, 500);
   }
 });
+
+
 
 
 
