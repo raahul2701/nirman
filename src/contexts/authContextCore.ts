@@ -10,7 +10,7 @@ export interface AuthContextType {
   profileLoading: boolean;
   authError: string | null;
   profileError: string | null;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; user?: User | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;

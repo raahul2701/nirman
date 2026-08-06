@@ -6,11 +6,14 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../components/ui/useToast';
 import { BRANDING } from '../../constants/branding';
+import { supabase } from '../../lib/supabase';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
@@ -19,13 +22,37 @@ export function LoginPage() {
     e.preventDefault();
     if (!email || !password) return;
     setLoading(true);
-    const { error } = await signIn(email, password);
+    const { error, user } = await signIn(email, password);
     setLoading(false);
     if (error) {
       toast(error.message || 'Invalid credentials', 'error');
+    } else if (user?.user_metadata?.must_change_password) {
+      setMustChangePassword(true);
+      toast('Set a new password before continuing.', 'info');
     } else {
       navigate('/dashboard');
     }
+  }
+
+
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      toast('Use at least 8 characters for the new password.', 'error');
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+      data: { must_change_password: false },
+    });
+    setLoading(false);
+    if (error) {
+      toast(error.message || 'Password change failed', 'error');
+      return;
+    }
+    toast('Password updated. Welcome in.', 'success');
+    navigate('/dashboard');
   }
 
   return (
@@ -80,8 +107,8 @@ export function LoginPage() {
             <h1 className="text-3xl font-black text-[#12332D] mb-1">Welcome back</h1>
             <p className="text-[#6C7568] mb-8">Sign in to ARSPL NIRMAN command</p>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <Input
+            <form onSubmit={mustChangePassword ? handlePasswordChange : handleSubmit} className="flex flex-col gap-4">
+              {!mustChangePassword && <Input
                 label="Email Address"
                 type="email"
                 autoComplete="email"
@@ -90,22 +117,22 @@ export function LoginPage() {
                 onChange={e => setEmail(e.target.value)}
                 icon={<Mail size={15} />}
                 required
-              />
+              />}
               <Input
-                label="Password"
+                label={mustChangePassword ? 'New Password' : 'Password'}
                 type="password"
-                autoComplete="current-password"
-                placeholder="Password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
+                autoComplete={mustChangePassword ? 'new-password' : 'current-password'}
+                placeholder={mustChangePassword ? 'New password' : 'Password'}
+                value={mustChangePassword ? newPassword : password}
+                onChange={e => mustChangePassword ? setNewPassword(e.target.value) : setPassword(e.target.value)}
                 icon={<Lock size={15} />}
                 required
               />
-              <div className="flex justify-end">
+              {!mustChangePassword && <div className="flex justify-end">
                 <a href="#" className="text-xs font-semibold" style={{ color: '#005F56' }}>Forgot password?</a>
-              </div>
+              </div>}
               <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full mt-2">
-                Sign In
+                {mustChangePassword ? 'Update Password' : 'Sign In'}
                 <ArrowRight size={16} />
               </Button>
             </form>

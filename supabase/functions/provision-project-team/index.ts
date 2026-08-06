@@ -28,6 +28,7 @@ type RequestBody = {
   projectTable?: 'gov_projects' | 'projects';
   members?: TeamMemberInput[];
   resendInvitation?: boolean;
+  generateActivationLink?: boolean;
 };
 
 type StageResult = { stage: StageName; status: ProvisionStageStatus; message?: string };
@@ -75,6 +76,17 @@ function stage(stage: StageName, status: ProvisionStageStatus, message?: string)
 
 function safeError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error';
+}
+
+class SecurityException extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecurityException';
+  }
+}
+
+function assertSecurity(condition: boolean, message: string) {
+  if (!condition) throw new SecurityException(message);
 }
 
 function logProvisionDebug(event: string, details: Record<string, unknown>) {
@@ -240,6 +252,107 @@ async function loadProject(supabase: ReturnType<typeof createClient>, projectTab
   };
 }
 
+async function validateExistingIdentity(supabase: ReturnType<typeof createClient>, input: {
+  authUser: { id?: string; email?: string } | null;
+  profileByEmail: { id?: string; email?: string | null; role?: string | null } | null;
+  callerId: string;
+  workspace: WorkspaceDetails;
+  member: ReturnType<typeof sanitizeMember>;
+}) {
+  const authId = input.authUser?.id || null;
+  const profileId = input.profileByEmail?.id || null;
+  const resolvedUserId = authId || profileId;
+  if (!resolvedUserId) return null;
+
+  assertSecurity(resolvedUserId !== input.callerId, 'SecurityException: provisioned login_id resolves to the current authenticated user.');
+  assertSecurity(resolvedUserId !== input.workspace.executive_engineer_id, 'SecurityException: provisioned login_id resolves to the Executive Engineer.');
+  if (input.authUser?.email) {
+    assertSecurity(normalizeEmail(input.authUser.email) === input.member.email, 'SecurityException: auth user email does not match requested member login_id.');
+  }
+  if (authId && profileId) {
+    assertSecurity(authId === profileId, 'SecurityException: auth user and profile email resolve to different users.');
+  }
+  if (input.profileByEmail?.role) {
+    assertSecurity(input.profileByEmail.role === input.member.role, 'SecurityException: existing profile role does not match requested member role.');
+  }
+
+  const profileById = await supabase.from('profiles').select('id, email, role').eq('id', resolvedUserId).maybeSingle();
+  if (profileById.error) throw profileById.error;
+  if (profileById.data?.email) {
+    assertSecurity(normalizeEmail(profileById.data.email) === input.member.email, 'SecurityException: resolved profile belongs to a different login_id.');
+  }
+  if (profileById.data?.role) {
+    assertSecurity(profileById.data.role === input.member.role, 'SecurityException: resolved profile role does not match requested member role.');
+  }
+
+  return resolvedUserId;
+}
+
+async function verifyAuthLoginId(supabase: ReturnType<typeof createClient>, input: {
+  userId: string;
+  member: ReturnType<typeof sanitizeMember>;
+  callerId: string;
+  workspace: WorkspaceDetails;
+}) {
+  assertSecurity(input.userId !== input.callerId, 'SecurityException: generated login_id belongs to the current authenticated user.');
+  assertSecurity(input.userId !== input.workspace.executive_engineer_id, 'SecurityException: generated login_id belongs to the Executive Engineer.');
+  const authUser = await supabase.auth.admin.getUserById(input.userId);
+  if (authUser.error) throw authUser.error;
+  assertSecurity(authUser.data.user?.id === input.userId, 'SecurityException: generated auth user id could not be verified.');
+  assertSecurity(normalizeEmail(authUser.data.user?.email || '') === input.member.email, 'SecurityException: generated login_id belongs to another auth user.');
+}
+
+async function verifyProvisionedIdentity(supabase: ReturnType<typeof createClient>, input: {
+  workspaceId: string;
+  projectId: string;
+  projectTable: 'gov_projects' | 'projects';
+  assignmentId: string | null;
+  userId: string;
+  member: ReturnType<typeof sanitizeMember>;
+  callerId: string;
+  workspace: WorkspaceDetails;
+}) {
+  assertSecurity(input.userId !== input.callerId, 'SecurityException: provisioned user id matches current authenticated user.');
+  assertSecurity(input.userId !== input.workspace.executive_engineer_id, 'SecurityException: provisioned user id matches Executive Engineer.');
+
+  const authUser = await supabase.auth.admin.getUserById(input.userId);
+  if (authUser.error) throw authUser.error;
+  assertSecurity(authUser.data.user?.id === input.userId, 'SecurityException: auth user id could not be verified.');
+  assertSecurity(normalizeEmail(authUser.data.user?.email || '') === input.member.email, 'SecurityException: auth user login_id does not match requested member email.');
+
+  const profile = await supabase.from('profiles').select('id, email, role').eq('id', input.userId).maybeSingle();
+  if (profile.error) throw profile.error;
+  assertSecurity(profile.data?.id === input.userId, 'SecurityException: profile row does not belong to auth user.');
+  assertSecurity(normalizeEmail(profile.data?.email || '') === input.member.email, 'SecurityException: profile login_id does not match auth user.');
+  assertSecurity(profile.data?.role === input.member.role, 'SecurityException: profile role does not match provisioned role.');
+
+  const membership = await supabase
+    .from('workspace_users')
+    .select('id, user_id, email, role, active')
+    .eq('workspace_id', input.workspaceId)
+    .eq('user_id', input.userId)
+    .eq('role', input.member.role)
+    .eq('active', true)
+    .maybeSingle();
+  if (membership.error) throw membership.error;
+  assertSecurity(membership.data?.user_id === input.userId, 'SecurityException: workspace membership does not belong to auth user.');
+  assertSecurity(normalizeEmail(membership.data?.email || '') === input.member.email, 'SecurityException: workspace membership login_id does not match auth user.');
+  assertSecurity(membership.data?.role === input.member.role, 'SecurityException: workspace membership role does not match provisioned role.');
+
+  const assignment = await supabase
+    .from('project_assignments')
+    .select('id, executive_engineer_id, assistant_engineer_id, junior_engineer_id, contractor_id')
+    .eq('workspace_id', input.workspaceId)
+    .eq('project_id', input.projectId)
+    .eq('project_table', input.projectTable)
+    .maybeSingle();
+  if (assignment.error) throw assignment.error;
+  assertSecurity(assignment.data?.id === input.assignmentId, 'SecurityException: project assignment could not be verified.');
+  assertSecurity(assignment.data?.[roleColumn[input.member.role]] === input.userId, 'SecurityException: project assignment role column does not belong to auth user.');
+  const otherRoleColumns = Object.values(roleColumn).filter((column) => column !== roleColumn[input.member.role]);
+  assertSecurity(!otherRoleColumns.some((column) => assignment.data?.[column] === input.userId), 'SecurityException: auth user is assigned to multiple isolated project roles.');
+}
+
 async function upsertProfile(supabase: ReturnType<typeof createClient>, member: ReturnType<typeof sanitizeMember>, userId: string) {
   const profilePayload = {
     full_name: member.fullName,
@@ -358,6 +471,8 @@ Deno.serve(async (req: Request) => {
     const projectId = body.projectId || '';
     const projectTable = body.projectTable || 'gov_projects';
     const resendInvitation = body.resendInvitation === true;
+    const generateActivationLink = body.generateActivationLink === true;
+    const inviteRedirectUrl = 'https://nirman.apostolicredeem.com';
     const members = (body.members || []).map(sanitizeMember).filter((member) => member.fullName && member.email && allowedRoles.has(member.role));
 
     if (!workspaceId || !projectId) return json({ ok: false, message: 'workspaceId and projectId are required.' }, 400);
@@ -410,9 +525,15 @@ Deno.serve(async (req: Request) => {
 
       try {
         const authUser = await findAuthUserByEmail(supabase, member.email);
-        const profileByEmail = await supabase.from('profiles').select('id').eq('email', member.email).maybeSingle();
+        const profileByEmail = await supabase.from('profiles').select('id, email, role').eq('email', member.email).maybeSingle();
         if (profileByEmail.error) throw profileByEmail.error;
-        userId = authUser?.id || (profileByEmail.data as { id?: string } | null)?.id || null;
+        userId = await validateExistingIdentity(supabase, {
+          authUser: authUser || null,
+          profileByEmail: (profileByEmail.data as { id?: string; email?: string | null; role?: string | null } | null) || null,
+          callerId,
+          workspace,
+          member,
+        });
         logProvisionDebug('identity_lookup', {
           workspaceId,
           projectId,
@@ -425,7 +546,47 @@ Deno.serve(async (req: Request) => {
         });
         stages.push(stage('identity_lookup', 'success', userId ? 'Existing identity found.' : 'No existing identity found.'));
 
-        if (!userId || resendInvitation) {
+        if (generateActivationLink) {
+          const existingIdentityBeforeManualLink = Boolean(userId);
+          const manualLink = await supabase.auth.admin.generateLink({
+            type: existingIdentityBeforeManualLink ? 'recovery' : 'invite',
+            email: member.email,
+            options: {
+              data: { full_name: member.fullName, role: member.role },
+              redirectTo: inviteRedirectUrl,
+            },
+          });
+          if (manualLink.error) throw manualLink.error;
+          userId = manualLink.data.user?.id || userId;
+          activationLink = manualLink.data.properties?.action_link || null;
+          identityStatus = 'created';
+          logProvisionDebug('manual_link_created', {
+            workspaceId,
+            projectId,
+            email: member.email,
+            role: member.role,
+            inviteMethod: 'manual_link',
+            supabaseResponse: 'success',
+            smtpResponse: 'not_attempted_manual_link_requested',
+            redirectUrl: inviteRedirectUrl,
+            notificationStatus: 'manual_link',
+            finalStageStatus: 'manual_link',
+            userId,
+            linkType: existingIdentityBeforeManualLink ? 'recovery' : 'invite',
+            activationLinkCreated: Boolean(activationLink),
+          });
+          await logProvisionEvent(supabase, {
+            callerId,
+            workspaceId,
+            projectId,
+            member,
+            action: 'team_invitation_manual_link_created',
+            stage: 'auth_invitation',
+            status: 'manual_link',
+            message: 'Manual activation link intentionally generated.',
+          });
+          stages.push(stage('auth_invitation', 'manual_link', 'Manual activation link intentionally generated.'));
+        } else if (!userId || resendInvitation) {
           logProvisionDebug('invite_attempted', {
             workspaceId,
             projectId,
@@ -433,11 +594,11 @@ Deno.serve(async (req: Request) => {
             role: member.role,
             existingAuthUser: Boolean(authUser?.id),
             resendInvitation,
-            redirectConfigured: Boolean(Deno.env.get('TEAM_INVITE_REDIRECT_URL')),
+            redirectUrl: inviteRedirectUrl,
           });
           const invite = await supabase.auth.admin.inviteUserByEmail(member.email, {
             data: { full_name: member.fullName, role: member.role },
-            redirectTo: Deno.env.get('TEAM_INVITE_REDIRECT_URL') || undefined,
+            redirectTo: inviteRedirectUrl,
           });
           if (invite.error) {
             const inviteError = invite.error;
@@ -446,44 +607,28 @@ Deno.serve(async (req: Request) => {
               projectId,
               email: member.email,
               role: member.role,
+              inviteMethod: 'email',
+              supabaseResponse: 'error',
+              smtpResponse: safeError(inviteError),
               existingAuthUser: Boolean(authUser?.id),
               resendInvitation,
-              smtpUnavailable: true,
+              redirectUrl: inviteRedirectUrl,
+              notificationStatus: 'failed',
+              finalStageStatus: 'failed',
               error: safeError(inviteError),
             });
-            const existingIdentityBeforeManualLink = Boolean(userId);
-            const manualLink = await supabase.auth.admin.generateLink({
-              type: existingIdentityBeforeManualLink ? 'recovery' : 'invite',
-              email: member.email,
-              options: {
-                data: { full_name: member.fullName, role: member.role },
-                redirectTo: Deno.env.get('TEAM_INVITE_REDIRECT_URL') || undefined,
-              },
-            });
-            if (manualLink.error) throw new Error(`Invitation email failed (${safeError(inviteError)}); manual activation link generation also failed (${safeError(manualLink.error)}).`);
-            userId = manualLink.data.user?.id || userId;
-            activationLink = manualLink.data.properties?.action_link || null;
-            identityStatus = 'created';
-            logProvisionDebug('manual_link_created', {
-              workspaceId,
-              projectId,
-              email: member.email,
-              role: member.role,
-              userId,
-              linkType: existingIdentityBeforeManualLink ? 'recovery' : 'invite',
-              activationLinkCreated: Boolean(activationLink),
-            });
+            stages.push(stage('auth_invitation', 'failed', safeError(inviteError)));
             await logProvisionEvent(supabase, {
               callerId,
               workspaceId,
               projectId,
               member,
-              action: 'team_invitation_manual_link_created',
+              action: 'team_invitation_email_failed',
               stage: 'auth_invitation',
-              status: 'manual_link',
-              message: `Invitation email failed; manual activation link generated. ${safeError(inviteError)}`,
+              status: 'failed',
+              message: safeError(inviteError),
             });
-            stages.push(stage('auth_invitation', 'manual_link', `Invitation email failed; manual activation link generated. ${safeError(inviteError)}`));
+
           } else {
             userId = invite.data.user?.id || userId;
             identityStatus = 'invited';
@@ -522,6 +667,7 @@ Deno.serve(async (req: Request) => {
         }
 
         if (!userId) throw new Error('Identity resolution did not return a user id.');
+        await verifyAuthLoginId(supabase, { userId, member, callerId, workspace });
         await upsertProfile(supabase, member, userId);
         stages.push(stage('profile_creation', 'success'));
 
@@ -538,14 +684,25 @@ Deno.serve(async (req: Request) => {
         });
         stages.push(stage('project_assignment', 'success', `Assignment ${assignmentId}`));
 
+        await verifyProvisionedIdentity(supabase, {
+          workspaceId,
+          projectId,
+          projectTable,
+          assignmentId,
+          userId,
+          member,
+          callerId,
+          workspace,
+        });
+
         const letter = letterFor({ workspace, project, member, userId, activationLink });
         stages.push(stage('letter_generation', 'success'));
-        const notificationStatus: ProvisionStageStatus = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'not_configured';
+        const notificationStatus: ProvisionStageStatus = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : stages.some((item) => item.stage === 'auth_invitation' && item.status === 'failed') ? 'failed' : 'not_configured';
         const notificationMessage = identityStatus === 'invited'
           ? 'Supabase Auth invite email requested.'
           : activationLink
             ? 'Manual activation link generated for EE delivery.'
-            : 'No email or manual activation link was created.';
+            : stages.find((item) => item.stage === 'auth_invitation' && item.status === 'failed')?.message || 'No email or manual activation link was created.';
         logProvisionDebug('notification_status', {
           workspaceId,
           projectId,
@@ -553,11 +710,23 @@ Deno.serve(async (req: Request) => {
           role: member.role,
           identityStatus,
           notificationStatus,
+          method: identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'email',
           emailSent: identityStatus === 'invited',
+          redirectUrl: inviteRedirectUrl,
+          finalStageStatus: notificationStatus,
         });
         stages.push(stage('notification_delivery', notificationStatus, notificationMessage));
 
+        const notificationMethod = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'email';
+        const notificationSucceeded = notificationStatus === 'email' || notificationStatus === 'manual_link';
         results.push({
+          success: true,
+          assignment_saved: true,
+          notification: {
+            method: notificationMethod,
+            status: notificationSucceeded ? 'success' : notificationStatus,
+            ...(notificationStatus === 'failed' ? { error: notificationMessage } : {}),
+          },
           role: member.role,
           email: member.email,
           fullName: member.fullName,
@@ -573,7 +742,7 @@ Deno.serve(async (req: Request) => {
             sms_sent: false,
             activation_pending: identityStatus !== 'existing',
             activated: identityStatus === 'existing',
-            delivery_failed: false,
+            delivery_failed: notificationStatus === 'failed',
           },
           activationLink,
           letter,
@@ -583,6 +752,13 @@ Deno.serve(async (req: Request) => {
         const failedStage: StageName = nextFailureStage(stages);
         await logProvisionFailure(supabase, { callerId, workspaceId, projectId, member, stage: failedStage, error });
         results.push({
+          success: Boolean(assignmentId),
+          assignment_saved: Boolean(assignmentId),
+          notification: {
+            method: 'email',
+            status: 'failed',
+            error: safeError(error),
+          },
           role: member.role,
           email: member.email,
           fullName: member.fullName,
@@ -592,7 +768,7 @@ Deno.serve(async (req: Request) => {
           statuses: {
             account: userId ? identityStatus : 'failed',
             invitation_created: false,
-            assigned: false,
+            assigned: Boolean(assignmentId),
             letter_created: false,
             email_sent: false,
             sms_sent: false,
@@ -612,6 +788,13 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, message: safeError(error) }, 500);
   }
 });
+
+
+
+
+
+
+
 
 
 

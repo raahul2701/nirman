@@ -303,16 +303,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         logger.warn('Failed login attempt', { email, error: error.message });
-        return { error: error as Error };
+        return { error: error as Error, user: null };
       }
       setAuthError(null);
       void logAudit('login', { table_name: 'auth' }, data.user?.id);
       logLoginSuccess(data.user, data.user?.email || email);
       updateActivity();
-      return { error: null };
+      return { error: null, user: data.user ?? null };
     } catch (error) {
       logger.error('Sign in error', { error });
-      return { error: error as Error };
+      return { error: error as Error, user: null };
     }
   }, [logAudit, updateActivity]);
 

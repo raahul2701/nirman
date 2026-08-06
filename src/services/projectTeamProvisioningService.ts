@@ -46,6 +46,13 @@ export type ProvisionStageResult = {
 };
 
 export type ProvisionTeamMemberResult = {
+  success?: boolean;
+  assignment_saved?: boolean;
+  notification?: {
+    method: 'email' | 'manual_link';
+    status: 'success' | 'failed' | 'not_configured';
+    error?: string;
+  };
   role: ProvisionTeamRole;
   email: string;
   fullName: string;
@@ -93,6 +100,7 @@ export async function provisionProjectTeam(input: {
   projectTable: 'gov_projects' | 'projects';
   members: ProvisionTeamMemberInput[];
   resendInvitation?: boolean;
+  generateActivationLink?: boolean;
 }) {
   const members = input.members.map((member) => ({ ...member, email: normalizeProvisionEmail(member.email) }));
   const { data, error } = await supabase.functions.invoke<ProvisionProjectTeamResponse>('provision-project-team', {
@@ -144,6 +152,7 @@ export async function downloadAccessLetterPdf(letter: AccessLetterPayload) {
   doc.text('This authorization grants project-specific access only. No permanent password is included in this letter.', margin, y, { maxWidth: 170 });
   doc.save(`${letter.reference}.pdf`);
 }
+
 
 
 
