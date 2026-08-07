@@ -85,6 +85,7 @@ type ProvisionProjectTeamResponse = {
   projectId?: string;
   projectTable?: 'gov_projects' | 'projects';
   results?: ProvisionTeamMemberResult[];
+  rows?: ProvisionTeamMemberResult[];
 };
 
 export function normalizeProvisionEmail(email: string) {
@@ -107,7 +108,7 @@ export async function provisionProjectTeam(input: {
 }) {
   const members = input.members.map((member) => ({ ...member, email: normalizeProvisionEmail(member.email) }));
   const { data, error } = await supabase.functions.invoke<ProvisionProjectTeamResponse>('provision-project-team', {
-    body: { ...input, members },
+    body: { ...input, action: 'provision', members },
   });
   if (error) throw error;
   if (!data?.ok) throw new Error(data?.message || 'Project team provisioning failed');
@@ -124,7 +125,7 @@ export async function getProjectTeamProvisioningStatus(input: {
   });
   if (error) throw error;
   if (!data?.ok) throw new Error(data?.message || 'Could not load provisioning status');
-  return data.results || [];
+  return data.rows || data.results || [];
 }
 
 export async function downloadAccessLetterPdf(letter: AccessLetterPayload) {

@@ -23,7 +23,7 @@ type TeamMemberInput = {
 };
 
 type RequestBody = {
-  action?: 'status';
+  action?: 'status' | 'provision';
   workspaceId?: string;
   projectId?: string;
   projectTable?: 'gov_projects' | 'projects';
@@ -77,6 +77,13 @@ function stage(stage: StageName, status: ProvisionStageStatus, message?: string)
 
 function safeError(error: unknown) {
   return error instanceof Error ? error.message : 'Unknown error';
+}
+
+const diagnosticFile = 'supabase/functions/provision-project-team/index.ts';
+
+function diagnosticFailure(stage: string, line: number, error: unknown, status = 500) {
+  const details = error instanceof Error ? error : new Error(safeError(error));
+  return json({ success: false, stage, file: diagnosticFile, line, error: details.message, stack: details.stack || null }, status);
 }
 
 class SecurityException extends Error {
@@ -502,7 +509,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders });
   if (req.method !== 'POST') return json({ ok: false, message: 'Method not allowed' }, 405);
 
+  let diagnosticStage = 'Validate request';
+  let diagnosticLine = 0;
   try {
+    diagnosticStage = 'Validate request'; diagnosticLine = 518;
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !serviceRoleKey) throw new Error('Supabase service environment is not configured.');
@@ -512,14 +522,17 @@ Deno.serve(async (req: Request) => {
     if (!jwt) return json({ ok: false, message: 'Missing authorization token.' }, 401);
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    diagnosticStage = 'Validate request'; diagnosticLine = 526;
     const { data: callerData, error: callerError } = await supabase.auth.getUser(jwt);
     if (callerError || !callerData.user?.id) return json({ ok: false, message: 'Invalid session.' }, 401);
     const callerId = callerData.user.id;
 
+    diagnosticStage = 'Validate request'; diagnosticLine = 531;
     const body = await req.json() as RequestBody;
     const workspaceId = body.workspaceId || '';
     const projectId = body.projectId || '';
     const projectTable = body.projectTable || 'gov_projects';
+    const action = body.action || 'provision';
     const resendInvitation = body.resendInvitation === true;
     const generateActivationLink = body.generateActivationLink === true;
     const inviteRedirectUrl = 'https://nirman.apostolicredeem.com/auth/callback';
@@ -527,11 +540,14 @@ Deno.serve(async (req: Request) => {
 
     if (!workspaceId || !projectId) return json({ ok: false, message: 'workspaceId and projectId are required.' }, 400);
     if (!['gov_projects', 'projects'].includes(projectTable)) return json({ ok: false, message: 'Unsupported project table.' }, 400);
-    if (members.length === 0) return json({ ok: false, message: 'At least one valid team member is required.' }, 400);
+    if (action !== 'status' && action !== 'provision') return json({ ok: false, message: 'Unsupported provisioning action.' }, 400);
+    if (action === 'provision' && members.length === 0) return json({ ok: false, message: 'At least one valid team member is required.' }, 400);
 
-    const duplicateEmail = members.find((member, index) => members.findIndex((other) => other.email === member.email) !== index)?.email;
-    if (duplicateEmail) return json({ ok: false, message: `Duplicate email in submission: ${duplicateEmail}` }, 400);
-
+    if (action === 'provision') {
+      const duplicateEmail = members.find((member, index) => members.findIndex((other) => other.email === member.email) !== index)?.email;
+      if (duplicateEmail) return json({ ok: false, message: `Duplicate email in submission: ${duplicateEmail}` }, 400);
+    }
+    diagnosticStage = 'Load workspace'; diagnosticLine = 548;
     const membership = await supabase
       .from('workspace_users')
       .select('id, workspace_id, user_id, role, active')
@@ -543,6 +559,7 @@ Deno.serve(async (req: Request) => {
     if (membership.error) throw membership.error;
     if (!membership.data) return json({ ok: false, message: 'Caller is not an active Executive Engineer in this workspace.' }, 403);
 
+    diagnosticStage = 'Load workspace'; diagnosticLine = 560;
     const workspaceResult = await supabase
       .from('executive_engineer_workspaces')
       .select('id, workspace_name, division_code, department, district, executive_engineer_id, executive_engineer_name, executive_engineer_email')
@@ -552,6 +569,7 @@ Deno.serve(async (req: Request) => {
     if (!workspaceResult.data) return json({ ok: false, message: 'Workspace was not found.' }, 404);
     const workspace = workspaceResult.data as WorkspaceDetails;
 
+    diagnosticStage = 'Load assignment'; diagnosticLine = 570;
     const assignmentScope = await supabase
       .from('project_assignments')
       .select('id, assistant_engineer_id, junior_engineer_id, contractor_id')
@@ -563,7 +581,7 @@ Deno.serve(async (req: Request) => {
     if (assignmentScope.error) throw assignmentScope.error;
     if (!assignmentScope.data) return json({ ok: false, message: 'Project is not assigned to this workspace.' }, 403);
 
-    if (body.action === 'status') {
+    if (action === 'status') {
       const assignment = assignmentScope.data as Record<string, string | null>;
       const roles: Array<[TeamRole, string | null]> = [['assistant_engineer', assignment.assistant_engineer_id], ['junior_engineer', assignment.junior_engineer_id], ['contractor', assignment.contractor_id]];
       const results = [];
@@ -574,9 +592,10 @@ Deno.serve(async (req: Request) => {
         if (profileResult.error) throw profileResult.error;
         results.push(liveStatusResult({ role, user: authResult.data.user as unknown as Record<string, any>, profile: profileResult.data as Record<string, any> | null, assignmentId: assignment.id || '' }));
       }
-      return json({ ok: true, workspaceId, projectId, projectTable, results });
+      return json({ ok: true, workspaceId, projectId, projectTable, rows: results, results });
     }
 
+    diagnosticStage = 'Load project'; diagnosticLine = 596;
     const project = await loadProject(supabase, projectTable, projectId);
     const results = [];
 
@@ -587,7 +606,10 @@ Deno.serve(async (req: Request) => {
       let identityStatus: 'existing' | 'invited' | 'created' = 'existing';
       let assignmentId: string | null = null;
 
+      let memberStage = 'Create auth user';
+      let memberLine = 0;
       try {
+        memberStage = 'Create auth user'; memberLine = 610;
         const authUser = await findAuthUserByEmail(supabase, member.email);
         const profileByEmail = await supabase.from('profiles').select('id, email, role').eq('email', member.email).maybeSingle();
         if (profileByEmail.error) throw profileByEmail.error;
@@ -611,6 +633,7 @@ Deno.serve(async (req: Request) => {
         stages.push(stage('identity_lookup', 'success', userId ? 'Existing identity found.' : 'No existing identity found.'));
 
         if (generateActivationLink) {
+          memberStage = 'Generate activation link'; memberLine = 635;
           const existingIdentityBeforeManualLink = Boolean(userId);
           const manualLink = await supabase.auth.admin.generateLink({
             type: existingIdentityBeforeManualLink ? 'recovery' : 'invite',
@@ -660,6 +683,7 @@ Deno.serve(async (req: Request) => {
             resendInvitation,
             redirectUrl: inviteRedirectUrl,
           });
+          memberStage = 'Invite email'; memberLine = 684;
           const invite = await supabase.auth.admin.inviteUserByEmail(member.email, {
             data: { full_name: member.fullName, role: member.role },
             redirectTo: inviteRedirectUrl,
@@ -740,12 +764,15 @@ Deno.serve(async (req: Request) => {
 
         if (!userId) throw new Error('Identity resolution did not return a user id.');
         await verifyAuthLoginId(supabase, { userId, member, callerId, workspace });
+        memberStage = 'Create profile'; memberLine = 765;
         await upsertProfile(supabase, member, userId);
         stages.push(stage('profile_creation', 'success'));
 
+        memberStage = 'Workspace membership'; memberLine = 769;
         const membershipId = await upsertMembership(supabase, workspaceId, member, userId);
         stages.push(stage('workspace_membership', 'success', membershipId ? `Membership ${membershipId}` : undefined));
 
+        memberStage = 'Project assignment'; memberLine = 773;
         assignmentId = await assignProject(supabase, {
           workspaceId,
           projectId,
@@ -826,6 +853,7 @@ Deno.serve(async (req: Request) => {
           stages,
         });
       } catch (error) {
+        return diagnosticFailure(memberStage, memberLine, error);
         const failedStage: StageName = nextFailureStage(stages);
         await logProvisionFailure(supabase, { callerId, workspaceId, projectId, member, stage: failedStage, error });
         results.push({
@@ -865,7 +893,7 @@ Deno.serve(async (req: Request) => {
 
     return json({ ok: true, workspaceId, projectId, projectTable, results });
   } catch (error) {
-    return json({ ok: false, message: safeError(error) }, 500);
+    return diagnosticFailure(diagnosticStage, diagnosticLine, error);
   }
 });
 
