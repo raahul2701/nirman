@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { logAssignmentCreated } from '../../services/activityLogger';
 import { useAuth } from '../../contexts/useAuth';
 import { resolveActiveWorkspaceForWrite } from '../../services/businessHierarchyService';
-import { downloadAccessLetterPdf, normalizeProvisionEmail, provisionProjectTeam, roleLabel, type ProvisionTeamMemberInput, type ProvisionTeamMemberResult, type ProvisionTeamRole } from '../../services/projectTeamProvisioningService';
+import { downloadAccessLetterPdf, getProjectTeamProvisioningStatus, normalizeProvisionEmail, provisionProjectTeam, roleLabel, type ProvisionTeamMemberInput, type ProvisionTeamMemberResult, type ProvisionTeamRole } from '../../services/projectTeamProvisioningService';
 
 type WorkspaceRow = {
   id: string;
@@ -285,6 +285,15 @@ export function AssignProjectPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+  useEffect(() => {
+    if (!workspaceId || !projectKey) return;
+    const [projectTable, projectId] = projectKey.split(':') as ['gov_projects' | 'projects', string];
+    let active = true;
+    void getProjectTeamProvisioningStatus({ workspaceId, projectId, projectTable })
+      .then((results) => { if (active) setProvisionResults(results); })
+      .catch(() => { /* Preserve the latest provisioning result if status is temporarily unavailable. */ });
+    return () => { active = false; };
+  }, [projectKey, workspaceId]);
 
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
@@ -666,8 +675,18 @@ export function AssignProjectPage() {
             ))}
           </div>
 
-          {provisionResults.length > 0 && (
-            <div className="mt-6 overflow-x-auto">
+          <section className="mt-6" aria-labelledby="provisioning-result-heading">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 id="provisioning-result-heading" className="font-semibold text-[#12332D]">Project Team Provisioning Result</h3>
+                <p className="text-xs text-[#6C7568]">Live invitation, password, activation, and assignment status for this project.</p>
+              </div>
+              <Button size="sm" variant="outline" icon={<RefreshCw size={13} />} onClick={() => {
+                if (!selectedProject) return;
+                void getProjectTeamProvisioningStatus({ workspaceId, projectId: selectedProject.id, projectTable: selectedProject.table }).then(setProvisionResults).catch((err) => setError(err instanceof Error ? err.message : 'Could not refresh provisioning status'));
+              }}>Refresh Status</Button>
+            </div>
+            {provisionResults.length > 0 ? <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-sm">
                 <thead>
                   <tr className="border-b border-[#D9D0B5] text-left text-[#6C7568]">
@@ -687,13 +706,16 @@ export function AssignProjectPage() {
                         <p className="font-medium text-[#12332D]">{result.fullName}</p>
                         <p className="text-xs text-[#6C7568]">{roleLabel(result.role)} - {result.email}</p>
                       </td>
-                      <td className="py-3 pr-4">{result.identityStatus}</td>
+                      <td className="py-3 pr-4">{result.identityStatus}<p className="text-xs text-[#6C7568]">Login ID: {result.email}</p></td>
                       <td className="py-3 pr-4">{statusText(result.statuses.assigned)}</td>
                       <td className="py-3 pr-4">{statusText(result.statuses.letter_created)}</td>
                       <td className="py-3 pr-4">
-                        <p>email: {statusText(result.statuses.email_sent)}</p>
-                        <p>sms: {statusText(result.statuses.sms_sent)}</p>
-                        {result.statuses.delivery_failed && <p className="text-red-500">needs review</p>}
+                        <p>Email: {result.statuses.email_sent ? 'Email Sent' : result.statuses.delivery_failed ? 'Email Failed' : 'Invitation Pending'}</p>
+                        <p>SMS: {result.statuses.sms_sent ? 'SMS Sent' : 'Not sent'}</p>
+                        <p>Activation: {result.statuses.activated ? 'Activated' : 'Invitation Pending'}</p>
+                        <p>Current Status: {result.statuses.first_login_completed ? 'First Login Completed' : result.statuses.password_created ? 'Password Created' : result.statuses.delivery_failed ? 'Invitation Failed' : 'Invitation Pending'}</p>
+                        {result.statuses.last_login_at && <p>Last Login: {new Date(result.statuses.last_login_at).toLocaleString()}</p>}
+                        {result.statuses.delivery_failed && <p className="mt-1 text-red-600">Assignment Saved · Invitation Failed<br />Reason: {result.notification?.error || result.stages.find((stage) => stage.status === 'failed')?.message || 'Delivery could not be confirmed.'}</p>}
                       </td>
                       <td className="py-3 pr-4">
                         <div className="flex max-w-xs flex-wrap gap-1">
@@ -707,20 +729,21 @@ export function AssignProjectPage() {
                       <td className="py-3 pr-4">
                         <div className="flex flex-wrap gap-2">
                           <Button size="sm" variant="outline" icon={<Download size={12} />} disabled={!result.letter} onClick={() => result.letter && downloadAccessLetterPdf(result.letter)}>Download Letter</Button>
-                          <Button size="sm" variant="outline" icon={<Send size={12} />} onClick={() => retryProvision(result)}>Resend Activation</Button>
+                          <Button size="sm" variant="outline" icon={<Send size={12} />} onClick={() => retryProvision(result)}>Resend Invitation</Button>
                           <Button size="sm" variant="outline" icon={<Copy size={12} />} onClick={() => copyLoginId(result.email)}>Copy Login ID</Button>
                           {result.activationLink && (
                             <Button size="sm" variant="outline" icon={<Copy size={12} />} onClick={() => copyLoginId(result.activationLink || '')}>Copy Activation Link</Button>
                           )}
                           <Button size="sm" variant="outline" onClick={() => navigate(`/enterprise/assign-project?workspaceId=${workspaceId}&projectId=${selectedProject?.id || ''}&projectTable=${selectedProject?.table || 'gov_projects'}`)}>Open Assignment</Button>
+                          <Button size="sm" variant="outline" onClick={() => navigate(`/admin/audit-logs?email=${encodeURIComponent(result.email)}`)}>View Audit</Button>
                         </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          )}
+            </div> : <p className="rounded-lg border border-dashed border-[#D9D0B5] px-4 py-5 text-sm text-[#6C7568]">No project-team provisioning record is available yet.</p>}
+          </section>
         </Card>
         <Card className="xl:col-span-2">
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

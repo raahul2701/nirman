@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { corsHeaders } from '../_shared/cors.ts';
 
 type TeamRole = 'assistant_engineer' | 'junior_engineer' | 'contractor';
-type StageName = 'identity_lookup' | 'auth_invitation' | 'profile_creation' | 'workspace_membership' | 'project_assignment' | 'letter_generation' | 'notification_delivery';
+type StageName = 'identity_lookup' | 'auth_invitation' | 'profile_creation' | 'workspace_membership' | 'project_assignment' | 'letter_generation' | 'notification_delivery' | 'password_created' | 'activation_completed';
 type ProvisionStageStatus =
   | 'pending'
   | 'success'
@@ -23,6 +23,7 @@ type TeamMemberInput = {
 };
 
 type RequestBody = {
+  action?: 'status';
   workspaceId?: string;
   projectId?: string;
   projectTable?: 'gov_projects' | 'projects';
@@ -195,6 +196,24 @@ function nextFailureStage(stages: StageResult[]): StageName {
   return order.find((item) => !completed.has(item)) || 'notification_delivery';
 }
 
+function liveStatusResult(input: { role: TeamRole; user: Record<string, any>; profile: Record<string, any> | null; assignmentId: string }) {
+  const metadata = input.user.user_metadata || {};
+  const passwordCreated = Boolean(metadata.password_created_at);
+  const activated = Boolean(input.user.email_confirmed_at || input.user.confirmed_at || passwordCreated);
+  const firstLoginCompleted = Boolean(input.user.last_sign_in_at);
+  const invitationPending = Boolean(input.user.invited_at) && !activated;
+  const stages: StageResult[] = [
+    stage('identity_lookup', 'success', 'Identity found.'),
+    stage('auth_invitation', input.user.invited_at ? 'success' : 'skipped', input.user.invited_at ? 'Invitation created.' : 'Existing account.'),
+    stage('profile_creation', 'success'), stage('workspace_membership', 'success'),
+    stage('project_assignment', 'success', `Assignment ${input.assignmentId}`),
+    stage('letter_generation', 'skipped', 'Letter can be downloaded from the invitation result.'),
+    stage('notification_delivery', input.user.invited_at ? 'email' : 'not_configured', input.user.invited_at ? 'Email invitation requested from Supabase Auth.' : 'No invitation email was required.'),
+    stage('password_created', passwordCreated ? 'success' : 'pending', passwordCreated ? 'Password created.' : 'Password creation pending.'),
+    stage('activation_completed', activated ? 'success' : 'pending', activated ? 'Account activated.' : 'Activation pending.'),
+  ];
+  return { success: true, assignment_saved: true, notification: { method: 'email' as const, status: input.user.invited_at ? 'success' as const : 'not_configured' as const }, role: input.role, email: input.user.email || input.profile?.email || '', fullName: input.profile?.full_name || metadata.full_name || input.user.email || input.role, userId: input.user.id, identityStatus: activated ? 'existing' as const : invitationPending ? 'invited' as const : 'created' as const, assignmentId: input.assignmentId, statuses: { account: activated ? 'active' : invitationPending ? 'invited' : 'created', invitation_created: Boolean(input.user.invited_at), assigned: true, letter_created: false, email_sent: Boolean(input.user.invited_at), sms_sent: false, activation_pending: invitationPending, activated, password_created: passwordCreated, first_login_completed: firstLoginCompleted, last_login_at: input.user.last_sign_in_at || null, delivery_failed: false }, activationLink: null, letter: null, stages };
+}
 function sanitizeMember(member: TeamMemberInput) {
   return {
     role: member.role,
@@ -503,7 +522,7 @@ Deno.serve(async (req: Request) => {
     const projectTable = body.projectTable || 'gov_projects';
     const resendInvitation = body.resendInvitation === true;
     const generateActivationLink = body.generateActivationLink === true;
-    const inviteRedirectUrl = 'https://nirman.apostolicredeem.com';
+    const inviteRedirectUrl = 'https://nirman.apostolicredeem.com/auth/callback';
     const members = (body.members || []).map(sanitizeMember).filter((member) => member.fullName && member.email && allowedRoles.has(member.role));
 
     if (!workspaceId || !projectId) return json({ ok: false, message: 'workspaceId and projectId are required.' }, 400);
@@ -535,7 +554,7 @@ Deno.serve(async (req: Request) => {
 
     const assignmentScope = await supabase
       .from('project_assignments')
-      .select('id')
+      .select('id, assistant_engineer_id, junior_engineer_id, contractor_id')
       .eq('workspace_id', workspaceId)
       .eq('project_id', projectId)
       .eq('project_table', projectTable)
@@ -543,6 +562,20 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (assignmentScope.error) throw assignmentScope.error;
     if (!assignmentScope.data) return json({ ok: false, message: 'Project is not assigned to this workspace.' }, 403);
+
+    if (body.action === 'status') {
+      const assignment = assignmentScope.data as Record<string, string | null>;
+      const roles: Array<[TeamRole, string | null]> = [['assistant_engineer', assignment.assistant_engineer_id], ['junior_engineer', assignment.junior_engineer_id], ['contractor', assignment.contractor_id]];
+      const results = [];
+      for (const [role, userId] of roles) {
+        if (!userId) continue;
+        const [authResult, profileResult] = await Promise.all([supabase.auth.admin.getUserById(userId), supabase.from('profiles').select('full_name, email').eq('id', userId).maybeSingle()]);
+        if (authResult.error || !authResult.data.user) continue;
+        if (profileResult.error) throw profileResult.error;
+        results.push(liveStatusResult({ role, user: authResult.data.user as unknown as Record<string, any>, profile: profileResult.data as Record<string, any> | null, assignmentId: assignment.id || '' }));
+      }
+      return json({ ok: true, workspaceId, projectId, projectTable, results });
+    }
 
     const project = await loadProject(supabase, projectTable, projectId);
     const results = [];
@@ -755,6 +788,8 @@ Deno.serve(async (req: Request) => {
           finalStageStatus: notificationStatus,
         });
         stages.push(stage('notification_delivery', notificationStatus, notificationMessage));
+        stages.push(stage('password_created', 'pending', 'Password creation pending.'));
+        stages.push(stage('activation_completed', 'pending', 'Activation pending.'));
 
         const notificationMethod = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'email';
         const notificationSucceeded = notificationStatus === 'email' || notificationStatus === 'manual_link';
@@ -781,6 +816,9 @@ Deno.serve(async (req: Request) => {
             sms_sent: false,
             activation_pending: identityStatus !== 'existing',
             activated: identityStatus === 'existing',
+            password_created: false,
+            first_login_completed: false,
+            last_login_at: null,
             delivery_failed: notificationStatus === 'failed',
           },
           activationLink,
@@ -813,6 +851,9 @@ Deno.serve(async (req: Request) => {
             sms_sent: false,
             activation_pending: false,
             activated: false,
+            password_created: false,
+            first_login_completed: false,
+            last_login_at: null,
             delivery_failed: true,
           },
           activationLink: null,

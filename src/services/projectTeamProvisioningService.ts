@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 
 export type ProvisionTeamRole = 'assistant_engineer' | 'junior_engineer' | 'contractor';
-export type ProvisionStageName = 'identity_lookup' | 'auth_invitation' | 'profile_creation' | 'workspace_membership' | 'project_assignment' | 'letter_generation' | 'notification_delivery';
+export type ProvisionStageName = 'identity_lookup' | 'auth_invitation' | 'profile_creation' | 'workspace_membership' | 'project_assignment' | 'letter_generation' | 'notification_delivery' | 'password_created' | 'activation_completed';
 export type ProvisionStageStatus =
   | 'pending'
   | 'success'
@@ -68,6 +68,9 @@ export type ProvisionTeamMemberResult = {
     sms_sent: boolean;
     activation_pending: boolean;
     activated: boolean;
+    password_created: boolean;
+    first_login_completed: boolean;
+    last_login_at?: string | null;
     delivery_failed: boolean;
   };
   activationLink?: string | null;
@@ -108,6 +111,19 @@ export async function provisionProjectTeam(input: {
   });
   if (error) throw error;
   if (!data?.ok) throw new Error(data?.message || 'Project team provisioning failed');
+  return data.results || [];
+}
+
+export async function getProjectTeamProvisioningStatus(input: {
+  workspaceId: string;
+  projectId: string;
+  projectTable: 'gov_projects' | 'projects';
+}) {
+  const { data, error } = await supabase.functions.invoke<ProvisionProjectTeamResponse>('provision-project-team', {
+    body: { ...input, action: 'status' },
+  });
+  if (error) throw error;
+  if (!data?.ok) throw new Error(data?.message || 'Could not load provisioning status');
   return data.results || [];
 }
 
