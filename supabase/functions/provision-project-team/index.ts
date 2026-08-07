@@ -93,6 +93,37 @@ function logProvisionDebug(event: string, details: Record<string, unknown>) {
   console.info('[provision-project-team]', event, details);
 }
 
+function authErrorDetails(error: unknown) {
+  const details = typeof error === 'object' && error !== null ? error as Record<string, unknown> : {};
+  return {
+    message: safeError(error),
+    status: details.status ?? null,
+    code: details.code ?? details.error_code ?? null,
+    name: details.name ?? null,
+    providerResponse: details.provider_response ?? details.providerResponse ?? null,
+  };
+}
+
+function inviteResponseDetails(invite: { data?: { user?: Record<string, unknown> | null } | null; error?: unknown }) {
+  const user = invite.data?.user || null;
+  return {
+    hasUser: Boolean(user),
+    user: user ? {
+      id: user.id ?? null,
+      email: user.email ?? null,
+      invited_at: user.invited_at ?? null,
+      confirmation_sent_at: user.confirmation_sent_at ?? null,
+      email_confirmed_at: user.email_confirmed_at ?? null,
+      confirmed_at: user.confirmed_at ?? null,
+      created_at: user.created_at ?? null,
+      updated_at: user.updated_at ?? null,
+      app_metadata: user.app_metadata ?? null,
+      user_metadata: user.user_metadata ?? null,
+    } : null,
+    error: invite.error ? authErrorDetails(invite.error) : null,
+  };
+}
+
 
 async function logProvisionFailure(supabase: ReturnType<typeof createClient>, input: {
   callerId: string;
@@ -616,6 +647,10 @@ Deno.serve(async (req: Request) => {
               notificationStatus: 'failed',
               finalStageStatus: 'failed',
               error: safeError(inviteError),
+              inviteResponse: inviteResponseDetails(invite),
+              httpStatus: authErrorDetails(inviteError).status,
+              supabaseErrorCode: authErrorDetails(inviteError).code,
+              providerResponse: authErrorDetails(inviteError).providerResponse,
             });
             stages.push(stage('auth_invitation', 'failed', safeError(inviteError)));
             await logProvisionEvent(supabase, {
@@ -640,6 +675,10 @@ Deno.serve(async (req: Request) => {
               userId,
               existingAuthUser: Boolean(authUser?.id),
               resendInvitation,
+              inviteResponse: inviteResponseDetails(invite),
+              httpStatus: 200,
+              supabaseErrorCode: null,
+              providerResponse: null,
             });
             await logProvisionEvent(supabase, {
               callerId,
@@ -788,6 +827,7 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, message: safeError(error) }, 500);
   }
 });
+
 
 
 

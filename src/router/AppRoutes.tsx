@@ -2,6 +2,8 @@ import { Navigate, Outlet, RouteObject, useRoutes } from 'react-router-dom';
 import { OnboardingGuard, ProtectedRoute } from '../components/ProtectedRoute';
 import { createLazyComponent, lazyWithRetry } from '../lib/lazyWithRetry';
 
+const AuthCallbackPage = lazyWithRetry(() => import('../pages/auth/AuthCallbackPage').then((mod) => ({ default: mod.AuthCallbackPage })));
+const CreatePasswordPage = lazyWithRetry(() => import('../pages/auth/CreatePasswordPage').then((mod) => ({ default: mod.CreatePasswordPage })));
 const LoginPage = lazyWithRetry(() => import('../pages/auth/LoginPage').then((mod) => ({ default: mod.LoginPage })));
 const SignupPage = lazyWithRetry(() => import('../pages/auth/SignupPage').then((mod) => ({ default: mod.SignupPage })));
 const OnboardingPage = lazyWithRetry(() => import('../pages/auth/OnboardingPage').then((mod) => ({ default: mod.OnboardingPage })));
@@ -76,6 +78,9 @@ const protectedTree = (
 );
 
 const routes: RouteObject[] = [
+  { index: true, element: <AuthCallbackPage /> },
+  { path: 'auth/callback', element: <AuthCallbackPage /> },
+  { path: 'create-password', element: <CreatePasswordPage /> },
   { path: 'login', element: <LoginPage /> },
   { path: 'signup', element: <SignupPage /> },
   { path: 'onboarding', element: <ProtectedRoute><OnboardingPage /></ProtectedRoute> },
@@ -237,4 +242,5 @@ const routes: RouteObject[] = [
 export function AppRoutes() {
   return useRoutes(routes as RouteObject[]);
 }
+
 
