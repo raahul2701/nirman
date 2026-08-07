@@ -316,9 +316,20 @@ async function validateExistingIdentity(supabase: ReturnType<typeof createClient
   workspace: WorkspaceDetails;
   member: ReturnType<typeof sanitizeMember>;
 }) {
-  const authId = input.authUser?.id || null;
+  const authId = input.authUser?.email
+    && normalizeEmail(input.authUser.email) === normalizeEmail(input.member.email)
+    ? input.authUser.id || null
+    : null;
   const profileId = input.profileByEmail?.id || null;
   const resolvedUserId = authId || profileId;
+  const resolutionSource = authId ? 'auth_user' : profileId ? 'profile' : 'none';
+  logProvisionDebug('identity_resolution', {
+    requested_email: input.member.email,
+    auth_email: input.authUser?.email || null,
+    profile_email: input.profileByEmail?.email || null,
+    resolved_user_id: resolvedUserId,
+    resolution_source: resolutionSource,
+  });
   if (!resolvedUserId) return null;
 
   assertSecurity(resolvedUserId !== input.callerId, 'SecurityException: provisioned login_id resolves to the current authenticated user.');
