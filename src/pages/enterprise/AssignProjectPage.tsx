@@ -498,7 +498,20 @@ export function AssignProjectPage() {
     label: `${project.table === 'gov_projects' ? 'Government Project' : 'Workspace Project'} - ${project.code ? `${project.code} - ` : ''}${project.label}`,
   }));
 
-  const canManageAssignment = Boolean(user?.id && selectedWorkspace && (selectedWorkspace.executive_engineer_id === user.id || profile?.role === 'admin' || profile?.role === 'super_admin'));
+  const canManageAssignment = Boolean(
+    user?.id
+    && selectedWorkspace
+    && (
+      workspaceUsers.some((member) => (
+        member.workspace_id === selectedWorkspace.id
+        && member.user_id === user.id
+        && member.role === 'executive_engineer'
+        && member.active !== false
+      ))
+      || profile?.role === 'admin'
+      || profile?.role === 'super_admin'
+    )
+  );
   const assignmentBlockReason = loading
     ? 'Assignment data is still loading.'
     : saving
