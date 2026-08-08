@@ -86,6 +86,41 @@ function diagnosticFailure(stage: string, line: number, error: unknown, status =
   return json({ success: false, stage, file: diagnosticFile, line, error: details.message, stack: details.stack || null }, status);
 }
 
+class AssignmentStepError extends Error {
+  constructor(
+    readonly line: number,
+    readonly statement: string,
+    readonly raw: unknown,
+  ) {
+    super(raw instanceof Error ? raw.message : typeof raw === 'object' && raw !== null && typeof (raw as Record<string, unknown>).message === 'string' ? (raw as Record<string, unknown>).message as string : String(raw));
+  }
+}
+function assignmentFailure(stage: string, line: number, statement: string, error: unknown) {
+  const raw = typeof error === 'object' && error !== null ? error as Record<string, unknown> : {};
+  const message = error instanceof Error
+    ? error.message
+    : typeof raw.message === 'string'
+      ? raw.message
+      : String(error);
+  const stack = error instanceof Error ? error.stack || null : typeof raw.stack === 'string' ? raw.stack : null;
+  return json({
+    success: false,
+    stage,
+    file: diagnosticFile,
+    line,
+    statement,
+    error: message,
+    stack,
+    sql: raw,
+    postgres_error_code: raw.code ?? null,
+    constraint_name: raw.constraint ?? null,
+    table_name: raw.table ?? null,
+    column_name: raw.column ?? null,
+    rpc_name: raw.rpc ?? null,
+  }, 500);
+}
+
+
 class SecurityException extends Error {
   constructor(message: string) {
     super(message);
@@ -203,7 +238,7 @@ function nextFailureStage(stages: StageResult[]): StageName {
   return order.find((item) => !completed.has(item)) || 'notification_delivery';
 }
 
-function liveStatusResult(input: { role: TeamRole; user: Record<string, any>; profile: Record<string, any> | null; assignmentId: string }) {
+function liveStatusResult(input: { role: TeamRole; user: { id: string; email?: string | null; invited_at?: string | null; email_confirmed_at?: string | null; confirmed_at?: string | null; last_sign_in_at?: string | null; user_metadata?: { password_created_at?: string | null } }; profile: { full_name?: string | null; email?: string | null } | null; assignmentId: string }) {
   const metadata = input.user.user_metadata || {};
   const passwordCreated = Boolean(metadata.password_created_at);
   const activated = Boolean(input.user.email_confirmed_at || input.user.confirmed_at || passwordCreated);
@@ -491,31 +526,37 @@ async function assignProject(supabase: ReturnType<typeof createClient>, input: {
   member: ReturnType<typeof sanitizeMember>;
   userId: string;
 }) {
-  const lookup = await supabase
-    .from('project_assignments')
-    .select('id, assistant_engineer_id, junior_engineer_id, contractor_id, contractor_company_name, access_status')
-    .eq('workspace_id', input.workspaceId)
-    .eq('project_id', input.projectId)
-    .eq('project_table', input.projectTable)
-    .limit(2);
-  if (lookup.error) throw lookup.error;
+  let lookup;
+  try {
+    lookup = await supabase
+      .from('project_assignments')
+      .select('id, assistant_engineer_id, junior_engineer_id, contractor_id, contractor_company_name, access_status')
+      .eq('workspace_id', input.workspaceId)
+      .eq('project_id', input.projectId)
+      .eq('project_table', input.projectTable)
+      .limit(2);
+    if (lookup.error) throw lookup.error;
+  } catch (error) {
+    throw new AssignmentStepError(531, 'project_assignments.select', error);
+  }
   const existing = (lookup.data || [])[0] as { id: string } | undefined;
-  if (!existing?.id) throw new Error('Project is not linked to this workspace. Open Assignment first, then retry provisioning.');
+  if (!existing?.id) throw new AssignmentStepError(543, 'project_assignments.select', new Error('Project is not linked to this workspace. Open Assignment first, then retry provisioning.'));
 
   const payload: Record<string, unknown> = {
     executive_engineer_id: input.executiveEngineerId,
     access_status: 'active',
     [roleColumn[input.member.role]]: input.userId,
   };
-  if (input.member.role === 'contractor') {
-    payload.contractor_company_name = input.member.companyName || null;
-  }
+  if (input.member.role === 'contractor') payload.contractor_company_name = input.member.companyName || null;
 
-  const result = await supabase.from('project_assignments').update(payload).eq('id', existing.id).select('id').maybeSingle();
-  if (result.error) throw result.error;
+  try {
+    const result = await supabase.from('project_assignments').update(payload).eq('id', existing.id).select('id').maybeSingle();
+    if (result.error) throw result.error;
+  } catch (error) {
+    throw new AssignmentStepError(553, 'project_assignments.update', error);
+  }
   return existing.id;
 }
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders });
   if (req.method !== 'POST') return json({ ok: false, message: 'Method not allowed' }, 405);
@@ -601,7 +642,7 @@ Deno.serve(async (req: Request) => {
         const [authResult, profileResult] = await Promise.all([supabase.auth.admin.getUserById(userId), supabase.from('profiles').select('full_name, email').eq('id', userId).maybeSingle()]);
         if (authResult.error || !authResult.data.user) continue;
         if (profileResult.error) throw profileResult.error;
-        results.push(liveStatusResult({ role, user: authResult.data.user as unknown as Record<string, any>, profile: profileResult.data as Record<string, any> | null, assignmentId: assignment.id || '' }));
+        results.push(liveStatusResult({ role, user: authResult.data.user as unknown as { id: string; email?: string | null; invited_at?: string | null; email_confirmed_at?: string | null; confirmed_at?: string | null; last_sign_in_at?: string | null; user_metadata?: { password_created_at?: string | null } }, profile: profileResult.data as unknown as { full_name?: string | null; email?: string | null } | null, assignmentId: assignment.id || '' }));
       }
       return json({ ok: true, workspaceId, projectId, projectTable, rows: results, results });
     }
@@ -774,37 +815,58 @@ Deno.serve(async (req: Request) => {
         }
 
         if (!userId) throw new Error('Identity resolution did not return a user id.');
-        await verifyAuthLoginId(supabase, { userId, member, callerId, workspace });
-        memberStage = 'Create profile'; memberLine = 765;
-        await upsertProfile(supabase, member, userId);
+        try {
+          await verifyAuthLoginId(supabase, { userId, member, callerId, workspace });
+        } catch (error) {
+          return assignmentFailure('Verify auth login ID', 819, 'verifyAuthLoginId', error);
+        }
+        memberStage = 'Create profile'; memberLine = 0;
+        try {
+          await upsertProfile(supabase, member, userId);
+        } catch (error) {
+          return assignmentFailure('Create profile', 825, 'upsertProfile', error);
+        }
         stages.push(stage('profile_creation', 'success'));
 
-        memberStage = 'Workspace membership'; memberLine = 769;
-        const membershipId = await upsertMembership(supabase, workspaceId, member, userId);
+        memberStage = 'Workspace membership'; memberLine = 0;
+        let membershipId: string | null = null;
+        try {
+          membershipId = await upsertMembership(supabase, workspaceId, member, userId);
+        } catch (error) {
+          return assignmentFailure('Workspace membership', 834, 'upsertMembership', error);
+        }
         stages.push(stage('workspace_membership', 'success', membershipId ? `Membership ${membershipId}` : undefined));
 
-        memberStage = 'Project assignment'; memberLine = 773;
-        assignmentId = await assignProject(supabase, {
-          workspaceId,
-          projectId,
-          projectTable,
-          executiveEngineerId: workspace.executive_engineer_id || callerId,
-          member,
-          userId,
-        });
+        memberStage = 'Project assignment'; memberLine = 0;
+        try {
+          assignmentId = await assignProject(supabase, {
+            workspaceId,
+            projectId,
+            projectTable,
+            executiveEngineerId: workspace.executive_engineer_id || callerId,
+            member,
+            userId,
+          });
+        } catch (error) {
+          if (error instanceof AssignmentStepError) return assignmentFailure('Project assignment', error.line, error.statement, error.raw);
+          return assignmentFailure('Project assignment', 842, 'assignProject', error);
+        }
         stages.push(stage('project_assignment', 'success', `Assignment ${assignmentId}`));
 
-        await verifyProvisionedIdentity(supabase, {
-          workspaceId,
-          projectId,
-          projectTable,
-          assignmentId,
-          userId,
-          member,
-          callerId,
-          workspace,
-        });
-
+        try {
+          await verifyProvisionedIdentity(supabase, {
+            workspaceId,
+            projectId,
+            projectTable,
+            assignmentId,
+            userId,
+            member,
+            callerId,
+            workspace,
+          });
+        } catch (error) {
+          return assignmentFailure('Verify project assignment', 857, 'verifyProvisionedIdentity', error);
+        }
         const letter = letterFor({ workspace, project, member, userId, activationLink });
         stages.push(stage('letter_generation', 'success'));
         const notificationStatus: ProvisionStageStatus = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : stages.some((item) => item.stage === 'auth_invitation' && item.status === 'failed') ? 'failed' : 'not_configured';

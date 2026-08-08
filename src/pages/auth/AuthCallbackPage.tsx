@@ -23,6 +23,12 @@ export function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
   const params = useMemo(() => paramsFromLocation(location), [location]);
 
+  console.info('AuthCallbackPage loaded', {
+    href: window.location.href,
+    hash: window.location.hash,
+    search: window.location.search,
+  });
+
   useEffect(() => {
     let active = true;
 
