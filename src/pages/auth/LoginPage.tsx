@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../components/ui/useToast';
 import { BRANDING } from '../../constants/branding';
+import { AUTH_CALLBACK_URL } from '../../lib/authCallback';
 import { supabase } from '../../lib/supabase';
 
 export function LoginPage() {
@@ -13,6 +14,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const { signIn } = useAuth();
   const navigate = useNavigate();
@@ -34,7 +36,6 @@ export function LoginPage() {
     }
   }
 
-
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault();
     if (newPassword.length < 8) {
@@ -53,6 +54,23 @@ export function LoginPage() {
     }
     toast('Password updated. Welcome in.', 'success');
     navigate('/dashboard');
+  }
+
+  async function handlePasswordRecovery(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email) return;
+
+    setLoading(true);
+    try {
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: AUTH_CALLBACK_URL,
+      });
+    } catch {
+      // Keep the response generic to avoid revealing whether this email is registered.
+    } finally {
+      setLoading(false);
+    }
+    toast('If the email is registered, a password reset link has been sent.', 'success');
   }
 
   return (
@@ -104,10 +122,10 @@ export function LoginPage() {
           </div>
 
           <div className="rounded-lg bg-white p-6 shadow-command" style={{ border: '1px solid var(--border)' }}>
-            <h1 className="text-3xl font-black text-[#12332D] mb-1">Welcome back</h1>
-            <p className="text-[#6C7568] mb-8">Sign in to ARSPL NIRMAN command</p>
+            <h1 className="text-3xl font-black text-[#12332D] mb-1">{recoveryMode ? 'Reset your password' : 'Welcome back'}</h1>
+            <p className="text-[#6C7568] mb-8">{recoveryMode ? 'Enter your email to receive a reset link.' : 'Sign in to ARSPL NIRMAN command'}</p>
 
-            <form onSubmit={mustChangePassword ? handlePasswordChange : handleSubmit} className="flex flex-col gap-4">
+            <form onSubmit={mustChangePassword ? handlePasswordChange : recoveryMode ? handlePasswordRecovery : handleSubmit} className="flex flex-col gap-4">
               {!mustChangePassword && <Input
                 label="Email Address"
                 type="email"
@@ -118,7 +136,7 @@ export function LoginPage() {
                 icon={<Mail size={15} />}
                 required
               />}
-              <Input
+              {!recoveryMode && <Input
                 label={mustChangePassword ? 'New Password' : 'Password'}
                 type="password"
                 autoComplete={mustChangePassword ? 'new-password' : 'current-password'}
@@ -127,22 +145,24 @@ export function LoginPage() {
                 onChange={e => mustChangePassword ? setNewPassword(e.target.value) : setPassword(e.target.value)}
                 icon={<Lock size={15} />}
                 required
-              />
-              {!mustChangePassword && <div className="flex justify-end">
-                <a href="#" className="text-xs font-semibold" style={{ color: '#005F56' }}>Forgot password?</a>
+              />}
+              {!mustChangePassword && !recoveryMode && <div className="flex justify-end">
+                <button type="button" onClick={() => setRecoveryMode(true)} className="text-xs font-semibold" style={{ color: '#005F56' }}>Forgot password?</button>
               </div>}
               <Button type="submit" variant="primary" size="lg" loading={loading} className="w-full mt-2">
-                {mustChangePassword ? 'Update Password' : 'Sign In'}
+                {mustChangePassword ? 'Update Password' : recoveryMode ? 'Send Reset Link' : 'Sign In'}
                 <ArrowRight size={16} />
               </Button>
             </form>
 
-            <p className="text-center text-[#6C7568] text-sm mt-6">
+            {recoveryMode ? <p className="text-center text-[#6C7568] text-sm mt-6">
+              <button type="button" onClick={() => setRecoveryMode(false)} style={{ color: '#005F56' }} className="font-semibold hover:underline">Back to sign in</button>
+            </p> : <p className="text-center text-[#6C7568] text-sm mt-6">
               Don't have an account?{' '}
               <Link to="/signup" style={{ color: '#005F56' }} className="font-semibold hover:underline">
                 Create account
               </Link>
-            </p>
+            </p>}
           </div>
         </div>
       </div>
