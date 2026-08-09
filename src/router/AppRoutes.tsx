@@ -78,7 +78,7 @@ const protectedTree = (
 );
 
 const routes: RouteObject[] = [
-  { index: true, element: <AuthCallbackPage /> },
+  { index: true, element: <Navigate to="/dashboard" replace /> },
   { path: 'auth/callback', element: <AuthCallbackPage /> },
   { path: 'create-password', element: <CreatePasswordPage /> },
   { path: 'login', element: <LoginPage /> },
