@@ -23,12 +23,6 @@ export function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
   const params = useMemo(() => paramsFromLocation(location), [location]);
 
-  console.info('AuthCallbackPage loaded', {
-    href: window.location.href,
-    hash: window.location.hash,
-    search: window.location.search,
-  });
-
   useEffect(() => {
     let active = true;
 
@@ -38,10 +32,12 @@ export function AuthCallbackPage() {
       const refreshToken = params.get('refresh_token');
       const tokenHash = params.get('token_hash') || params.get('token');
 
-      if (!isPasswordCreationFlow(type)) {
-        navigate('/dashboard', { replace: true });
-        return;
-      }
+      console.info('AuthCallbackPage callback parameters', {
+        type,
+        has_access_token: Boolean(accessToken),
+        has_refresh_token: Boolean(refreshToken),
+        has_token_hash: Boolean(tokenHash),
+      });
 
       try {
         if (accessToken && refreshToken) {
@@ -50,21 +46,33 @@ export function AuthCallbackPage() {
             refresh_token: refreshToken,
           });
           if (sessionError) throw sessionError;
-        } else if (tokenHash) {
+        } else if (tokenHash && type) {
           const { error: verifyError } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type,
           });
           if (verifyError) throw verifyError;
         } else {
-          throw new Error('Invite link is missing Supabase auth tokens.');
+          throw new Error('Authentication link is missing supported Supabase callback parameters.');
+        }
+
+        const { data: sessionData, error: getSessionError } = await supabase.auth.getSession();
+        if (getSessionError) throw getSessionError;
+        if (!sessionData.session?.user) {
+          throw new Error('Authentication session could not be established.');
         }
 
         if (!active) return;
-        navigate(`/create-password?type=${type}`, { replace: true });
-      } catch (callbackError) {
+
+        if (isPasswordCreationFlow(type)) {
+          navigate(`/create-password?flow=${type}&type=${type}`, { replace: true });
+          return;
+        }
+
+        navigate('/dashboard', { replace: true });
+      } catch {
         if (!active) return;
-        setError(callbackError instanceof Error ? callbackError.message : 'Invite link could not be verified.');
+        setError('Invalid or expired authentication link.');
       }
     }
 
@@ -76,8 +84,7 @@ export function AuthCallbackPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F7F3E8] p-6">
         <div className="max-w-md rounded-lg border border-red-200 bg-white p-6 text-center shadow-command">
-          <p className="font-semibold text-red-600">Invite link could not be accepted</p>
-          <p className="mt-2 text-sm text-[#6C7568]">{error}</p>
+          <p className="font-semibold text-red-600">{error}</p>
         </div>
       </div>
     );
@@ -87,9 +94,8 @@ export function AuthCallbackPage() {
     <div className="flex min-h-screen items-center justify-center bg-[#F7F3E8]">
       <div className="flex items-center gap-3 text-[#005F56]">
         <Loader2 className="animate-spin" size={20} />
-        <span className="text-sm font-medium">Accepting your invitation...</span>
+        <span className="text-sm font-medium">Verifying your authentication link...</span>
       </div>
     </div>
   );
 }
-
