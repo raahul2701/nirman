@@ -392,6 +392,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initializeAuth = async () => {
       try {
+        const isRecoveryCallback = typeof window !== 'undefined'
+          && window.location.pathname === '/auth/callback'
+          && new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type') === 'recovery';
+
+        if (isRecoveryCallback) {
+          return;
+        }
+
         const { data, error } = await withTimeout(
           supabase.auth.getSession(),
           AUTH_BOOTSTRAP_TIMEOUT_MS,

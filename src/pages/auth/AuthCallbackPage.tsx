@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 type AuthFlowType = 'invite' | 'recovery';
+const CALLBACK_TIMEOUT_MS = 15_000;
 
 function paramsFromLocation(location: ReturnType<typeof useLocation>) {
   const params = new URLSearchParams(location.search);
@@ -25,6 +26,14 @@ export function AuthCallbackPage() {
 
   useEffect(() => {
     let active = true;
+    let timedOut = false;
+    let callbackSessionUserId: string | null = null;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      if (active) {
+        setError('Invalid or expired authentication link.');
+      }
+    }, CALLBACK_TIMEOUT_MS);
 
     async function handleCallback() {
       const type = params.get('type');
@@ -32,24 +41,38 @@ export function AuthCallbackPage() {
       const refreshToken = params.get('refresh_token');
       const tokenHash = params.get('token_hash') || params.get('token');
 
-      console.info('AuthCallbackPage callback parameters', {
-        type,
-        has_access_token: Boolean(accessToken),
-        has_refresh_token: Boolean(refreshToken),
-        has_token_hash: Boolean(tokenHash),
-      });
-
       try {
         if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
+          const { data: { session: existingSession } } = await supabase.auth.getSession();
+          const existingUserId = existingSession?.user?.id ?? null;
+          console.info('[NIRMAN-AUTH-TRACE]', {
+            pathname: window.location.pathname,
+            type,
+            has_access_token: Boolean(accessToken),
+            has_refresh_token: Boolean(refreshToken),
+            has_token_hash: Boolean(tokenHash),
+            existing_user_id: existingUserId,
+          });
+
+          const { data: setSessionData, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
+          callbackSessionUserId = setSessionData.session?.user?.id ?? null;
+          console.info('[NIRMAN-AUTH-TRACE]', {
+            set_session_success: !sessionError,
+            set_session_user_id: callbackSessionUserId,
+          });
           if (sessionError) throw sessionError;
         } else if (tokenHash && type) {
-          const { error: verifyError } = await supabase.auth.verifyOtp({
+          const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type,
+          });
+          callbackSessionUserId = verifyData.session?.user?.id ?? null;
+          console.info('[NIRMAN-AUTH-TRACE]', {
+            verify_otp_success: !verifyError,
+            verify_otp_user_id: callbackSessionUserId,
           });
           if (verifyError) throw verifyError;
         } else {
@@ -57,12 +80,25 @@ export function AuthCallbackPage() {
         }
 
         const { data: sessionData, error: getSessionError } = await supabase.auth.getSession();
+        const sessionUserId = sessionData.session?.user?.id ?? null;
+        console.info('[NIRMAN-AUTH-TRACE]', {
+          get_session_success: !getSessionError,
+          get_session_user_id: sessionUserId,
+        });
         if (getSessionError) throw getSessionError;
         if (!sessionData.session?.user) {
           throw new Error('Authentication session could not be established.');
         }
+        if (type === 'recovery' && (!callbackSessionUserId || sessionUserId !== callbackSessionUserId)) {
+          throw new Error('Recovery session could not be established.');
+        }
 
-        if (!active) return;
+        if (!active || timedOut) return;
+
+        if (type === 'recovery') {
+          navigate('/create-password?flow=recovery&type=recovery', { replace: true });
+          return;
+        }
 
         if (isPasswordCreationFlow(type)) {
           navigate(`/create-password?flow=${type}&type=${type}`, { replace: true });
@@ -71,13 +107,18 @@ export function AuthCallbackPage() {
 
         navigate('/dashboard', { replace: true });
       } catch {
-        if (!active) return;
+        if (!active || timedOut) return;
         setError('Invalid or expired authentication link.');
+      } finally {
+        window.clearTimeout(timeoutId);
       }
     }
 
     void handleCallback();
-    return () => { active = false; };
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
   }, [navigate, params]);
 
   if (error) {
