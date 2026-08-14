@@ -20,6 +20,7 @@ type TeamMemberInput = {
   employeeCode?: string | null;
   licenceNumber?: string | null;
   companyName?: string | null;
+  initial_password?: string;
 };
 
 type RequestBody = {
@@ -27,6 +28,7 @@ type RequestBody = {
   workspaceId?: string;
   projectId?: string;
   projectTable?: 'gov_projects' | 'projects';
+  assignmentId?: string;
   members?: TeamMemberInput[];
   resendInvitation?: boolean;
   generateActivationLink?: boolean;
@@ -265,6 +267,13 @@ function sanitizeMember(member: TeamMemberInput) {
     employeeCode: member.employeeCode ? String(member.employeeCode).trim() : null,
     licenceNumber: member.licenceNumber ? String(member.licenceNumber).trim() : null,
     companyName: member.companyName ? String(member.companyName).trim() : null,
+  };
+}
+
+function normalizeProvisionMember(member: TeamMemberInput) {
+  return {
+    ...sanitizeMember(member),
+    initialPassword: typeof member.initial_password === 'string' ? member.initial_password : null,
   };
 }
 
@@ -510,7 +519,9 @@ async function upsertMembership(supabase: ReturnType<typeof createClient>, works
     .limit(2);
   if (lookup.error) throw lookup.error;
 
-  const existing = (lookup.data || [])[0] as { id: string } | undefined;
+  const rows = input.assignmentId ? (lookup.data ? [lookup.data] : []) : (lookup.data || []);
+  if (rows.length > 1) throw new AssignmentStepError(531, 'DUPLICATE_ACTIVE_ASSIGNMENT', new Error('DUPLICATE_ACTIVE_ASSIGNMENT'));
+  const existing = rows[0] as { id: string } | undefined;
   const result = existing?.id
     ? await supabase.from('workspace_users').update(membershipPayload).eq('id', existing.id).select('id').maybeSingle()
     : await supabase.from('workspace_users').insert(membershipPayload).select('id').maybeSingle();
@@ -525,21 +536,20 @@ async function assignProject(supabase: ReturnType<typeof createClient>, input: {
   executiveEngineerId: string;
   member: ReturnType<typeof sanitizeMember>;
   userId: string;
+  assignmentId?: string | null;
 }) {
   let lookup;
   try {
-    lookup = await supabase
-      .from('project_assignments')
-      .select('id, assistant_engineer_id, junior_engineer_id, contractor_id, contractor_company_name, access_status')
-      .eq('workspace_id', input.workspaceId)
-      .eq('project_id', input.projectId)
-      .eq('project_table', input.projectTable)
-      .limit(2);
+    lookup = input.assignmentId
+      ? await supabase.from('project_assignments').select('id, workspace_id, project_id, project_table, assistant_engineer_id, junior_engineer_id, contractor_id, contractor_company_name, access_status').eq('id', input.assignmentId).maybeSingle()
+      : await supabase.from('project_assignments').select('id, workspace_id, project_id, project_table, assistant_engineer_id, junior_engineer_id, contractor_id, contractor_company_name, access_status').eq('workspace_id', input.workspaceId).eq('project_id', input.projectId).eq('project_table', input.projectTable).in('access_status', ['active', 'pilot']);
     if (lookup.error) throw lookup.error;
   } catch (error) {
     throw new AssignmentStepError(531, 'project_assignments.select', error);
   }
-  const existing = (lookup.data || [])[0] as { id: string } | undefined;
+  const rows = input.assignmentId ? (lookup.data ? [lookup.data] : []) : (lookup.data || []);
+  if (rows.length > 1) throw new AssignmentStepError(531, 'DUPLICATE_ACTIVE_ASSIGNMENT', new Error('DUPLICATE_ACTIVE_ASSIGNMENT'));
+  const existing = rows[0] as { id: string } | undefined;
   if (!existing?.id) throw new AssignmentStepError(543, 'project_assignments.select', new Error('Project is not linked to this workspace. Open Assignment first, then retry provisioning.'));
 
   const payload: Record<string, unknown> = {
@@ -584,11 +594,12 @@ Deno.serve(async (req: Request) => {
     const workspaceId = body.workspaceId || '';
     const projectId = body.projectId || '';
     const projectTable = body.projectTable || 'gov_projects';
+    const requestedAssignmentId = body.assignmentId || null;
     const action = body.action || 'provision';
     const resendInvitation = body.resendInvitation === true;
     const generateActivationLink = body.generateActivationLink === true;
     const inviteRedirectUrl = 'https://nirman.apostolicredeem.com/auth/callback';
-    const members = (body.members || []).map(sanitizeMember).filter((member) => member.fullName && member.email && allowedRoles.has(member.role));
+    const members = (body.members || []).map(normalizeProvisionMember).filter((member) => member.fullName && member.email && allowedRoles.has(member.role));
 
     if (!workspaceId || !projectId) return json({ ok: false, message: 'workspaceId and projectId are required.' }, 400);
     if (!['gov_projects', 'projects'].includes(projectTable)) return json({ ok: false, message: 'Unsupported project table.' }, 400);
@@ -598,6 +609,10 @@ Deno.serve(async (req: Request) => {
     if (action === 'provision') {
       const duplicateEmail = members.find((member, index) => members.findIndex((other) => other.email === member.email) !== index)?.email;
       if (duplicateEmail) return json({ ok: false, message: `Duplicate email in submission: ${duplicateEmail}` }, 400);
+    }
+
+    if (action === 'provision' && members.some((member) => member.initialPassword !== null && member.initialPassword.length < 8)) {
+      return json({ ok: false, message: 'Initial password must be at least 8 characters.' }, 400);
     }
     diagnosticStage = 'Load workspace'; diagnosticLine = 548;
     const membership = await supabase
@@ -622,19 +637,18 @@ Deno.serve(async (req: Request) => {
     const workspace = workspaceResult.data as WorkspaceDetails;
 
     diagnosticStage = 'Load assignment'; diagnosticLine = 570;
-    const assignmentScope = await supabase
-      .from('project_assignments')
-      .select('id, assistant_engineer_id, junior_engineer_id, contractor_id')
-      .eq('workspace_id', workspaceId)
-      .eq('project_id', projectId)
-      .eq('project_table', projectTable)
-      .limit(1)
-      .maybeSingle();
+    const assignmentScope = requestedAssignmentId
+      ? await supabase.from('project_assignments').select('id, workspace_id, project_id, project_table, access_status, assistant_engineer_id, junior_engineer_id, contractor_id').eq('id', requestedAssignmentId).maybeSingle()
+      : await supabase.from('project_assignments').select('id, workspace_id, project_id, project_table, access_status, assistant_engineer_id, junior_engineer_id, contractor_id').eq('workspace_id', workspaceId).eq('project_id', projectId).eq('project_table', projectTable).in('access_status', ['active', 'pilot']);
     if (assignmentScope.error) throw assignmentScope.error;
-    if (!assignmentScope.data) return json({ ok: false, message: 'Project is not assigned to this workspace.' }, 403);
+    const scopedAssignments = requestedAssignmentId ? (assignmentScope.data ? [assignmentScope.data] : []) : (assignmentScope.data || []);
+    if (scopedAssignments.length > 1) return json({ ok: false, message: 'DUPLICATE_ACTIVE_ASSIGNMENT: This project already has more than one active team assignment. Please reconcile the assignments before continuing.' }, 409);
+    if (scopedAssignments.length === 0) return json({ ok: false, message: 'Project is not assigned to this workspace.' }, 403);
+    const resolvedAssignment = scopedAssignments[0];
+    if (resolvedAssignment.workspace_id !== workspaceId || resolvedAssignment.project_id !== projectId || resolvedAssignment.project_table !== projectTable || !['active', 'pilot'].includes(resolvedAssignment.access_status)) return json({ ok: false, message: 'Assignment does not match the requested project scope.' }, 409);
 
     if (action === 'status') {
-      const assignment = assignmentScope.data as Record<string, string | null>;
+      const assignment = resolvedAssignment as Record<string, string | null>;
       const roles: Array<[TeamRole, string | null]> = [['assistant_engineer', assignment.assistant_engineer_id], ['junior_engineer', assignment.junior_engineer_id], ['contractor', assignment.contractor_id]];
       const results = [];
       for (const [role, userId] of roles) {
@@ -651,7 +665,10 @@ Deno.serve(async (req: Request) => {
     const project = await loadProject(supabase, projectTable, projectId);
     const results = [];
 
-    for (const member of members) {
+    for (const memberInput of members) {
+      const member = sanitizeMember(memberInput);
+      const initialPassword = memberInput.initialPassword;
+      const hasInitialPassword = initialPassword !== null;
       const stages: StageResult[] = [];
       let userId: string | null = null;
       let activationLink: string | null = null;
@@ -684,7 +701,31 @@ Deno.serve(async (req: Request) => {
         });
         stages.push(stage('identity_lookup', 'success', userId ? 'Existing identity found.' : 'No existing identity found.'));
 
-        if (generateActivationLink) {
+        if (hasInitialPassword) {
+          memberStage = 'Set initial password'; memberLine = 0;
+          const existingMetadata = authUser?.user_metadata && typeof authUser.user_metadata === 'object'
+            ? authUser.user_metadata as Record<string, unknown>
+            : {};
+          const userMetadata = {
+            ...existingMetadata,
+            full_name: member.fullName,
+            role: member.role,
+            must_change_password: true,
+            password_created_at: new Date().toISOString(),
+          };
+          try {
+            const passwordResult = authUser?.id
+              ? await supabase.auth.admin.updateUserById(authUser.id, { password: initialPassword, user_metadata: userMetadata })
+              : await supabase.auth.admin.createUser({ email: member.email, password: initialPassword, email_confirm: true, user_metadata: userMetadata });
+            if (passwordResult.error || !passwordResult.data.user?.id) throw new Error('password provisioning failed');
+            userId = passwordResult.data.user.id;
+          } catch {
+            throw new Error('Unable to establish credentials for this team member.');
+          }
+          identityStatus = authUser?.id ? 'existing' : 'created';
+          logProvisionDebug('initial_password_provisioned', { workspaceId, projectId, email: member.email, role: member.role, userId, identityStatus });
+          stages.push(stage('auth_invitation', 'skipped', 'Initial password was set directly; no Auth invitation or recovery email was sent.'));
+        } else if (generateActivationLink) {
           memberStage = 'Generate activation link'; memberLine = 635;
           const existingIdentityBeforeManualLink = Boolean(userId);
           const manualLink = await supabase.auth.admin.generateLink({
@@ -846,6 +887,7 @@ Deno.serve(async (req: Request) => {
             executiveEngineerId: workspace.executive_engineer_id || callerId,
             member,
             userId,
+            assignmentId: requestedAssignmentId,
           });
         } catch (error) {
           if (error instanceof AssignmentStepError) return assignmentFailure('Project assignment', error.line, error.statement, error.raw);
@@ -888,7 +930,7 @@ Deno.serve(async (req: Request) => {
           finalStageStatus: notificationStatus,
         });
         stages.push(stage('notification_delivery', notificationStatus, notificationMessage));
-        stages.push(stage('password_created', 'pending', 'Password creation pending.'));
+        stages.push(stage('password_created', hasInitialPassword ? 'success' : 'pending', hasInitialPassword ? 'Initial password set.' : 'Password creation pending.'));
         stages.push(stage('activation_completed', 'pending', 'Activation pending.'));
 
         const notificationMethod = identityStatus === 'invited' ? 'email' : activationLink ? 'manual_link' : 'email';
@@ -916,7 +958,7 @@ Deno.serve(async (req: Request) => {
             sms_sent: false,
             activation_pending: identityStatus !== 'existing',
             activated: identityStatus === 'existing',
-            password_created: false,
+            password_created: hasInitialPassword,
             first_login_completed: false,
             last_login_at: null,
             delivery_failed: notificationStatus === 'failed',

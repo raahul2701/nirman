@@ -233,11 +233,13 @@ export function StartPilotWizardPage() {
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
   const selectedProject = projects.find((project) => `${project.table}:${project.id}` === projectKey);
-  const existingAssignment = assignments.find((assignment) => (
+  const matchingAssignments = assignments.filter((assignment) => (
     assignment.workspace_id === workspaceId
     && assignment.project_id === selectedProject?.id
     && (assignment.project_table || 'gov_projects') === selectedProject?.table
   ));
+  const activeAssignments = matchingAssignments.filter((assignment) => assignment.access_status === 'active');
+  const existingAssignment = activeAssignments.length === 1 ? activeAssignments[0] : undefined;
 
   const loadData = useCallback(async (nextWorkspaceId?: string) => {
     setLoading(true);
@@ -373,6 +375,10 @@ export function StartPilotWizardPage() {
       setError('Select a workspace and project before saving.');
       return;
     }
+    if (activeAssignments.length > 1) {
+      setError('This project already has more than one active team assignment. Please reconcile the assignments before continuing.');
+      return;
+    }
     if (existingAssignment && !allowUpdate) {
       setError('An assignment already exists for this workspace and project. Review it, then choose update existing assignment to continue.');
       return;
@@ -401,12 +407,15 @@ export function StartPilotWizardPage() {
       if (!activeWorkspace.requestedWorkspaceMatched) {
         throw new Error('The selected workspace does not belong to your active Executive Engineer account.');
       }
+      if (activeWorkspace.membership.role !== 'executive_engineer' || activeWorkspace.userId !== user?.id) {
+        throw new Error('Only an authorized Executive Engineer can create or update this assignment.');
+      }
       const contractor = contractors.find((item) => item.id === preservedContractorId);
       const payload = {
         workspace_id: selectedWorkspace.id,
         project_id: selectedProject.id,
         project_table: selectedProject.table,
-        executive_engineer_id: selectedWorkspace.executive_engineer_id,
+        executive_engineer_id: activeWorkspace.userId,
         assistant_engineer_id: preservedAssistantEngineerId,
         junior_engineer_id: preservedJuniorEngineerId,
         contractor_id: preservedContractorId,
@@ -615,7 +624,7 @@ export function StartPilotWizardPage() {
             workspace_id: workspace.id,
             project_id: project.id,
             project_table: project.table,
-            executive_engineer_id: workspace.executive_engineer_id || user.id,
+            executive_engineer_id: user.id,
             assistant_engineer_id: null,
             junior_engineer_id: null,
             contractor_id: null,

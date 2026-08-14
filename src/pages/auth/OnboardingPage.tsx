@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { HardHat, Building2, MapPin, Phone, ChevronRight, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/useAuth';
 import { supabase } from '../../lib/supabase';
@@ -15,8 +15,10 @@ const roles = [
   { value: 'super_admin', label: 'Company Admin' },
 ];
 
+const ENTERPRISE_ROLES = new Set(['executive_engineer', 'assistant_engineer', 'junior_engineer', 'contractor']);
+
 export function OnboardingPage() {
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, profileLoading, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -67,6 +69,9 @@ export function OnboardingPage() {
     { num: 2, label: 'Company' },
     { num: 3, label: 'Contact' },
   ];
+
+  if (user && profileLoading) return null;
+  if (profile && ENTERPRISE_ROLES.has(profile.role)) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8" style={{ background: '#0D0D0D' }}>

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FolderOpen, Plus, X, Calendar, MapPin, DollarSign,
-  TrendingUp, CheckCircle, Clock, PauseCircle, XCircle
+  FolderOpen, Plus, X, MapPin, DollarSign,
+  TrendingUp
 } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
@@ -10,7 +10,9 @@ import { Input, Select, Textarea } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/useAuth';
 import { useToast } from '../components/ui/useToast';
-import { Project } from '../types';
+import type { DashboardProject } from '../components/dashboard/dashboard';
+import { loadAssignedDashboardProjects } from '../components/dashboard/dashboardService';
+import { getDashboardRole } from '../services/executionDemoData';
 import { formatCurrency } from '../lib/utils';
 import { resolveActiveWorkspaceForWrite } from '../services/businessHierarchyService';
 
@@ -21,20 +23,15 @@ const statusOptions = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
-const statusColors: Record<string, string> = {
-  active: '#22c55e', completed: '#00D4AA', on_hold: '#F59E0B', cancelled: '#ef4444'
-};
-
-const statusIcons: Record<string, typeof CheckCircle> = {
-  active: TrendingUp, completed: CheckCircle, on_hold: PauseCircle, cancelled: XCircle
-};
 
 export function ProjectsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const userId = user?.id;
+  const dashboardRole = getDashboardRole(profile?.role);
+  const canUpdateProgress = ['executive_engineer', 'assistant_engineer', 'junior_engineer', 'admin'].includes(dashboardRole);
   const toast = useToast();
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -44,15 +41,30 @@ export function ProjectsPage() {
   });
 
   const loadProjects = useCallback(async () => {
-    if (!userId) return;
-    const { data } = await supabase.from('projects').select('*').eq('owner_id', userId).order('created_at', { ascending: false });
-    if (data) setProjects(data as Project[]);
-    setLoading(false);
-  }, [userId]);
+    if (!userId) {
+      setProjects([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const assignedProjects = await loadAssignedDashboardProjects(profile?.role, {
+        userId,
+        fullName: profile?.full_name,
+        company: profile?.company,
+      });
+      setProjects(assignedProjects);
+    } catch (error) {
+      setProjects([]);
+      toast(error instanceof Error ? error.message : 'Failed to load assigned projects', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.company, profile?.full_name, profile?.role, toast, userId]);
 
   useEffect(() => {
-    if (userId) loadProjects();
-  }, [loadProjects, userId]);
+    void loadProjects();
+  }, [loadProjects]);
 
   async function addProject() {
     if (!userId) return;
@@ -124,27 +136,30 @@ export function ProjectsPage() {
       return;
     }
 
-    if (data) setProjects(prev => [data as Project, ...prev]);
+    await loadProjects();
     setShowForm(false);
     setForm({ name: '', description: '', status: 'active', start_date: '', end_date: '', budget: '', location: '' });
     toast(`Project "${form.name}" created!`, 'success');
   }
 
   async function updateProgress(id: string, progress: number) {
-    await supabase.from('projects').update({ progress_percent: progress }).eq('id', id);
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, progress_percent: progress } : p));
+    if (!canUpdateProgress) return;
+    const { error } = await supabase.from('projects').update({ progress_percent: progress }).eq('id', id);
+    if (error) {
+      toast('Progress update was not authorized', 'error');
+      return;
+    }
+    setProjects(prev => prev.map((project) => project.id === id ? { ...project, progress } : project));
   }
 
   return (
     <AppLayout title="Projects" subtitle="Workspace execution projects">
       <div className="flex items-center justify-between mb-6">
         <div className="flex gap-3">
-          {['active', 'completed', 'on_hold'].map(s => (
-            <div key={s} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium" style={{ background: `${statusColors[s]}10`, color: statusColors[s], border: `1px solid ${statusColors[s]}25` }}>
-              <span>{projects.filter(p => p.status === s).length}</span>
-              <span className="capitalize">{s.replace('_', ' ')}</span>
-            </div>
-          ))}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium" style={{ background: '#22c55e10', color: '#22c55e', border: '1px solid #22c55e25' }}>
+            <span>{projects.length}</span>
+            <span>Assigned projects</span>
+          </div>
         </div>
         <Button variant="primary" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>New Project</Button>
       </div>
@@ -183,29 +198,27 @@ export function ProjectsPage() {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <FolderOpen size={48} className="text-[#2A2A2A] mb-4" />
           <p className="text-white font-semibold mb-1">No projects yet</p>
-          <p className="text-[#606060] text-sm mb-4">Create your first construction project</p>
+          <p className="text-[#606060] text-sm mb-4">No active project assignments are available for your role.</p>
           <Button variant="primary" icon={<Plus size={14} />} onClick={() => setShowForm(true)}>Create Project</Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {projects.map(p => {
-            const Icon = statusIcons[p.status] || TrendingUp;
-            const color = statusColors[p.status] || '#808080';
+            const Icon = TrendingUp;
+            const color = '#22c55e';
             return (
               <div key={p.id} className="rounded-2xl p-5" style={{ background: '#1A1A1A', border: '1px solid #232323' }}>
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <Icon size={13} style={{ color }} />
-                      <span className="text-xs capitalize font-medium" style={{ color }}>{p.status.replace('_', ' ')}</span>
+                      <span className="text-xs capitalize font-medium" style={{ color }}>{p.projectTable.replace('_', ' ')}</span>
                     </div>
                     <h3 className="text-white font-bold truncate">{p.name}</h3>
-                    {p.location && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <MapPin size={10} className="text-[#606060]" />
-                        <span className="text-[#606060] text-xs">{p.location}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <MapPin size={10} className="text-[#606060]" />
+                      <span className="text-[#606060] text-xs">{p.code} · {p.assignmentRole?.replace('_', ' ') || 'assigned'}</span>
+                    </div>
                   </div>
                   {p.budget > 0 && (
                     <div className="text-right flex-shrink-0 ml-3">
@@ -215,42 +228,29 @@ export function ProjectsPage() {
                   )}
                 </div>
 
-                {p.description && <p className="text-[#808080] text-xs mb-4 line-clamp-2">{p.description}</p>}
 
                 {/* Progress */}
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[#606060] text-xs">Progress</span>
-                    <span className="text-white text-xs font-semibold">{p.progress_percent}%</span>
+                    <span className="text-white text-xs font-semibold">{p.progress == null ? 'Not available' : `${Math.round(p.progress)}%`}</span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#2A2A2A' }}>
-                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p.progress_percent}%`, background: `linear-gradient(90deg, #FF6B00, #FF8C00)` }} />
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p.progress || 0}%`, background: `linear-gradient(90deg, #FF6B00, #FF8C00)` }} />
                   </div>
-                  <div className="flex gap-1 mt-2 flex-wrap">
-                    {[0, 25, 50, 75, 100].map(v => (
-                      <button key={v} onClick={() => updateProgress(p.id, v)}
-                        className="px-2 py-0.5 rounded text-[9px] transition-all"
-                        style={{ background: p.progress_percent === v ? 'rgba(255,107,0,0.2)' : '#111111', color: p.progress_percent === v ? '#FF6B00' : '#606060', border: `1px solid ${p.progress_percent === v ? 'rgba(255,107,0,0.3)' : '#1F1F1F'}` }}>
-                        {v}%
-                      </button>
-                    ))}
-                  </div>
+                  {canUpdateProgress && p.projectTable === 'projects' && (
+                    <div className="flex gap-1 mt-2 flex-wrap">
+                      {[0, 25, 50, 75, 100].map((value) => (
+                        <button key={value} onClick={() => updateProgress(p.id, value)}
+                          className="px-2 py-0.5 rounded text-[9px] transition-all"
+                          style={{ background: p.progress === value ? 'rgba(255,107,0,0.2)' : '#111111', color: p.progress === value ? '#FF6B00' : '#606060', border: `1px solid ${p.progress === value ? 'rgba(255,107,0,0.3)' : '#1F1F1F'}` }}>
+                          {value}%
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-4 pt-3 border-t border-[#232323]">
-                  {p.start_date && (
-                    <div className="flex items-center gap-1">
-                      <Calendar size={10} className="text-[#606060]" />
-                      <span className="text-[#606060] text-[10px]">{new Date(p.start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
-                    </div>
-                  )}
-                  {p.end_date && (
-                    <div className="flex items-center gap-1">
-                      <Clock size={10} className="text-[#606060]" />
-                      <span className="text-[#606060] text-[10px]">Due {new Date(p.end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
-                    </div>
-                  )}
-                </div>
               </div>
             );
           })}

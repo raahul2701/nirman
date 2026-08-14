@@ -11,6 +11,7 @@ interface ProtectedRouteProps {
 }
 
 const DEFAULT_REQUIRED_ROLES: string[] = [];
+const ENTERPRISE_ROLES = new Set(['executive_engineer', 'assistant_engineer', 'junior_engineer', 'contractor']);
 
 function AuthLoadingShell({ message }: { message: string }) {
   return (
@@ -81,7 +82,7 @@ export function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const { user, profile, loading, profileLoading } = useAuth();
 
   if (loading || (user && profileLoading)) return null;
-  if (profile && !profile.onboarding_complete) return <Navigate to="/onboarding" replace />;
+  if (profile && !profile.onboarding_complete && !ENTERPRISE_ROLES.has(profile.role)) return <Navigate to="/onboarding" replace />;
 
   return <>{children}</>;
 }

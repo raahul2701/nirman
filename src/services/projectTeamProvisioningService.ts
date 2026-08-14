@@ -19,6 +19,7 @@ export type ProvisionTeamMemberInput = {
   employeeCode?: string | null;
   licenceNumber?: string | null;
   companyName?: string | null;
+  initial_password?: string;
 };
 
 export type AccessLetterPayload = {
@@ -84,9 +85,15 @@ type ProvisionProjectTeamResponse = {
   workspaceId?: string;
   projectId?: string;
   projectTable?: 'gov_projects' | 'projects';
+  assignmentId?: string;
   results?: ProvisionTeamMemberResult[];
   rows?: ProvisionTeamMemberResult[];
 };
+
+export class DuplicateActiveAssignmentError extends Error {
+  readonly code = 'DUPLICATE_ACTIVE_ASSIGNMENT';
+  constructor() { super('This project already has more than one active team assignment. Please reconcile the assignments before continuing.'); }
+}
 
 export function normalizeProvisionEmail(email: string) {
   return String(email || '').trim().toLowerCase();
@@ -102,6 +109,7 @@ export async function provisionProjectTeam(input: {
   workspaceId: string;
   projectId: string;
   projectTable: 'gov_projects' | 'projects';
+  assignmentId?: string;
   members: ProvisionTeamMemberInput[];
   resendInvitation?: boolean;
   generateActivationLink?: boolean;
@@ -111,7 +119,10 @@ export async function provisionProjectTeam(input: {
     body: { ...input, action: 'provision', members },
   });
   if (error) throw error;
-  if (!data?.ok) throw new Error(data?.message || 'Project team provisioning failed');
+  if (!data?.ok) {
+    if (data?.message?.includes('DUPLICATE_ACTIVE_ASSIGNMENT')) throw new DuplicateActiveAssignmentError();
+    throw new Error(data?.message || 'Project team provisioning failed');
+  }
   return data.results || [];
 }
 

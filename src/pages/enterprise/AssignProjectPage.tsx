@@ -110,6 +110,8 @@ const defaultProvisionMembers: ProvisionTeamMemberInput[] = [
   { role: 'contractor', fullName: '', email: '', phone: '', licenceNumber: '', companyName: '' },
 ];
 
+type ProvisionPasswordConfirmations = Partial<Record<ProvisionTeamRole, string>>;
+
 function statusText(value: boolean) {
   return value ? 'yes' : 'no';
 }
@@ -169,6 +171,7 @@ export function AssignProjectPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [teamMembers, setTeamMembers] = useState<ProvisionTeamMemberInput[]>(defaultProvisionMembers);
+  const [teamMemberPasswordConfirmations, setTeamMemberPasswordConfirmations] = useState<ProvisionPasswordConfirmations>({});
   const [provisioning, setProvisioning] = useState(false);
   const [provisionResults, setProvisionResults] = useState<ProvisionTeamMemberResult[]>([]);
 
@@ -352,12 +355,25 @@ export function AssignProjectPage() {
     setTeamMembers((current) => current.map((member) => (member.role === role ? { ...member, [field]: value } : member)));
   }
 
-  function validateTeamMembers(members: ProvisionTeamMemberInput[]) {
+  function updateTeamMemberPasswordConfirmation(role: ProvisionTeamRole, value: string) {
+    setTeamMemberPasswordConfirmations((current) => ({ ...current, [role]: value }));
+  }
+
+  function validateTeamMembers(members: ProvisionTeamMemberInput[], confirmations: ProvisionPasswordConfirmations) {
     const completeMembers = members
       .map((member) => ({ ...member, email: normalizeProvisionEmail(member.email), fullName: member.fullName.trim() }))
       .filter((member) => member.fullName || member.email || member.phone || member.employeeCode || member.licenceNumber || member.companyName);
     const missingRequired = completeMembers.find((member) => !member.fullName || !member.email);
     if (missingRequired) return { error: `${roleLabel(missingRequired.role)} requires full name and email.`, members: [] as ProvisionTeamMemberInput[] };
+    const passwordValidationError = completeMembers
+      .map((member) => {
+        const confirmation = confirmations[member.role] || '';
+        if (!member.initial_password || member.initial_password.length < 8) return `${roleLabel(member.role)} initial password must be at least 8 characters.`;
+        if (member.initial_password !== confirmation) return `${roleLabel(member.role)} password confirmation does not match.`;
+        return null;
+      })
+      .find(Boolean);
+    if (passwordValidationError) return { error: passwordValidationError, members: [] as ProvisionTeamMemberInput[] };
     const duplicateEmail = completeMembers.find((member, index) => completeMembers.findIndex((other) => other.email === member.email) !== index)?.email;
     if (duplicateEmail) return { error: `Duplicate email in team submission: ${duplicateEmail}`, members: [] as ProvisionTeamMemberInput[] };
     return { error: null, members: completeMembers };
@@ -370,7 +386,7 @@ export function AssignProjectPage() {
       setError('Select a workspace and project before provisioning team access.');
       return;
     }
-    const validation = validateTeamMembers(membersOverride || teamMembers);
+    const validation = validateTeamMembers(membersOverride || teamMembers, teamMemberPasswordConfirmations);
     if (validation.error) {
       setError(validation.error);
       return;
@@ -386,12 +402,15 @@ export function AssignProjectPage() {
         workspaceId: selectedWorkspace.id,
         projectId: selectedProject.id,
         projectTable: selectedProject.table,
+        assignmentId: assignments.filter((assignment) => assignment.workspace_id === selectedWorkspace.id && assignment.project_id === selectedProject.id && (assignment.project_table || 'gov_projects') === selectedProject.table && assignment.access_status === 'active').length === 1 ? assignments.find((assignment) => assignment.workspace_id === selectedWorkspace.id && assignment.project_id === selectedProject.id && (assignment.project_table || 'gov_projects') === selectedProject.table && assignment.access_status === 'active')?.id : undefined,
         members: validation.members,
         resendInvitation: Boolean(membersOverride),
       });
       setProvisionResults(results);
       const failed = results.filter((result) => result.statuses.delivery_failed || !result.statuses.assigned);
       setSuccess(failed.length ? `Provisioning completed with ${failed.length} member issue(s).` : 'Project team provisioned successfully.');
+      setTeamMembers(defaultProvisionMembers.map((member) => ({ ...member })));
+      setTeamMemberPasswordConfirmations({});
       await loadData(selectedWorkspace.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Project team provisioning failed');
@@ -421,11 +440,17 @@ export function AssignProjectPage() {
       setError('No project is selected. Create a GovTrack project first.');
       return;
     }
-    const existing = assignments.find((assignment) => (
+    const activeMatches = assignments.filter((assignment) => (
       assignment.workspace_id === selectedWorkspace.id
       && assignment.project_id === selectedProject.id
       && (assignment.project_table || 'gov_projects') === selectedProject.table
+      && assignment.access_status === 'active'
     ));
+    if (activeMatches.length > 1) {
+      setError('This project already has more than one active team assignment. Please reconcile the assignments before continuing.');
+      return;
+    }
+    const existing = editingId ? assignments.find((assignment) => assignment.id === editingId) : activeMatches[0];
 
     const preservedAssistantEngineerId = preserveExistingSelection(assistantEngineerId, existing?.assistant_engineer_id);
     const preservedJuniorEngineerId = preserveExistingSelection(juniorEngineerId, existing?.junior_engineer_id);
@@ -450,12 +475,16 @@ export function AssignProjectPage() {
 
     setSaving(true);
     try {
+      const activeWorkspace = await resolveActiveWorkspaceForWrite(selectedWorkspace.id);
+      if (activeWorkspace.membership.role !== 'executive_engineer' || activeWorkspace.userId !== user?.id) {
+        throw new Error('Only an authorized Executive Engineer can create or update this assignment.');
+      }
       const contractor = contractorOptions.find((option) => option.id === preservedContractorId);
       const payload: AssignmentPayload = {
         workspace_id: selectedWorkspace.id,
         project_id: selectedProject.id,
         project_table: selectedProject.table,
-        executive_engineer_id: selectedWorkspace.executive_engineer_id,
+        executive_engineer_id: activeWorkspace.userId,
         assistant_engineer_id: preservedAssistantEngineerId,
         junior_engineer_id: preservedJuniorEngineerId,
         contractor_id: preservedContractorId,
@@ -675,6 +704,8 @@ export function AssignProjectPage() {
                   <Input label="Full Name" value={member.fullName} onChange={(event) => updateTeamMember(member.role, 'fullName', event.target.value)} />
                   <Input label="Email" type="email" value={member.email} onChange={(event) => updateTeamMember(member.role, 'email', event.target.value)} />
                   <Input label="Phone" value={member.phone || ''} onChange={(event) => updateTeamMember(member.role, 'phone', event.target.value)} />
+                  <Input label="Initial Password" type="password" autoComplete="new-password" value={member.initial_password || ''} onChange={(event) => updateTeamMember(member.role, 'initial_password', event.target.value)} />
+                  <Input label="Confirm Initial Password" type="password" autoComplete="new-password" value={teamMemberPasswordConfirmations[member.role] || ''} onChange={(event) => updateTeamMemberPasswordConfirmation(member.role, event.target.value)} />
                   {member.role === 'contractor' ? (
                     <>
                       <Input label="Licence Number" value={member.licenceNumber || ''} onChange={(event) => updateTeamMember(member.role, 'licenceNumber', event.target.value)} />
@@ -728,7 +759,7 @@ export function AssignProjectPage() {
                         <p>Activation: {result.statuses.activated ? 'Activated' : 'Invitation Pending'}</p>
                         <p>Current Status: {result.statuses.first_login_completed ? 'First Login Completed' : result.statuses.password_created ? 'Password Created' : result.statuses.delivery_failed ? 'Invitation Failed' : 'Invitation Pending'}</p>
                         {result.statuses.last_login_at && <p>Last Login: {new Date(result.statuses.last_login_at).toLocaleString()}</p>}
-                        {result.statuses.delivery_failed && <p className="mt-1 text-red-600">Assignment Saved · Invitation Failed<br />Reason: {result.notification?.error || result.stages.find((stage) => stage.status === 'failed')?.message || 'Delivery could not be confirmed.'}</p>}
+                        {result.statuses.delivery_failed && <p className="mt-1 text-red-600">Assignment Saved Â· Invitation Failed<br />Reason: {result.notification?.error || result.stages.find((stage) => stage.status === 'failed')?.message || 'Delivery could not be confirmed.'}</p>}
                       </td>
                       <td className="py-3 pr-4">
                         <div className="flex max-w-xs flex-wrap gap-1">
