@@ -84,7 +84,7 @@ export async function loadVisibleProjectAssignments(userId: string) {
   }
 
   return ((data || []) as ProjectAssignmentAccessRow[]).filter((assignment) => (
-    assignment.project_table === 'gov_projects'
+    (assignment.project_table === 'projects' || assignment.project_table === 'gov_projects')
     && Boolean(assignment.project_id)
     && isActiveAssignment(assignment.access_status)
   ));
@@ -92,7 +92,9 @@ export async function loadVisibleProjectAssignments(userId: string) {
 
 export async function loadVisibleGovProjectIds(userId: string) {
   const assignments = await loadVisibleProjectAssignments(userId);
-  return unique(assignments.map((assignment) => assignment.project_id));
+  return unique(assignments
+    .filter((assignment) => assignment.project_table === 'gov_projects')
+    .map((assignment) => assignment.project_id));
 }
 
 export async function loadAssignedGovProjects(userId: string) {

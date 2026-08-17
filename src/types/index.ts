@@ -80,20 +80,25 @@ export type WorkerSkill = 'mason' | 'carpenter' | 'electrician' | 'plumber' | 'p
 
 export interface Worker {
   id: string;
-  owner_id: string;
-  site_id?: string;
-  name: string;
-  phone: string;
-  aadhaar: string;
-  skill: WorkerSkill;
-  daily_wage: number;
-  photo_url: string;
-  status: 'active' | 'inactive' | 'on_leave';
-  performance_score: number;
-  joined_date: string;
-  created_at: string;
+  site_id: string | null;
+  full_name: string;
+  phone: string | null;
+  aadhaar_number: string | null;
+  skill: string | null;
+  daily_wage: number | null;
+  photo_url: string | null;
+  emergency_contact: string | null;
+  address: string | null;
+  joining_date: string | null;
+  is_active: boolean | null;
+  created_at: string | null;
+  workspace_id: string | null;
+  project_id: string | null;
+  project_table: 'projects' | 'gov_projects' | null;
+  contractor_id: string | null;
+  email: string | null;
+  auth_user_id: string | null;
 }
-
 export interface Attendance {
   id: string;
   worker_id: string;

@@ -2937,6 +2937,71 @@ export type Database = {
           },
         ]
       }
+      subcontractors: {
+        Row: {
+          company_name: string
+          contact_person: string | null
+          contractor_id: string
+          created_at: string
+          email: string | null
+          end_date: string | null
+          id: string
+          phone: string | null
+          project_id: string
+          project_table: string
+          start_date: string | null
+          status: string
+          updated_at: string
+          work_description: string | null
+          work_type: string | null
+          workspace_id: string
+        }
+        Insert: {
+          company_name: string
+          contact_person?: string | null
+          contractor_id: string
+          created_at?: string
+          email?: string | null
+          end_date?: string | null
+          id?: string
+          phone?: string | null
+          project_id: string
+          project_table: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          work_description?: string | null
+          work_type?: string | null
+          workspace_id: string
+        }
+        Update: {
+          company_name?: string
+          contact_person?: string | null
+          contractor_id?: string
+          created_at?: string
+          email?: string | null
+          end_date?: string | null
+          id?: string
+          phone?: string | null
+          project_id?: string
+          project_table?: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          work_description?: string | null
+          work_type?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subcontractors_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           amount: number | null
@@ -3767,8 +3832,11 @@ export type Database = {
         Row: {
           aadhaar_number: string | null
           address: string | null
+          auth_user_id: string | null
+          contractor_id: string | null
           created_at: string | null
           daily_wage: number | null
+          email: string | null
           emergency_contact: string | null
           full_name: string
           id: string
@@ -3776,14 +3844,20 @@ export type Database = {
           joining_date: string | null
           phone: string | null
           photo_url: string | null
+          project_id: string | null
+          project_table: string | null
           site_id: string | null
           skill: string | null
+          workspace_id: string | null
         }
         Insert: {
           aadhaar_number?: string | null
           address?: string | null
+          auth_user_id?: string | null
+          contractor_id?: string | null
           created_at?: string | null
           daily_wage?: number | null
+          email?: string | null
           emergency_contact?: string | null
           full_name: string
           id?: string
@@ -3791,14 +3865,20 @@ export type Database = {
           joining_date?: string | null
           phone?: string | null
           photo_url?: string | null
+          project_id?: string | null
+          project_table?: string | null
           site_id?: string | null
           skill?: string | null
+          workspace_id?: string | null
         }
         Update: {
           aadhaar_number?: string | null
           address?: string | null
+          auth_user_id?: string | null
+          contractor_id?: string | null
           created_at?: string | null
           daily_wage?: number | null
+          email?: string | null
           emergency_contact?: string | null
           full_name?: string
           id?: string
@@ -3806,8 +3886,11 @@ export type Database = {
           joining_date?: string | null
           phone?: string | null
           photo_url?: string | null
+          project_id?: string | null
+          project_table?: string | null
           site_id?: string | null
           skill?: string | null
+          workspace_id?: string | null
         }
         Relationships: [
           {
