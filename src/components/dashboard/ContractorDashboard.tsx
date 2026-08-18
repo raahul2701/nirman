@@ -14,7 +14,7 @@ import {
   Users,
 } from '../../lib/icons';
 import { StatCard } from '../ui/Card';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/useAuth';
 import { useToast } from '../ui/useToast';
@@ -48,6 +48,10 @@ function withProjectContext(actions: DashboardAction[], project?: DashboardProje
   return actions.map((action) => ({ ...action, to: `${action.to}?${params.toString()}` }));
 }
 
+function projectIdentity(project: Pick<DashboardProject, 'id' | 'projectTable'>) {
+  return `${project.projectTable}:${project.id}`;
+}
+
 function displayPercent(value: ContractorKpis[keyof ContractorKpis]) {
   return typeof value === 'number' ? `${value}%` : value;
 }
@@ -70,10 +74,15 @@ export function ContractorDashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const dashboardRequestRef = useRef(0);
 
   useEffect(() => {
+    const requestId = ++dashboardRequestRef.current;
+    const isCurrentRequest = () => dashboardRequestRef.current === requestId;
+
     async function loadDashboard() {
       if (!userId) {
+        if (!isCurrentRequest()) return;
         setProjects([]);
         setKpis(null);
         setError('No authenticated user found.');
@@ -84,11 +93,13 @@ export function ContractorDashboard() {
       setError(null);
       try {
         const result = await getContractorDashboardData(userId);
+        if (!isCurrentRequest()) return;
         setProjects(result.projects);
         setKpis(result.kpis);
         setWarnings(result.warnings);
-        setSelectedProjectId((current) => result.projects.some((project) => project.id === current) ? current : result.projects[0]?.id || '');
+        setSelectedProjectId((current) => result.projects.some((project) => projectIdentity(project) === current) ? current : result.projects[0] ? projectIdentity(result.projects[0]) : '');
       } catch (loadError) {
+        if (!isCurrentRequest()) return;
         const message = loadError instanceof Error ? loadError.message : 'Could not fetch contractor dashboard data.';
         setError(message);
         setProjects([]);
@@ -96,14 +107,18 @@ export function ContractorDashboard() {
         setWarnings([]);
         toast(message, 'error');
       } finally {
-        setLoading(false);
+        if (isCurrentRequest()) setLoading(false);
       }
     }
-    loadDashboard();
+
+    void loadDashboard();
+    return () => {
+      if (isCurrentRequest()) dashboardRequestRef.current += 1;
+    };
   }, [toast, userId]);
 
   const selectedProject = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId) || projects[0] || null,
+    () => projects.find((project) => projectIdentity(project) === selectedProjectId) || projects[0] || null,
     [projects, selectedProjectId],
   );
   const contextualActions = useMemo(() => withProjectContext(contractorActions, selectedProject), [selectedProject]);
@@ -128,10 +143,10 @@ export function ContractorDashboard() {
         {projects.length > 1 && (
           <select
             className="rounded-lg border border-[#D8B15A]/40 bg-white px-3 py-2 text-sm font-semibold text-[#12332D]"
-            value={selectedProject?.id || ''}
+            value={selectedProject ? projectIdentity(selectedProject) : ''}
             onChange={(event) => setSelectedProjectId(event.target.value)}
           >
-            {projects.map((project) => <option key={`${project.projectTable}:${project.id}`} value={project.id}>{project.code} - {project.name}</option>)}
+            {projects.map((project) => <option key={projectIdentity(project)} value={projectIdentity(project)}>{project.code} - {project.name}</option>)}
           </select>
         )}
       </div>

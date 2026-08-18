@@ -55,6 +55,10 @@ function normalizeProjectTable(projectTable?: string | null): 'projects' | 'gov_
   return null;
 }
 
+function projectIdentity(projectTable: 'projects' | 'gov_projects', projectId: string) {
+  return `${projectTable}:${projectId}`;
+}
+
 export async function loadAssignedDashboardProjects(role?: string | null, identity: DashboardIdentity = {}) {
   const dashboardRole = getDashboardRole(role);
   const summary = await getMyWorkspaceSummary();
@@ -126,8 +130,8 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   }
 
   const rows = new Map<string, ProjectRow>();
-  (!legacyProjects.error ? ((legacyProjects.data || []) as Omit<ProjectRow, 'table'>[]) : []).forEach((project) => rows.set(project.id, { ...project, table: 'projects' }));
-  (!govProjects.error ? ((govProjects.data || []) as Omit<ProjectRow, 'table'>[]) : []).forEach((project) => rows.set(project.id, { ...project, table: 'gov_projects' }));
+  (!legacyProjects.error ? ((legacyProjects.data || []) as Omit<ProjectRow, 'table'>[]) : []).forEach((project) => rows.set(projectIdentity('projects', project.id), { ...project, table: 'projects' }));
+  (!govProjects.error ? ((govProjects.data || []) as Omit<ProjectRow, 'table'>[]) : []).forEach((project) => rows.set(projectIdentity('gov_projects', project.id), { ...project, table: 'gov_projects' }));
   const componentsByProject = new Map<string, ComponentRow[]>();
   (!componentResult.error ? ((componentResult.data || []) as ComponentRow[]) : []).forEach((component) => {
     const list = componentsByProject.get(component.project_id) || [];
@@ -140,7 +144,7 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
     return !failedProjectTables.has(projectTable);
   }).map((assignment: ProjectAssignment): DashboardProject => {
     const projectTable = normalizeProjectTable(assignment.project_table) || 'gov_projects';
-    const projectRow = rows.get(assignment.project_id);
+    const projectRow = rows.get(projectIdentity(projectTable, assignment.project_id));
     const baseProject = projectRow ? normalizeProjectRow(projectRow) : { name: 'Project record unavailable', code: assignment.project_id.slice(0, 8), budget: 0, progress: null, category: ProjectCategory.OTHER };
     const components = componentsByProject.get(assignment.project_id);
     const componentProgress = componentProgressUnavailable

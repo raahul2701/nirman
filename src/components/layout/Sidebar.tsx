@@ -129,10 +129,28 @@ const navSections = [
   },
 ];
 
+const contractorNavPaths = new Set([
+  '/dashboard',
+  '/projects/agreement-boq',
+  '/field/daily-progress',
+  '/field/labour',
+  '/field/materials',
+  '/field/equipment',
+  '/workers',
+  '/finance/ra-bills',
+  '/finance/material-advance',
+  '/delays/hindrance',
+]);
+
 function SidebarComponent() {
   const [collapsed, setCollapsed] = useState(false);
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
+  const visibleNavSections = profile?.role === 'contractor'
+    ? navSections
+      .map((section) => ({ ...section, items: section.items.filter((item) => contractorNavPaths.has(item.to)) }))
+      .filter((section) => section.items.length > 0)
+    : navSections;
 
   async function handleSignOut() {
     await signOut();
@@ -161,7 +179,7 @@ function SidebarComponent() {
 
       {/* Nav */}
       <nav className="flex-1 py-4 overflow-y-auto overflow-x-hidden">
-        {navSections.map(({ title, icon: SectionIcon, items }) => (
+        {visibleNavSections.map(({ title, icon: SectionIcon, items }) => (
           <div key={title}>
             {!collapsed && (
               <div className="mt-4 mb-2 mx-4 flex items-center gap-1.5 first:mt-0">
@@ -173,7 +191,7 @@ function SidebarComponent() {
             {items.map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
-                to={to}
+                to={profile?.role === 'contractor' && to === '/dashboard' ? '/contractor/dashboard' : to}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg mb-0.5 transition-all duration-200 group ${
                     isActive
