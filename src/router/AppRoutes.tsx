@@ -10,6 +10,7 @@ const OnboardingPage = lazyWithRetry(() => import('../pages/auth/OnboardingPage'
 const DashboardPage = lazyWithRetry(() => import('../pages/DashboardPage').then((mod) => ({ default: mod.DashboardPage })));
 const ProblemsPage = createLazyComponent(() => import('../pages/ProblemsPage'), 'ProblemsPage');
 const WorkersPage = lazyWithRetry(() => import('../pages/WorkersPage').then((mod) => ({ default: mod.WorkersPage })));
+const ContractorSiteTeamPage = lazyWithRetry(() => import('../pages/ContractorSiteTeamPage').then((mod) => ({ default: mod.ContractorSiteTeamPage })));
 const SurveysPage = lazyWithRetry(() => import('../pages/SurveysPage').then((mod) => ({ default: mod.SurveysPage })));
 const DesignPage = lazyWithRetry(() => import('../pages/DesignPage').then((mod) => ({ default: mod.DesignPage })));
 const InventoryPage = lazyWithRetry(() => import('../pages/InventoryPage').then((mod) => ({ default: mod.InventoryPage })));
@@ -86,6 +87,7 @@ const routes: RouteObject[] = [
   { path: 'onboarding', element: <ProtectedRoute><OnboardingPage /></ProtectedRoute> },
   { path: 'dashboard', element: <ProtectedRoute><OnboardingGuard><DashboardPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'contractor/dashboard', element: <ContractorRoute><OnboardingGuard><DashboardPage /></OnboardingGuard></ContractorRoute> },
+  { path: 'contractor/site-team', element: <ContractorRoute><OnboardingGuard><ContractorSiteTeamPage /></OnboardingGuard></ContractorRoute> },
   { path: 'problems', element: <ProtectedRoute><OnboardingGuard><ProblemsPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'workers', element: <ProtectedRoute><OnboardingGuard><WorkersPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'surveys', element: <ProtectedRoute><OnboardingGuard><SurveysPage /></OnboardingGuard></ProtectedRoute> },
