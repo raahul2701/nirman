@@ -36,6 +36,7 @@ const contractorActions: DashboardAction[] = [
   { label: 'Material Request', to: '/finance/material-advance', icon: <Package size={16} /> },
   { label: 'RA Bill Status', to: '/finance/ra-bills', icon: <FileBarChart size={16} /> },
   { label: 'Labour Attendance', to: '/field/labour', icon: <Users size={16} /> },
+  { label: 'Site Team', to: '/contractor/site-team', icon: <Users size={16} /> },
   { label: 'Machinery Log', to: '/field/equipment', icon: <Truck size={16} /> },
   { label: 'Hindrance Register', to: '/delays/hindrance', icon: <FileX size={16} /> },
   { label: 'AI Assistant', to: '/projects/agreement-boq', icon: <MessageSquare size={16} /> },

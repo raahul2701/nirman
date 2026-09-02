@@ -9,7 +9,8 @@ export type Permission =
   | 'contractors:manage'
   | 'approvals:review'
   | 'admin:audit'
-  | 'admin:impersonate';
+  | 'admin:impersonate'
+  | 'site_team:project_manager:create';
 
 const permissionMatrix: Record<string, Permission[]> = {
   super_admin: ['operations:view', 'ai:use', 'uploads:create', 'projects:manage', 'contractors:view', 'contractors:manage', 'approvals:review', 'admin:audit', 'admin:impersonate'],
@@ -17,7 +18,7 @@ const permissionMatrix: Record<string, Permission[]> = {
   project_manager: ['operations:view', 'ai:use', 'uploads:create', 'projects:manage', 'contractors:view', 'approvals:review'],
   site_engineer: ['operations:view', 'ai:use', 'uploads:create', 'contractors:view'],
   labor_supervisor: ['uploads:create', 'contractors:view'],
-  contractor: ['uploads:create'],
+  contractor: ['uploads:create', 'site_team:project_manager:create'],
   gov_official: ['operations:view', 'approvals:review', 'contractors:view'],
   worker: [],
 };

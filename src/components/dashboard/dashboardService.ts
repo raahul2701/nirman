@@ -68,7 +68,7 @@ export async function loadAssignedDashboardProjects(role?: string | null, identi
   const assignments = summary.projects.filter((assignment) => {
     if (!assignment.project_id || !normalizeProjectTable(assignment.project_table)) return false;
     if (assignment.access_status !== 'active' && assignment.access_status !== 'pilot') return false;
-    if (dashboardRole === 'executive_engineer') return assignment.executive_engineer_id === currentUserId || summary.workspace?.executive_engineer_id === currentUserId;
+    if (dashboardRole === 'executive_engineer') return Boolean(summary.workspace?.id) && assignment.workspace_id === summary.workspace?.id;
     if (dashboardRole === 'admin') return summary.members.some((member) => member.user_id === currentUserId && member.active);
     if (dashboardRole === 'assistant_engineer') return assignment.assistant_engineer_id === currentUserId;
     if (dashboardRole === 'junior_engineer') return assignment.junior_engineer_id === currentUserId;

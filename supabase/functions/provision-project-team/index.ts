@@ -23,8 +23,18 @@ type TeamMemberInput = {
   initial_password?: string;
 };
 
+type ContractorSiteTeamInput = {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  employeeCode?: string;
+  loginIdentifier?: string;
+  scope?: { projectId?: string; role?: string; scopeType?: string; workPackageRef?: string };
+};
+
 type RequestBody = {
-  action?: 'status' | 'provision';
+  action?: 'status' | 'provision' | 'contractor_site_team_provision' | 'contractor_site_team_deactivate' | 'contractor_site_team_request_password_reset';
   workspaceId?: string;
   projectId?: string;
   projectTable?: 'gov_projects' | 'projects';
@@ -32,8 +42,8 @@ type RequestBody = {
   members?: TeamMemberInput[];
   resendInvitation?: boolean;
   generateActivationLink?: boolean;
-};
-
+  userId?: string;
+} & ContractorSiteTeamInput;
 type StageResult = { stage: StageName; status: ProvisionStageStatus; message?: string };
 type ProjectDetails = {
   id: string;
@@ -71,6 +81,52 @@ function json(body: Record<string, unknown>, status = 200) {
 
 function normalizeEmail(email: string) {
   return String(email || '').trim().toLowerCase();
+}
+
+function normalizeLoginIdentifier(value?: string | null) {
+  return String(value || '').trim().toLowerCase() || null;
+}
+
+function normalizeEmployeeCode(value?: string | null) {
+  return String(value || '').trim() || null;
+}
+
+function integerRangeErrorMessage(error: unknown) {
+  const raw = safeError(error);
+  return raw.toLowerCase();
+}
+
+function duplicateBusinessErrorMessage(error: unknown) {
+  const message = integerRangeErrorMessage(error);
+  if (message.includes('workspace_users_employee_code_unique') || message.includes('employee_code')) {
+    return 'This employee code is already active in this workspace.';
+  }
+  if (message.includes('workspace_users_login_identifier_unique') || message.includes('login_identifier')) {
+    return 'This login identifier is already active in this workspace.';
+  }
+  if (message.includes('duplicate key') || message.includes('unique constraint')) {
+    return 'This Site Team record conflicts with an existing active workspace user.';
+  }
+  return 'This Site Team record conflicts with an existing active worker in the workspace.';
+}
+
+async function cleanupFreshAuthUser(supabase: ReturnType<typeof createClient>, userId: string | null | undefined, profileWasCreatedInThisRequest = false) {
+  if (!userId) return;
+  try {
+    if (profileWasCreatedInThisRequest) {
+      const profileDelete = await supabase.from('profiles').delete().eq('id', userId);
+      if (profileDelete.error) console.warn('Site team profile cleanup failed', profileDelete.error.message);
+    }
+  } catch (error) {
+    console.warn('Site team profile cleanup threw', safeError(error));
+  }
+
+  try {
+    const { error } = await supabase.auth.admin.deleteUser(userId, false);
+    if (error) console.warn('Site team auth cleanup failed', error.message);
+  } catch (error) {
+    console.warn('Site team auth cleanup threw', safeError(error));
+  }
 }
 
 function stage(stage: StageName, status: ProvisionStageStatus, message?: string): StageResult {
@@ -567,6 +623,216 @@ async function assignProject(supabase: ReturnType<typeof createClient>, input: {
   }
   return existing.id;
 }
+
+async function logContractorSiteTeamAudit(supabase: ReturnType<typeof createClient>, input: {
+  callerId: string;
+  action: string;
+  recordId?: string | null;
+  metadata: Record<string, unknown>;
+}) {
+  const { error } = await supabase.from('audit_logs').insert({
+    user_id: input.callerId,
+    action: input.action,
+    table_name: 'workspace_users',
+    record_id: input.recordId || null,
+    new_values: input.metadata,
+    metadata: input.metadata,
+  });
+  if (error) console.warn('Contractor Site Team audit event failed', error.message);
+}
+
+async function resolveContractorSiteTeamCaller(supabase: ReturnType<typeof createClient>, callerId: string) {
+  const profile = await supabase.from('profiles').select('id, role').eq('id', callerId).maybeSingle();
+  if (profile.error) throw profile.error;
+  if (profile.data?.role !== 'contractor') throw new Error('Only active Contractor accounts may manage a Site Team.');
+  const membership = await supabase.from('workspace_users')
+    .select('id, workspace_id, user_id, role, active')
+    .eq('user_id', callerId).eq('role', 'contractor').eq('active', true).limit(2);
+  if (membership.error) throw membership.error;
+  const rows = membership.data || [];
+  if (rows.length !== 1 || !rows[0]?.workspace_id) throw new Error('A single active Contractor workspace is required for Site Team management.');
+  return { workspaceId: rows[0].workspace_id as string };
+}
+
+async function contractorCanUseProject(supabase: ReturnType<typeof createClient>, callerId: string, workspaceId: string, projectId: string) {
+  const assignment = await supabase.from('project_assignments')
+    .select('id, workspace_id, project_id, contractor_id, access_status')
+    .eq('workspace_id', workspaceId).eq('project_id', projectId).eq('contractor_id', callerId)
+    .in('access_status', ['active', 'pilot']).limit(2);
+  if (assignment.error) throw assignment.error;
+  if ((assignment.data || []).length !== 1) throw new Error('The selected project is not an active Contractor project.');
+}
+
+async function handleContractorSiteTeamAction(supabase: ReturnType<typeof createClient>, callerId: string, body: RequestBody, inviteRedirectUrl: string) {
+  const action = body.action;
+  const caller = await resolveContractorSiteTeamCaller(supabase, callerId);
+
+  if (action === 'contractor_site_team_deactivate' || action === 'contractor_site_team_request_password_reset') {
+    const userId = String(body.userId || '').trim();
+    if (!userId) return json({ ok: false, message: 'A Site Team user is required.' }, 400);
+
+    const teamMember = await supabase.from('workspace_users')
+      .select('id, user_id, email, role, contractor_owner_id, parent_user_id, active, workspace_id')
+      .eq('workspace_id', caller.workspaceId)
+      .eq('user_id', userId)
+      .eq('role', 'project_manager')
+      .eq('parent_user_id', callerId)
+      .eq('contractor_owner_id', callerId)
+      .eq('active', true)
+      .limit(2);
+    if (teamMember.error) throw teamMember.error;
+    if ((teamMember.data || []).length !== 1) return json({ ok: false, message: 'Site Team member was not found in your Contractor scope.' }, 404);
+    const member = teamMember.data![0] as { id: string; user_id: string; email?: string | null; active?: boolean | null; workspace_id?: string | null };
+
+    const authorizedProjectScope = await supabase.from('project_user_scopes')
+      .select('id, user_id, project_id, role, active')
+      .eq('user_id', member.user_id)
+      .eq('role', 'project_manager')
+      .eq('active', true)
+      .limit(20);
+    if (authorizedProjectScope.error) throw authorizedProjectScope.error;
+    const candidateScopes = (authorizedProjectScope.data || []) as Array<{ id: string; project_id: string; role: string; active: boolean; user_id: string }>;
+    const verifiedProjects = [] as Array<{ project_id: string }>;
+    for (const scope of candidateScopes) {
+      const assignment = await supabase.from('project_assignments')
+        .select('id, workspace_id, project_id, contractor_id, access_status')
+        .eq('workspace_id', caller.workspaceId)
+        .eq('project_id', scope.project_id)
+        .eq('contractor_id', callerId)
+        .in('access_status', ['active', 'pilot'])
+        .limit(2);
+      if (assignment.error) throw assignment.error;
+      if ((assignment.data || []).length === 1) verifiedProjects.push({ project_id: scope.project_id });
+    }
+
+    if (verifiedProjects.length !== 1) return json({ ok: false, message: 'The target Site Team member has no single authorized active project for this Contractor workspace.' }, 404);
+    const projectId = verifiedProjects[0].project_id;
+
+    if (action === 'contractor_site_team_deactivate') {
+      const result = await supabase.from('workspace_users')
+        .update({ active: false, deactivated_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', member.id)
+        .eq('workspace_id', caller.workspaceId)
+        .eq('user_id', userId)
+        .eq('role', 'project_manager')
+        .eq('parent_user_id', callerId)
+        .eq('contractor_owner_id', callerId)
+        .eq('active', true);
+      if (result.error) throw result.error;
+      const scopes = await supabase.from('project_user_scopes')
+        .update({ active: false })
+        .eq('user_id', member.user_id)
+        .eq('project_id', projectId)
+        .eq('role', 'project_manager')
+        .eq('active', true);
+      if (scopes.error) throw scopes.error;
+      await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_user_deactivated', recordId: member.id, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: member.user_id, role: 'project_manager', parent_user_id: callerId } });
+      return json({ ok: true });
+    }
+
+    if (!member.active) return json({ ok: false, message: 'A deactivated Site Team member cannot request a password reset.' }, 409);
+    if (!member.email) return json({ ok: false, message: 'This Site Team member has no email address for password recovery.' }, 409);
+    const recovery = await supabase.auth.resetPasswordForEmail(member.email, { redirectTo: inviteRedirectUrl });
+    if (recovery.error) throw recovery.error;
+    const result = await supabase.from('workspace_users').update({ password_reset_required: true, password_reset_requested_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', member.id);
+    if (result.error) throw result.error;
+    await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_password_reset_requested', recordId: member.id, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: member.user_id, role: 'project_manager', parent_user_id: callerId } });
+    return json({ ok: true });
+  }
+
+  const fullName = String(body.fullName || '').trim();
+  const email = normalizeEmail(body.email || '');
+  const loginIdentifier = normalizeLoginIdentifier(body.loginIdentifier || '');
+  const projectId = String(body.scope?.projectId || '').trim();
+  const scopeType = String(body.scope?.scopeType || '').trim();
+  const requestedRole = String(body.scope?.role || 'project_manager');
+  const workPackageRef = body.scope?.workPackageRef ? String(body.scope.workPackageRef).trim() : null;
+  if (!fullName || !email || !loginIdentifier || !projectId || !scopeType) return json({ ok: false, message: 'Full name, email, login identifier, project, and scope type are required.' }, 400);
+  if (requestedRole !== 'project_manager') return json({ ok: false, message: 'Only Project Manager is currently authorized for Contractor Site Team provisioning.' }, 403);
+  await contractorCanUseProject(supabase, callerId, caller.workspaceId, projectId);
+
+  let userId: string | null = null;
+  let createdFreshAuthUserId: string | null = null;
+  let profileWasCreatedInThisRequest = false;
+  const existingAuthUser = await findAuthUserByEmail(supabase, email);
+  if (existingAuthUser?.id) {
+    userId = existingAuthUser.id;
+    const [identityProfile, existingMemberships] = await Promise.all([
+      supabase.from('profiles').select('id, role').eq('id', userId).maybeSingle(),
+      supabase.from('workspace_users').select('id, role, contractor_owner_id').eq('user_id', userId).limit(10),
+    ]);
+    if (identityProfile.error) throw identityProfile.error;
+    if (existingMemberships.error) throw existingMemberships.error;
+    if (identityProfile.data?.role && identityProfile.data.role !== 'project_manager') {
+      return json({ ok: false, message: 'This identity already belongs to a different role and cannot be repurposed.' }, 409);
+    }
+    const unsafeMembership = (existingMemberships.data || []).find((membership) => membership.role !== 'project_manager' || membership.contractor_owner_id !== callerId);
+    if (unsafeMembership) return json({ ok: false, message: 'This identity is already assigned outside your Contractor Site Team.' }, 409);
+  } else {
+    const invite = await supabase.auth.inviteUserByEmail(email, { data: { full_name: fullName, role: 'project_manager' }, redirectTo: inviteRedirectUrl });
+    if (invite.error || !invite.data.user?.id) throw invite.error || new Error('Could not create the Site Team identity.');
+    userId = invite.data.user.id;
+    createdFreshAuthUserId = userId;
+  }
+
+  const now = new Date().toISOString();
+  const profile = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
+  if (profile.error) throw profile.error;
+  const profilePayload = { full_name: fullName, email, phone: body.phone ? String(body.phone).trim() : null, location: body.location ? String(body.location).trim() : null, role: 'project_manager', updated_at: now };
+  profileWasCreatedInThisRequest = !profile.data;
+  const profileWrite = profile.data
+    ? await supabase.from('profiles').update(profilePayload).eq('id', userId)
+    : await supabase.from('profiles').insert({ id: userId, ...profilePayload });
+  if (profileWrite.error) throw profileWrite.error;
+
+  const duplicatePreflight = await supabase.from('workspace_users').select('id, user_id, role, employee_code, login_identifier').eq('workspace_id', caller.workspaceId).eq('active', true).limit(100);
+  if (duplicatePreflight.error) throw duplicatePreflight.error;
+  const normalizedEmployeeCode = normalizeEmployeeCode(body.employeeCode);
+  const duplicateEmployee = normalizedEmployeeCode
+    ? (duplicatePreflight.data || []).find((row) => row.employee_code && String(row.employee_code).trim() === normalizedEmployeeCode)
+    : null;
+  const duplicateLogin = loginIdentifier
+    ? (duplicatePreflight.data || []).find((row) => row.login_identifier && String(row.login_identifier).trim().toLowerCase() === loginIdentifier)
+    : null;
+  if (duplicateEmployee || duplicateLogin) {
+    const duplicateMessage = duplicateEmployee ? 'This employee code is already active in this workspace.' : 'This login identifier is already active in this workspace.';
+    await cleanupFreshAuthUser(supabase, createdFreshAuthUserId, profileWasCreatedInThisRequest);
+    return json({ ok: false, message: duplicateMessage }, 409);
+  }
+
+  const membershipLookup = await supabase.from('workspace_users').select('id').eq('workspace_id', caller.workspaceId).eq('user_id', userId).eq('role', 'project_manager').eq('contractor_owner_id', callerId).limit(2);
+  if (membershipLookup.error) throw membershipLookup.error;
+  if ((membershipLookup.data || []).length > 1) return json({ ok: false, message: 'Duplicate Site Team memberships require reconciliation.' }, 409);
+  const membershipPayload = {
+    workspace_id: caller.workspaceId, user_id: userId, full_name: fullName, email, phone: body.phone ? String(body.phone).trim() : null,
+    role: 'project_manager', parent_user_id: callerId, contractor_owner_id: callerId, employee_code: normalizedEmployeeCode,
+    login_identifier: loginIdentifier, password_reset_required: true, deactivated_at: null, created_by: callerId, active: true, is_active: true, updated_at: now,
+  };
+  const membershipWrite = membershipLookup.data?.[0]?.id
+    ? await supabase.from('workspace_users').update(membershipPayload).eq('id', membershipLookup.data[0].id).select('id').single()
+    : await supabase.from('workspace_users').insert(membershipPayload).select('id').single();
+  if (membershipWrite.error) {
+    const duplicateBusinessMessage = duplicateBusinessErrorMessage(membershipWrite.error);
+    await cleanupFreshAuthUser(supabase, createdFreshAuthUserId, profileWasCreatedInThisRequest);
+    return json({ ok: false, message: duplicateBusinessMessage }, 409);
+  }
+  const membershipId = (membershipWrite.data as { id: string }).id;
+
+  let scopeLookup = supabase.from('project_user_scopes').select('id').eq('user_id', userId).eq('project_id', projectId).eq('role', 'project_manager').eq('scope_type', scopeType).limit(2);
+  scopeLookup = workPackageRef ? scopeLookup.eq('work_package_ref', workPackageRef) : scopeLookup.is('work_package_ref', null);
+  const existingScope = await scopeLookup;
+  if (existingScope.error) throw existingScope.error;
+  if ((existingScope.data || []).length > 1) return json({ ok: false, message: 'Duplicate project scopes require reconciliation.' }, 409);
+  const scopePayload = { user_id: userId, project_id: projectId, role: 'project_manager', scope_type: scopeType, work_package_ref: workPackageRef, active: true };
+  const scopeWrite = existingScope.data?.[0]?.id
+    ? await supabase.from('project_user_scopes').update(scopePayload).eq('id', existingScope.data[0].id)
+    : await supabase.from('project_user_scopes').insert(scopePayload);
+  if (scopeWrite.error) throw scopeWrite.error;
+
+  await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_project_manager_provisioned', recordId: membershipId, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: userId, role: 'project_manager', parent_user_id: callerId, contractor_owner_id: callerId, scope_type: scopeType, work_package_ref: workPackageRef } });
+  return json({ ok: true });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 200, headers: corsHeaders });
   if (req.method !== 'POST') return json({ ok: false, message: 'Method not allowed' }, 405);
@@ -600,6 +866,10 @@ Deno.serve(async (req: Request) => {
     const generateActivationLink = body.generateActivationLink === true;
     const inviteRedirectUrl = 'https://nirman.apostolicredeem.com/auth/callback';
     const members = (body.members || []).map(normalizeProvisionMember).filter((member) => member.fullName && member.email && allowedRoles.has(member.role));
+
+    if (action === 'contractor_site_team_provision' || action === 'contractor_site_team_deactivate' || action === 'contractor_site_team_request_password_reset') {
+      return await handleContractorSiteTeamAction(supabase, callerId, body, inviteRedirectUrl);
+    }
 
     if (!workspaceId || !projectId) return json({ ok: false, message: 'workspaceId and projectId are required.' }, 400);
     if (!['gov_projects', 'projects'].includes(projectTable)) return json({ ok: false, message: 'Unsupported project table.' }, 400);
