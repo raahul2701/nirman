@@ -26,7 +26,6 @@ export type ContractorStockTransaction = {
   transaction_date: string | null;
   done_by: string | null;
   notes: string | null;
-  created_at: string;
   materials?: { material_name: string; unit: string | null } | null;
 };
 
@@ -94,12 +93,13 @@ export async function listContractorStockTransactions(scope: WorkerScope): Promi
   const resolved = await resolveScope(scope);
   const { data, error } = await supabase
     .from('stock_transactions')
-    .select('id, material_id, transaction_type, quantity, unit_price, total_amount, transaction_date, done_by, notes, created_at, materials(material_name, unit)')
+    .select('id, material_id, transaction_type, quantity, unit_price, total_amount, transaction_date, done_by, notes')
     .eq('workspace_id', resolved.workspace_id)
     .eq('project_id', resolved.project_id)
     .eq('project_table', resolved.project_table)
     .eq('contractor_id', resolved.contractor_id)
-    .order('created_at', { ascending: false })
+    .eq('transaction_type', 'in')
+    .order('transaction_date', { ascending: false })
     .limit(50);
   if (error) throw error;
   return (data || []) as ContractorStockTransaction[];

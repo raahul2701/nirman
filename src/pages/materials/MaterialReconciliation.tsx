@@ -35,6 +35,20 @@ function assignmentScope(assignment: ProjectAssignmentAccessRow | undefined): Wo
   };
 }
 
+function attachMaterialDetails(
+  transactions: ContractorStockTransaction[],
+  materials: ContractorMaterialRecord[],
+): ContractorStockTransaction[] {
+  const materialsById = new Map(materials.map((material) => [material.id, material]));
+  return transactions.map((transaction) => {
+    const material = transaction.material_id ? materialsById.get(transaction.material_id) : undefined;
+    return {
+      ...transaction,
+      materials: material ? { material_name: material.material_name, unit: material.unit } : null,
+    };
+  });
+}
+
 export function MaterialReconciliation() {
   const { user, profile } = useAuth();
   const userId = user?.id;
@@ -104,7 +118,7 @@ export function MaterialReconciliation() {
       .then(([materialRows, transactionRows]) => {
         if (cancelled) return;
         setMaterials(materialRows);
-        setTransactions(transactionRows);
+        setTransactions(attachMaterialDetails(transactionRows, materialRows));
         setEntriesState('ready');
       })
       .catch(() => { if (!cancelled) setEntriesState('error'); });
@@ -129,7 +143,7 @@ export function MaterialReconciliation() {
       });
       const [materialRows, transactionRows] = await Promise.all([listContractorMaterials(selectedScope), listContractorStockTransactions(selectedScope)]);
       setMaterials(materialRows);
-      setTransactions(transactionRows);
+      setTransactions(attachMaterialDetails(transactionRows, materialRows));
       setForm({ material_name: '', quantity: '', unit: '', unit_price: '', entry_date: new Date().toISOString().slice(0, 10), notes: '' });
       setShowForm(false);
       setMessage(`Material entry saved. Current stock: ${result.current_quantity}`);
@@ -223,7 +237,7 @@ export function MaterialReconciliation() {
                   <div key={transaction.id} className="grid gap-2 px-5 py-4 md:grid-cols-[1fr_120px_100px_1fr] md:items-center">
                     <div>
                       <p className="text-sm font-medium text-white">{transaction.materials?.material_name || 'Material'}</p>
-                      <p className="text-xs text-slate-500">{new Date(transaction.created_at).toLocaleString()}</p>
+                      <p className="text-xs text-slate-500">{transaction.transaction_date ? new Date(transaction.transaction_date).toLocaleString() : 'No date'}</p>
                     </div>
                     <span className="text-slate-200">{transaction.quantity} {transaction.materials?.unit || ''}</span>
                     <span className="text-slate-400">{transaction.transaction_type}</span>
