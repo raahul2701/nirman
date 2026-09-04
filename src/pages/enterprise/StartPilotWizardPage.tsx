@@ -76,31 +76,7 @@ type AssignmentRow = {
 
 type AssignmentStatus = 'pilot' | 'active' | 'paused';
 type AssignmentPayload = Omit<AssignmentRow, 'id'>;
-type WorkspaceInsertPayload = {
-  workspace_name: string;
-  workspace_code: string;
-  department: string;
-  district: string;
-  division_code: string;
-  status: string;
-  executive_engineer_id: string;
-  executive_engineer_name: string;
-  executive_engineer_email: string | null;
-  storage_namespace: string;
-};
-type WorkspaceUserPayload = {
-  workspace_id: string;
-  user_id: string;
-  role: WorkspaceRole;
-  full_name: string;
-  email: string | null;
-  parent_user_id: string | null;
-  subdivision_name: string | null;
-  free_lifetime: boolean;
-  active: boolean;
-};
 type WorkspaceRole = 'executive_engineer' | 'assistant_engineer' | 'junior_engineer' | 'contractor';
-type WorkspaceMembershipRow = WorkspaceUserPayload & { id: string; created_at?: string | null };
 type PilotCreationStage = {
   workspaceResolved: boolean;
   membershipResolved: boolean;
@@ -118,10 +94,6 @@ function shortId(value: string | null | undefined, fallback = '-') {
 
 function profileName(profile: ProfileRow | undefined, fallback: string) {
   return profile?.full_name || profile?.company || profile?.email || fallback;
-}
-
-function resolveEngineerName(profile: ProfileRow | null | undefined, email?: string | null) {
-  return profile?.full_name || email?.split('@')[0] || 'Executive Engineer';
 }
 
 function selectValue(value: string) {

@@ -49,14 +49,6 @@ function normalizeText(value: string | null | undefined) {
   return String(value ?? '').trim();
 }
 
-function pickWorkspaceName(input: string | null | undefined) {
-  const value = normalizeText(input);
-  if (!value) {
-    throw new Error('workspace_name is required');
-  }
-  return value;
-}
-
 async function buildDeterministicStorageNamespace(callerId: string, workspaceName: string) {
   const seed = `${callerId}:${workspaceName}`;
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed));
