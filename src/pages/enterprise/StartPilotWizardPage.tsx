@@ -76,31 +76,7 @@ type AssignmentRow = {
 
 type AssignmentStatus = 'pilot' | 'active' | 'paused';
 type AssignmentPayload = Omit<AssignmentRow, 'id'>;
-type WorkspaceInsertPayload = {
-  workspace_name: string;
-  workspace_code: string;
-  department: string;
-  district: string;
-  division_code: string;
-  status: string;
-  executive_engineer_id: string;
-  executive_engineer_name: string;
-  executive_engineer_email: string | null;
-  storage_namespace: string;
-};
-type WorkspaceUserPayload = {
-  workspace_id: string;
-  user_id: string;
-  role: WorkspaceRole;
-  full_name: string;
-  email: string | null;
-  parent_user_id: string | null;
-  subdivision_name: string | null;
-  free_lifetime: boolean;
-  active: boolean;
-};
 type WorkspaceRole = 'executive_engineer' | 'assistant_engineer' | 'junior_engineer' | 'contractor';
-type WorkspaceMembershipRow = WorkspaceUserPayload & { id: string; created_at?: string | null };
 type PilotCreationStage = {
   workspaceResolved: boolean;
   membershipResolved: boolean;
@@ -120,10 +96,6 @@ function profileName(profile: ProfileRow | undefined, fallback: string) {
   return profile?.full_name || profile?.company || profile?.email || fallback;
 }
 
-function resolveEngineerName(profile: ProfileRow | null | undefined, email?: string | null) {
-  return profile?.full_name || email?.split('@')[0] || 'Executive Engineer';
-}
-
 function selectValue(value: string) {
   return value || EMPTY_VALUE;
 }
@@ -139,69 +111,6 @@ function findActiveWorkspaceUser(users: WorkspaceUserRow[], workspaceId: string,
 
 function preserveExistingSelection(selectedId: string, existingId: string | null | undefined) {
   return selectedId || existingId || null;
-}
-
-async function resolveWorkspaceMembership(payload: WorkspaceUserPayload): Promise<string> {
-  const lookup = await supabase
-    .from('workspace_users')
-    .select('id, workspace_id, user_id, role, full_name, email, parent_user_id, subdivision_name, free_lifetime, active, created_at')
-    .eq('workspace_id', payload.workspace_id)
-    .eq('user_id', payload.user_id)
-    .order('active', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(5);
-
-  if (lookup.error) {
-    throw new Error(`membership_lookup failed: ${lookup.error.message}`);
-  }
-
-  const rows = (lookup.data || []) as WorkspaceMembershipRow[];
-  if (rows.length > 1 && import.meta.env.DEV) {
-    console.warn('[start-pilot] duplicate workspace membership rows detected', {
-      workspaceId: payload.workspace_id,
-      userId: payload.user_id,
-      rowCount: rows.length,
-      requestStage: 'membership_lookup',
-    });
-  }
-
-  const existing = rows.find((row) => row.active) || rows[0];
-  if (existing?.id) {
-    const update = await supabase
-      .from('workspace_users')
-      .update({
-        active: true,
-        free_lifetime: existing.free_lifetime ?? payload.free_lifetime,
-        full_name: existing.full_name || payload.full_name,
-        email: existing.email || payload.email,
-      })
-      .eq('id', existing.id)
-      .select('id')
-      .maybeSingle();
-
-    if (update.error) {
-      throw new Error(`membership_update failed: ${update.error.message}`);
-    }
-
-    return existing.id;
-  }
-
-  const insert = await supabase
-    .from('workspace_users')
-    .insert(payload)
-    .select('id')
-    .maybeSingle();
-
-  if (insert.error) {
-    throw new Error(`membership_insert failed: ${insert.error.message}`);
-  }
-
-  const insertedId = (insert.data as { id?: string } | null)?.id;
-  if (!insertedId) {
-    throw new Error('membership_insert failed: workspace_users did not return an id.');
-  }
-
-  return insertedId;
 }
 
 export function StartPilotWizardPage() {
@@ -498,55 +407,48 @@ export function StartPilotWizardPage() {
       demoEndDate.setFullYear(demoEndDate.getFullYear() + 1);
       const endDate = demoEndDate.toISOString().slice(0, 10);
 
-      let workspace = null as WorkspaceRow | null;
-      const workspaceLookup = await supabase
-        .from('executive_engineer_workspaces')
-        .select('id, executive_engineer_id, workspace_name, division_code')
-        .eq('workspace_name', workspaceName)
-        .maybeSingle();
-      if (workspaceLookup.error) throw new Error(`executive_engineer_workspaces lookup failed: ${workspaceLookup.error.message}`);
+      const bootstrapRequest = {
+        workspace_name: workspaceName,
+        division_code: 'DEMO-DIV-001',
+        department: 'Demo Public Works Department',
+        district: 'Demo District',
+      };
 
-      if (workspaceLookup.data) {
-        workspace = workspaceLookup.data as WorkspaceRow;
-        creationStage.workspaceResolved = true;
-        results.push('Demo workspace already exists.');
-      } else {
-        const workspaceInsert = await supabase
-          .from('executive_engineer_workspaces')
-          .insert({
-            workspace_name: workspaceName,
-            workspace_code: 'DEMO-DIV-001',
-            department: 'Demo Public Works Department',
-            district: 'Demo District',
-            division_code: 'DEMO-DIV-001',
-            status: 'active',
-            executive_engineer_id: activeUserId,
-            executive_engineer_name: resolveEngineerName(profile, activeSession.user.email),
-            executive_engineer_email: activeSession.user.email || null,
-            storage_namespace: `demo_${activeUserId.replace(/-/g, '').slice(0, 16)}`,
-          } as WorkspaceInsertPayload)
-          .select('id, executive_engineer_id, workspace_name, division_code')
-          .maybeSingle();
-        if (workspaceInsert.error) throw new Error(`executive_engineer_workspaces insert failed: ${workspaceInsert.error.message}`);
-        workspace = workspaceInsert.data as WorkspaceRow;
-        creationStage.workspaceResolved = true;
-        results.push('Demo workspace created.');
+      const { data: bootstrapData, error: bootstrapError } = await supabase.functions.invoke<{
+        success: boolean;
+        workspace_id?: string | null;
+        workspace_name?: string | null;
+        executive_engineer_id?: string | null;
+        membership_id?: string | null;
+        role?: string | null;
+        created?: boolean;
+        error?: string | null;
+      }>('bootstrap-ee-workspace', {
+        body: bootstrapRequest,
+      });
+
+      if (bootstrapError) {
+        throw new Error(bootstrapError.message || 'Failed to bootstrap EE workspace');
+      }
+      if (!bootstrapData?.success || !bootstrapData.workspace_id) {
+        throw new Error(bootstrapData?.error || 'Failed to bootstrap EE workspace');
       }
 
-      if (!workspace) throw new Error('Demo workspace could not be created or loaded.');
-      const membershipId = await resolveWorkspaceMembership({
-        workspace_id: workspace.id,
-        user_id: activeUserId,
-        role: 'executive_engineer',
-        full_name: resolveEngineerName(profile, activeSession.user.email),
-        email: activeSession.user.email || null,
-        parent_user_id: null,
-        subdivision_name: null,
-        free_lifetime: true,
-        active: true,
-      });
+      const workspace: WorkspaceRow = {
+        id: bootstrapData.workspace_id,
+        executive_engineer_id: activeUserId,
+        workspace_name: bootstrapData.workspace_name || workspaceName,
+        division_code: bootstrapRequest.division_code,
+      };
+
+      creationStage.workspaceResolved = true;
       creationStage.membershipResolved = true;
-      results.push(`Current user linked as Executive Engineer membership ${shortId(membershipId)}.`);
+      results.push(bootstrapData.created ? 'Demo workspace created.' : 'Demo workspace already exists.');
+      if (bootstrapData.membership_id) {
+        results.push(`Current user linked as Executive Engineer membership ${shortId(bootstrapData.membership_id)}.`);
+      } else {
+        results.push('Current user linked as Executive Engineer membership.');
+      }
 
       let project = null as ProjectOption | null;
       const govProjectLookup = await supabase
