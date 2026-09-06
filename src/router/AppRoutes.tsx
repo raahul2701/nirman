@@ -48,6 +48,7 @@ const DieselIssue = lazyWithRetry(() => import('../pages/diesel/DieselIssue').th
 const DieselAlerts = lazyWithRetry(() => import('../pages/diesel/DieselAlerts').then((mod) => ({ default: mod.DieselAlerts })));
 const DieselReports = lazyWithRetry(() => import('../pages/diesel/DieselReports').then((mod) => ({ default: mod.DieselReports })));
 const MaintenanceDashboard = lazyWithRetry(() => import('../pages/maintenance/MaintenanceDashboard').then((mod) => ({ default: mod.MaintenanceDashboard })));
+const EquipmentExecutionPage = lazyWithRetry(() => import('../pages/equipment/EquipmentExecutionPage').then((mod) => ({ default: mod.EquipmentExecutionPage })));
 const ServiceSchedules = lazyWithRetry(() => import('../pages/maintenance/ServiceSchedules').then((mod) => ({ default: mod.ServiceSchedules })));
 const LabourPayments = lazyWithRetry(() => import('../pages/labour/LabourPayments').then((mod) => ({ default: mod.LabourPayments })));
 const LabourAdvances = lazyWithRetry(() => import('../pages/labour/LabourAdvances').then((mod) => ({ default: mod.LabourAdvances })));
@@ -140,7 +141,7 @@ const routes: RouteObject[] = [
   { path: 'field/daily-progress', element: <ProtectedRoute><OnboardingGuard><UploadWorkPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'field/labour', element: <ProtectedRoute><OnboardingGuard><LabourPayments /></OnboardingGuard></ProtectedRoute> },
   { path: 'field/materials', element: <ProtectedRoute><OnboardingGuard><MaterialReconciliation /></OnboardingGuard></ProtectedRoute> },
-  { path: 'field/equipment', element: <ProtectedRoute><OnboardingGuard><MaintenanceDashboard /></OnboardingGuard></ProtectedRoute> },
+  { path: 'field/equipment', element: <ProtectedRoute><OnboardingGuard><EquipmentExecutionPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'survey-quantity', element: <ProtectedRoute><OnboardingGuard><SurveyQuantityPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'field/survey-quantity', element: <ProtectedRoute><OnboardingGuard><SurveyQuantityPage /></OnboardingGuard></ProtectedRoute> },
   { path: 'quality/inspections', element: <ProtectedRoute><OnboardingGuard><InspectionsPage /></OnboardingGuard></ProtectedRoute> },
