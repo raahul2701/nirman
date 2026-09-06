@@ -18,7 +18,8 @@ export type EquipmentAssetRecord = {
   workspace_id: string;
   contractor_id: string;
   name: string;
-  asset_type: string;
+  equipment_code: string;
+  equipment_type: string;
   registration_number: string | null;
   status: string;
   initial_hour_meter: number;
@@ -40,7 +41,7 @@ export type EquipmentDeploymentRecord = {
   ended_on: string | null;
   notes: string | null;
   created_at: string;
-  equipment_assets?: { name: string; asset_type: string; registration_number: string | null } | null;
+  equipment_assets?: { name: string; equipment_code: string; equipment_type: string; registration_number: string | null } | null;
 };
 
 export type EquipmentExecutionLogRecord = {
@@ -66,7 +67,7 @@ export type EquipmentExecutionLogRecord = {
   remarks: string;
   photos: string[];
   created_at: string;
-  equipment_assets?: { name: string; asset_type: string; registration_number: string | null } | null;
+  equipment_assets?: { name: string; equipment_code: string; equipment_type: string; registration_number: string | null } | null;
 };
 
 export type EquipmentExecutionResult = {
@@ -75,9 +76,22 @@ export type EquipmentExecutionResult = {
   km_travelled: number;
 };
 
+/**
+ * Canonical equipment code format (approved design): EQ- followed by exactly
+ * three digits, e.g. EQ-014. Enforced by a DATABASE CHECK constraint
+ * (equipment_assets_equipment_code_format_check) and validated here for
+ * friendly client-side errors.
+ */
+export const EQUIPMENT_CODE_PATTERN = /^EQ-[0-9]{3}$/;
+
+export function normalizeEquipmentCode(raw: string): string {
+  return raw.trim().toUpperCase();
+}
+
 export type CreateEquipmentAssetInput = {
   name: string;
-  asset_type: string;
+  equipment_code: string;
+  equipment_type: string;
   registration_number?: string;
   initial_hour_meter?: number;
   initial_km?: number;
@@ -108,9 +122,9 @@ export type RecordEquipmentExecutionInput = {
   photos?: string[];
 };
 
-const ASSET_COLUMNS = 'id, workspace_id, contractor_id, name, asset_type, registration_number, status, initial_hour_meter, initial_km, notes, created_at, updated_at';
-const DEPLOYMENT_COLUMNS = 'id, workspace_id, project_id, project_table, contractor_id, equipment_asset_id, status, deployed_on, ended_on, notes, created_at, equipment_assets(name, asset_type, registration_number)';
-const LOG_COLUMNS = 'id, workspace_id, project_id, project_table, contractor_id, equipment_asset_id, execution_date, start_hour_meter, end_hour_meter, start_km, end_km, running_hours, km_travelled, fuel_used_litres, operator_name, activity, status, chainage_from, chainage_to, remarks, photos, created_at, equipment_assets(name, asset_type, registration_number)';
+const ASSET_COLUMNS = 'id, workspace_id, contractor_id, name, equipment_code, equipment_type, registration_number, status, initial_hour_meter, initial_km, notes, created_at, updated_at';
+const DEPLOYMENT_COLUMNS = 'id, workspace_id, project_id, project_table, contractor_id, equipment_asset_id, status, deployed_on, ended_on, notes, created_at, equipment_assets(name, equipment_code, equipment_type, registration_number)';
+const LOG_COLUMNS = 'id, workspace_id, project_id, project_table, contractor_id, equipment_asset_id, execution_date, start_hour_meter, end_hour_meter, start_km, end_km, running_hours, km_travelled, fuel_used_litres, operator_name, activity, status, chainage_from, chainage_to, remarks, photos, created_at, equipment_assets(name, equipment_code, equipment_type, registration_number)';
 
 /**
  * Resolves the signed-in contractor identity. Business lock D: contractor_id
@@ -179,6 +193,11 @@ export async function createEquipmentAsset(input: CreateEquipmentAssetInput): Pr
   const context = await resolveEquipmentContext();
   const name = input.name.trim();
   if (!name) throw new Error('Equipment name is required.');
+  const equipmentCode = normalizeEquipmentCode(input.equipment_code ?? '');
+  if (!equipmentCode) throw new Error('Equipment code is required (e.g. EQ-014).');
+  if (!EQUIPMENT_CODE_PATTERN.test(equipmentCode)) throw new Error('Equipment code must use the format EQ-014 (EQ- followed by exactly 3 digits).');
+  const equipmentType = (input.equipment_type || '').trim();
+  if (!equipmentType) throw new Error('Equipment type is required.');
   const initialHourMeter = input.initial_hour_meter ?? 0;
   const initialKm = input.initial_km ?? 0;
   if (!Number.isFinite(initialHourMeter) || initialHourMeter < 0) throw new Error('Initial hour meter must be zero or more.');
@@ -191,7 +210,8 @@ export async function createEquipmentAsset(input: CreateEquipmentAssetInput): Pr
       contractor_id: context.contractor_id,
       created_by: context.contractor_id,
       name,
-      asset_type: input.asset_type || 'other',
+      equipment_code: equipmentCode,
+      equipment_type: equipmentType,
       registration_number: input.registration_number?.trim() || null,
       status: 'active',
       initial_hour_meter: initialHourMeter,
@@ -200,7 +220,10 @@ export async function createEquipmentAsset(input: CreateEquipmentAssetInput): Pr
     })
     .select(ASSET_COLUMNS)
     .single();
-  if (error) throw error;
+  if (error) {
+    if (error.code === '23505') throw new Error('This equipment code is already used in your workspace. Equipment codes must be unique (e.g. EQ-014).');
+    throw error;
+  }
   return data as EquipmentAssetRecord;
 }
 

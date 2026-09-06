@@ -13,7 +13,7 @@ import { AppLayout } from '../../components/layout/AppLayout';
 import { Button } from '../../components/ui/Button';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { useEquipmentExecution, type EquipmentViewTab } from '../../hooks/useEquipmentExecution';
-import type { EquipmentDeploymentRecord, EquipmentExecutionLogRecord } from '../../services/contractorEquipmentService';
+import { EQUIPMENT_CODE_PATTERN, normalizeEquipmentCode, type EquipmentDeploymentRecord, type EquipmentExecutionLogRecord } from '../../services/contractorEquipmentService';
 
 const TABS: { id: EquipmentViewTab; label: string }[] = [
   { id: 'today', label: 'Today' },
@@ -21,7 +21,7 @@ const TABS: { id: EquipmentViewTab; label: string }[] = [
   { id: 'assets', label: 'Assets' },
 ];
 
-const ASSET_TYPES = [
+const EQUIPMENT_TYPES = [
   { value: 'excavator', label: 'Excavator' },
   { value: 'jcb', label: 'JCB / Backhoe Loader' },
   { value: 'tipper', label: 'Tipper / Dumper' },
@@ -246,7 +246,7 @@ function TodayView({ equipment }: { equipment: EquipmentHook }) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="border-b border-[#303030] text-xs uppercase text-[#808080]">
-                <tr><th className="pb-3 pr-4">Equipment</th><th className="pb-3 pr-4">Type</th><th className="pb-3 pr-4">Registration</th><th className="pb-3 pr-4">Deployed on</th><th className="pb-3 pr-4">Last meter (hrs / KM)</th><th className="pb-3">Today</th></tr>
+                <tr><th className="pb-3 pr-4">Equipment</th><th className="pb-3 pr-4">Code</th><th className="pb-3 pr-4">Type</th><th className="pb-3 pr-4">Registration</th><th className="pb-3 pr-4">Deployed on</th><th className="pb-3 pr-4">Last meter (hrs / KM)</th><th className="pb-3">Today</th></tr>
               </thead>
               <tbody>
                 {equipment.todayDeployments.map((deployment) => {
@@ -254,7 +254,8 @@ function TodayView({ equipment }: { equipment: EquipmentHook }) {
                   return (
                     <tr key={deployment.id} className="border-b border-[#303030] text-[#D0D0D0] last:border-0">
                       <td className="py-3 pr-4 font-medium text-white">{deploymentLabel(deployment)}</td>
-                      <td className="py-3 pr-4">{deployment.equipment_assets?.asset_type || '—'}</td>
+                      <td className="py-3 pr-4">{deployment.equipment_assets?.equipment_code || '—'}</td>
+                      <td className="py-3 pr-4">{deployment.equipment_assets?.equipment_type || '—'}</td>
                       <td className="py-3 pr-4">{deployment.equipment_assets?.registration_number || '—'}</td>
                       <td className="py-3 pr-4">{deployment.deployed_on}</td>
                       <td className="py-3 pr-4">{baseline ? `${formatNumber(baseline.hourMeter)} / ${formatNumber(baseline.km)}` : '—'}</td>
@@ -445,7 +446,7 @@ function HistoryRow({ log, expanded, onToggle }: { log: EquipmentExecutionLogRec
   );
 }
 
-const emptyAssetForm = { name: '', assetType: 'excavator', registrationNumber: '', initialHour: '', initialKm: '', notes: '' };
+const emptyAssetForm = { equipmentCode: '', name: '', equipmentType: 'excavator', registrationNumber: '', initialHour: '', initialKm: '', notes: '' };
 const emptyDeployForm = { assetId: '', deployedOn: todayStr(), notes: '' };
 
 function AssetsView({ equipment }: { equipment: EquipmentHook }) {
@@ -473,13 +474,17 @@ function AssetsView({ equipment }: { equipment: EquipmentHook }) {
     setSuccess('');
     const initialHour = parseNumber(assetForm.initialHour) ?? 0;
     const initialKm = parseNumber(assetForm.initialKm) ?? 0;
+    const equipmentCode = normalizeEquipmentCode(assetForm.equipmentCode);
     if (!assetForm.name.trim()) { setFormError('Equipment name is required.'); return; }
+    if (!equipmentCode) { setFormError('Equipment code is required (e.g. EQ-014).'); return; }
+    if (!EQUIPMENT_CODE_PATTERN.test(equipmentCode)) { setFormError('Equipment code must use the format EQ-014 (EQ- followed by exactly 3 digits).'); return; }
     if (initialHour < 0 || initialKm < 0) { setFormError('Initial meter readings cannot be negative.'); return; }
     setSubmitting(true);
     try {
       await equipment.registerAsset({
         name: assetForm.name,
-        asset_type: assetForm.assetType,
+        equipment_code: equipmentCode,
+        equipment_type: assetForm.equipmentType,
         registration_number: assetForm.registrationNumber,
         initial_hour_meter: initialHour,
         initial_km: initialKm,
@@ -555,7 +560,8 @@ function AssetsView({ equipment }: { equipment: EquipmentHook }) {
           <form onSubmit={registerAsset} className="mb-4 space-y-3 rounded-xl border border-[#303030] bg-[#111111] p-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Input label="Equipment name" value={assetForm.name} onChange={(event) => setAssetForm((current) => ({ ...current, name: event.target.value }))} required placeholder="e.g. JCB 3DX" />
-              <Select label="Type" value={assetForm.assetType} onChange={(event) => setAssetForm((current) => ({ ...current, assetType: event.target.value }))} options={ASSET_TYPES} />
+              <Input label="Equipment code" value={assetForm.equipmentCode} onChange={(event) => setAssetForm((current) => ({ ...current, equipmentCode: event.target.value }))} required placeholder="e.g. EQ-014" />
+              <Select label="Type" value={assetForm.equipmentType} onChange={(event) => setAssetForm((current) => ({ ...current, equipmentType: event.target.value }))} options={EQUIPMENT_TYPES} />
               <Input label="Registration number" value={assetForm.registrationNumber} onChange={(event) => setAssetForm((current) => ({ ...current, registrationNumber: event.target.value }))} placeholder="e.g. RJ14 CD 1234" />
               <Input label="Initial hour meter" type="number" min="0" step="0.01" value={assetForm.initialHour} onChange={(event) => setAssetForm((current) => ({ ...current, initialHour: event.target.value }))} />
               <Input label="Initial KM" type="number" min="0" step="0.01" value={assetForm.initialKm} onChange={(event) => setAssetForm((current) => ({ ...current, initialKm: event.target.value }))} />
@@ -568,15 +574,16 @@ function AssetsView({ equipment }: { equipment: EquipmentHook }) {
           <p className="py-6 text-center text-sm text-[#A0A0A0]">No equipment registered yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="border-b border-[#303030] text-xs uppercase text-[#808080]">
-                <tr><th className="pb-3 pr-4">Name</th><th className="pb-3 pr-4">Type</th><th className="pb-3 pr-4">Registration</th><th className="pb-3 pr-4">Initial meters (hrs / KM)</th><th className="pb-3 pr-4">Deployment</th><th className="pb-3 pr-4">Status</th><th className="pb-3">Actions</th></tr>
+                <tr><th className="pb-3 pr-4">Name</th><th className="pb-3 pr-4">Code</th><th className="pb-3 pr-4">Type</th><th className="pb-3 pr-4">Registration</th><th className="pb-3 pr-4">Initial meters (hrs / KM)</th><th className="pb-3 pr-4">Deployment</th><th className="pb-3 pr-4">Status</th><th className="pb-3">Actions</th></tr>
               </thead>
               <tbody>
                 {equipment.assets.map((asset) => (
                   <tr key={asset.id} className="border-b border-[#303030] text-[#D0D0D0] last:border-0">
                     <td className="py-3 pr-4 font-medium text-white">{asset.name}</td>
-                    <td className="py-3 pr-4">{ASSET_TYPES.find((type) => type.value === asset.asset_type)?.label || asset.asset_type}</td>
+                    <td className="py-3 pr-4">{asset.equipment_code}</td>
+                    <td className="py-3 pr-4">{EQUIPMENT_TYPES.find((type) => type.value === asset.equipment_type)?.label || asset.equipment_type}</td>
                     <td className="py-3 pr-4">{asset.registration_number || '—'}</td>
                     <td className="py-3 pr-4">{formatNumber(asset.initial_hour_meter)} / {formatNumber(asset.initial_km)}</td>
                     <td className="py-3 pr-4">{activelyDeployedAssetIds.has(asset.id) ? <span className="text-emerald-300">Deployed</span> : <span className="text-[#808080]">Available</span>}</td>
@@ -604,7 +611,7 @@ function AssetsView({ equipment }: { equipment: EquipmentHook }) {
               onChange={(event) => setDeployForm((current) => ({ ...current, assetId: event.target.value }))}
               options={[
                 { value: '', label: 'Select equipment' },
-                ...deployableAssets.map((asset) => ({ value: asset.id, label: asset.name })),
+                ...deployableAssets.map((asset) => ({ value: asset.id, label: `${asset.equipment_code} · ${asset.name}` })),
               ]}
             />
             <Select
@@ -629,12 +636,13 @@ function AssetsView({ equipment }: { equipment: EquipmentHook }) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="border-b border-[#303030] text-xs uppercase text-[#808080]">
-                <tr><th className="pb-3 pr-4">Equipment</th><th className="pb-3 pr-4">Project</th><th className="pb-3 pr-4">Deployed on</th><th className="pb-3 pr-4">Ended on</th><th className="pb-3 pr-4">Status</th><th className="pb-3">Actions</th></tr>
+                <tr><th className="pb-3 pr-4">Equipment</th><th className="pb-3 pr-4">Code</th><th className="pb-3 pr-4">Project</th><th className="pb-3 pr-4">Deployed on</th><th className="pb-3 pr-4">Ended on</th><th className="pb-3 pr-4">Status</th><th className="pb-3">Actions</th></tr>
               </thead>
               <tbody>
                 {equipment.deployments.map((deployment) => (
                   <tr key={deployment.id} className="border-b border-[#303030] text-[#D0D0D0] last:border-0">
                     <td className="py-3 pr-4 font-medium text-white">{deploymentLabel(deployment)}</td>
+                    <td className="py-3 pr-4">{deployment.equipment_assets?.equipment_code || '—'}</td>
                     <td className="py-3 pr-4">{projectLabel(deployment.project_id)}</td>
                     <td className="py-3 pr-4">{deployment.deployed_on}</td>
                     <td className="py-3 pr-4">{deployment.ended_on || '—'}</td>
