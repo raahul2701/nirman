@@ -116,6 +116,11 @@ export function SurveyQuantityPage() {
   }, [form.length, form.width, form.depth]);
   const hasEntireProjectScope = scopes.some((scope) => scope.scope_type === 'entire_project');
   const workPackageOptions = scopes.filter((scope) => scope.scope_type !== 'entire_project' && scope.work_package_ref);
+  const canSave =
+    Boolean(project) && boqItems.length > 0 && scopes.length > 0
+    && form.boqItemId !== '' && form.mbNumber.trim() !== '' && form.chainage.trim() !== ''
+    && (hasEntireProjectScope || form.workPackageRef !== '')
+    && calculatedQuantity !== null;
 
   function updateField(field: keyof FormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -221,7 +226,7 @@ export function SurveyQuantityPage() {
               <p className="mt-2 text-3xl font-bold text-[#005F56]">{calculatedQuantity === null ? '--' : calculatedQuantity.toFixed(3)}</p>
               <p className="mt-1 text-xs text-[#6C7568]">The RPC result is authoritative.</p>
               {saveError && <p className="mt-4 text-sm text-[#B42318]">{saveError}</p>}
-              <Button className="mt-5 w-full" variant="primary" icon={saving ? <Loader2 size={15} className="animate-spin" /> : <ClipboardCheck size={15} />} onClick={saveDraft} disabled={saving || !project || !boqItems.length || !scopes.length}>{saving ? 'Saving Draft...' : 'Save Measurement Draft'}</Button>
+              <Button className="mt-5 w-full" variant="primary" icon={saving ? <Loader2 size={15} className="animate-spin" /> : <ClipboardCheck size={15} />} onClick={saveDraft} disabled={saving || !canSave}>{saving ? 'Saving Draft...' : 'Save Measurement Draft'}</Button>
             </Card>
             {savedDraft && <Card className="border-[#0B8B7D]/30"><div className="flex items-center gap-2 text-sm font-bold text-[#005F56]"><CheckCircle2 size={16} /> Measurement draft saved</div><dl className="mt-4 space-y-2 text-xs text-[#6C7568]"><div className="flex justify-between gap-3"><dt>ID</dt><dd className="font-mono text-right">{String(savedDraft.id || 'Unavailable')}</dd></div><div className="flex justify-between gap-3"><dt>Status</dt><dd className="font-bold text-[#005F56]">{String(savedDraft.status || 'draft')}</dd></div><div className="flex justify-between gap-3"><dt>Quantity</dt><dd>{String(savedDraft.calculated_quantity || calculatedQuantity || '')}</dd></div><div className="flex justify-between gap-3"><dt>Source</dt><dd>{String(savedDraft.measurement_source || 'manual')}</dd></div></dl></Card>}
           </div>
