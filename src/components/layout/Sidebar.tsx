@@ -143,6 +143,15 @@ const contractorNavPaths = new Set([
   '/finance/material-advance',
   '/delays/hindrance',
 ]);
+// Surveyor is a scoped field persona: they get the generic dashboard, the
+// Survey & Quantity capture page, the user manual, and settings only.
+const surveyorNavPaths = new Set([
+  '/dashboard',
+  '/field/survey-quantity',
+  '/help/user-manual',
+  '/settings',
+]);
+
 
 function SidebarComponent() {
   const [collapsed, setCollapsed] = useState(false);
@@ -151,6 +160,10 @@ function SidebarComponent() {
   const visibleNavSections = profile?.role === 'contractor'
     ? navSections
       .map((section) => ({ ...section, items: section.items.filter((item) => contractorNavPaths.has(item.to)) }))
+      .filter((section) => section.items.length > 0)
+    : profile?.role === 'surveyor'
+    ? navSections
+      .map((section) => ({ ...section, items: section.items.filter((item) => surveyorNavPaths.has(item.to)) }))
       .filter((section) => section.items.length > 0)
     : navSections;
 
