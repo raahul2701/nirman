@@ -7,6 +7,7 @@ export type UserRole =
   | 'assistant_engineer'
   | 'junior_engineer'
   | 'site_engineer'
+  | 'surveyor'
   | 'labor_supervisor'
   | 'contractor'
   | 'gov_official'

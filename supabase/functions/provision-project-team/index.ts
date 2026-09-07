@@ -72,6 +72,10 @@ const roleColumn: Record<TeamRole, 'assistant_engineer_id' | 'junior_engineer_id
   contractor: 'contractor_id',
 };
 
+const SITE_TEAM_ROLES = ['project_manager', 'surveyor'] as const;
+type SiteTeamRole = (typeof SITE_TEAM_ROLES)[number];
+const allowedSiteTeamRoles = new Set<string>(SITE_TEAM_ROLES);
+
 function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -675,19 +679,19 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
       .select('id, user_id, email, role, contractor_owner_id, parent_user_id, active, workspace_id')
       .eq('workspace_id', caller.workspaceId)
       .eq('user_id', userId)
-      .eq('role', 'project_manager')
+      .in('role', [...SITE_TEAM_ROLES])
       .eq('parent_user_id', callerId)
       .eq('contractor_owner_id', callerId)
       .eq('active', true)
       .limit(2);
     if (teamMember.error) throw teamMember.error;
     if ((teamMember.data || []).length !== 1) return json({ ok: false, message: 'Site Team member was not found in your Contractor scope.' }, 404);
-    const member = teamMember.data![0] as { id: string; user_id: string; email?: string | null; active?: boolean | null; workspace_id?: string | null };
+    const member = teamMember.data![0] as { id: string; user_id: string; email?: string | null; role?: string | null; active?: boolean | null; workspace_id?: string | null };
 
     const authorizedProjectScope = await supabase.from('project_user_scopes')
       .select('id, user_id, project_id, role, active')
       .eq('user_id', member.user_id)
-      .eq('role', 'project_manager')
+      .in('role', [...SITE_TEAM_ROLES])
       .eq('active', true)
       .limit(20);
     if (authorizedProjectScope.error) throw authorizedProjectScope.error;
@@ -714,7 +718,7 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
         .eq('id', member.id)
         .eq('workspace_id', caller.workspaceId)
         .eq('user_id', userId)
-        .eq('role', 'project_manager')
+        .in('role', [...SITE_TEAM_ROLES])
         .eq('parent_user_id', callerId)
         .eq('contractor_owner_id', callerId)
         .eq('active', true);
@@ -723,10 +727,10 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
         .update({ active: false })
         .eq('user_id', member.user_id)
         .eq('project_id', projectId)
-        .eq('role', 'project_manager')
+        .in('role', [...SITE_TEAM_ROLES])
         .eq('active', true);
       if (scopes.error) throw scopes.error;
-      await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_user_deactivated', recordId: member.id, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: member.user_id, role: 'project_manager', parent_user_id: callerId } });
+      await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_user_deactivated', recordId: member.id, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: member.user_id, role: member.role ?? 'project_manager', parent_user_id: callerId } });
       return json({ ok: true });
     }
 
@@ -736,7 +740,7 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
     if (recovery.error) throw recovery.error;
     const result = await supabase.from('workspace_users').update({ password_reset_required: true, password_reset_requested_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', member.id);
     if (result.error) throw result.error;
-    await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_password_reset_requested', recordId: member.id, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: member.user_id, role: 'project_manager', parent_user_id: callerId } });
+    await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_password_reset_requested', recordId: member.id, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: member.user_id, role: member.role ?? 'project_manager', parent_user_id: callerId } });
     return json({ ok: true });
   }
 
@@ -745,10 +749,14 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
   const loginIdentifier = normalizeLoginIdentifier(body.loginIdentifier || '');
   const projectId = String(body.scope?.projectId || '').trim();
   const scopeType = String(body.scope?.scopeType || '').trim();
-  const requestedRole = String(body.scope?.role || 'project_manager');
+  const requestedRoleRaw = String(body.scope?.role || 'project_manager');
   const workPackageRef = body.scope?.workPackageRef ? String(body.scope.workPackageRef).trim() : null;
   if (!fullName || !email || !loginIdentifier || !projectId || !scopeType) return json({ ok: false, message: 'Full name, email, login identifier, project, and scope type are required.' }, 400);
-  if (requestedRole !== 'project_manager') return json({ ok: false, message: 'Only Project Manager is currently authorized for Contractor Site Team provisioning.' }, 403);
+  if (!fullName || !email || !loginIdentifier || !projectId || !scopeType) return json({ ok: false, message: 'Full name, email, login identifier, project, and scope type are required.' }, 400);
+  if (!allowedSiteTeamRoles.has(requestedRoleRaw)) return json({ ok: false, message: 'Only Project Manager and Surveyor are currently authorized for Contractor Site Team provisioning.' }, 403);
+  const requestedRole = requestedRoleRaw as SiteTeamRole;
+  if (scopeType === 'entire_project' && workPackageRef) return json({ ok: false, message: 'entire_project scope must not include a work package reference.' }, 400);
+  if (scopeType === 'work_package' && !workPackageRef) return json({ ok: false, message: 'A work package reference is required for work_package scope.' }, 400);
   await contractorCanUseProject(supabase, callerId, caller.workspaceId, projectId);
 
   let userId: string | null = null;
@@ -763,13 +771,13 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
     ]);
     if (identityProfile.error) throw identityProfile.error;
     if (existingMemberships.error) throw existingMemberships.error;
-    if (identityProfile.data?.role && identityProfile.data.role !== 'project_manager') {
+    if (identityProfile.data?.role && !allowedSiteTeamRoles.has(identityProfile.data.role)) {
       return json({ ok: false, message: 'This identity already belongs to a different role and cannot be repurposed.' }, 409);
     }
-    const unsafeMembership = (existingMemberships.data || []).find((membership) => membership.role !== 'project_manager' || membership.contractor_owner_id !== callerId);
+    const unsafeMembership = (existingMemberships.data || []).find((membership) => !allowedSiteTeamRoles.has(String(membership.role)) || membership.contractor_owner_id !== callerId);
     if (unsafeMembership) return json({ ok: false, message: 'This identity is already assigned outside your Contractor Site Team.' }, 409);
   } else {
-    const invite = await supabase.auth.inviteUserByEmail(email, { data: { full_name: fullName, role: 'project_manager' }, redirectTo: inviteRedirectUrl });
+    const invite = await supabase.auth.inviteUserByEmail(email, { data: { full_name: fullName, role: requestedRole }, redirectTo: inviteRedirectUrl });
     if (invite.error || !invite.data.user?.id) throw invite.error || new Error('Could not create the Site Team identity.');
     userId = invite.data.user.id;
     createdFreshAuthUserId = userId;
@@ -778,7 +786,7 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
   const now = new Date().toISOString();
   const profile = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
   if (profile.error) throw profile.error;
-  const profilePayload = { full_name: fullName, email, phone: body.phone ? String(body.phone).trim() : null, location: body.location ? String(body.location).trim() : null, role: 'project_manager', updated_at: now };
+  const profilePayload = { full_name: fullName, email, phone: body.phone ? String(body.phone).trim() : null, location: body.location ? String(body.location).trim() : null, role: requestedRole, updated_at: now };
   profileWasCreatedInThisRequest = !profile.data;
   const profileWrite = profile.data
     ? await supabase.from('profiles').update(profilePayload).eq('id', userId)
@@ -800,12 +808,12 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
     return json({ ok: false, message: duplicateMessage }, 409);
   }
 
-  const membershipLookup = await supabase.from('workspace_users').select('id').eq('workspace_id', caller.workspaceId).eq('user_id', userId).eq('role', 'project_manager').eq('contractor_owner_id', callerId).limit(2);
+  const membershipLookup = await supabase.from('workspace_users').select('id').eq('workspace_id', caller.workspaceId).eq('user_id', userId).eq('role', requestedRole).eq('contractor_owner_id', callerId).limit(2);
   if (membershipLookup.error) throw membershipLookup.error;
   if ((membershipLookup.data || []).length > 1) return json({ ok: false, message: 'Duplicate Site Team memberships require reconciliation.' }, 409);
   const membershipPayload = {
     workspace_id: caller.workspaceId, user_id: userId, full_name: fullName, email, phone: body.phone ? String(body.phone).trim() : null,
-    role: 'project_manager', parent_user_id: callerId, contractor_owner_id: callerId, employee_code: normalizedEmployeeCode,
+    role: requestedRole, parent_user_id: callerId, contractor_owner_id: callerId, employee_code: normalizedEmployeeCode,
     login_identifier: loginIdentifier, password_reset_required: true, deactivated_at: null, created_by: callerId, active: true, is_active: true, updated_at: now,
   };
   const membershipWrite = membershipLookup.data?.[0]?.id
@@ -818,18 +826,18 @@ async function handleContractorSiteTeamAction(supabase: ReturnType<typeof create
   }
   const membershipId = (membershipWrite.data as { id: string }).id;
 
-  let scopeLookup = supabase.from('project_user_scopes').select('id').eq('user_id', userId).eq('project_id', projectId).eq('role', 'project_manager').eq('scope_type', scopeType).limit(2);
+  let scopeLookup = supabase.from('project_user_scopes').select('id').eq('user_id', userId).eq('project_id', projectId).eq('role', requestedRole).eq('scope_type', scopeType).limit(2);
   scopeLookup = workPackageRef ? scopeLookup.eq('work_package_ref', workPackageRef) : scopeLookup.is('work_package_ref', null);
   const existingScope = await scopeLookup;
   if (existingScope.error) throw existingScope.error;
   if ((existingScope.data || []).length > 1) return json({ ok: false, message: 'Duplicate project scopes require reconciliation.' }, 409);
-  const scopePayload = { user_id: userId, project_id: projectId, role: 'project_manager', scope_type: scopeType, work_package_ref: workPackageRef, active: true };
+  const scopePayload = { user_id: userId, project_id: projectId, role: requestedRole, scope_type: scopeType, work_package_ref: workPackageRef, active: true };
   const scopeWrite = existingScope.data?.[0]?.id
     ? await supabase.from('project_user_scopes').update(scopePayload).eq('id', existingScope.data[0].id)
     : await supabase.from('project_user_scopes').insert(scopePayload);
   if (scopeWrite.error) throw scopeWrite.error;
 
-  await logContractorSiteTeamAudit(supabase, { callerId, action: 'contractor_site_team_project_manager_provisioned', recordId: membershipId, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: userId, role: 'project_manager', parent_user_id: callerId, contractor_owner_id: callerId, scope_type: scopeType, work_package_ref: workPackageRef } });
+  await logContractorSiteTeamAudit(supabase, { callerId, action: requestedRole === 'surveyor' ? 'contractor_site_team_surveyor_provisioned' : 'contractor_site_team_project_manager_provisioned', recordId: membershipId, metadata: { workspace_id: caller.workspaceId, project_id: projectId, user_id: userId, role: requestedRole, parent_user_id: callerId, contractor_owner_id: callerId, scope_type: scopeType, work_package_ref: workPackageRef } });
   return json({ ok: true });
 }
 

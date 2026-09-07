@@ -2,6 +2,9 @@ import { supabase } from '../lib/supabase';
 import { loadProjectOptionsForAssignments, loadVisibleProjectAssignments, type ProjectOption } from './assignedProjectsService';
 
 export const SITE_TEAM_ROLE = 'project_manager' as const;
+export const SITE_TEAM_SURVEYOR_ROLE = 'surveyor' as const;
+export const SITE_TEAM_ROLES = [SITE_TEAM_ROLE, SITE_TEAM_SURVEYOR_ROLE] as const;
+export type SiteTeamRole = (typeof SITE_TEAM_ROLES)[number];
 
 export type ContractorSiteTeamMember = {
   id: string;
@@ -22,7 +25,7 @@ export type ContractorSiteTeamMember = {
 
 export type SiteTeamScope = {
   projectId: string;
-  role: typeof SITE_TEAM_ROLE;
+  role: SiteTeamRole;
   scopeType: string;
   workPackageRef?: string;
 };
@@ -62,7 +65,7 @@ export async function listContractorSiteTeam(): Promise<ContractorSiteTeamMember
     .select('id, user_id, full_name, email, phone, role, employee_code, login_identifier, active, deactivated_at, password_reset_required')
     .eq('workspace_id', workspaceId)
     .eq('contractor_owner_id', contractorId)
-    .eq('role', SITE_TEAM_ROLE)
+    .in('role', [...SITE_TEAM_ROLES])
     .order('created_at', { ascending: false });
   if (membersError) throw membersError;
 
@@ -72,7 +75,7 @@ export async function listContractorSiteTeam(): Promise<ContractorSiteTeamMember
 
   const [{ data: profiles, error: profilesError }, { data: scopes, error: scopesError }] = await Promise.all([
     supabase.from('profiles').select('id, location').in('id', userIds),
-    supabase.from('project_user_scopes').select('user_id, project_id, role, active').in('user_id', userIds).eq('role', SITE_TEAM_ROLE).eq('active', true),
+    supabase.from('project_user_scopes').select('user_id, project_id, role, active').in('user_id', userIds).in('role', [...SITE_TEAM_ROLES]).eq('active', true),
   ]);
   if (profilesError) throw profilesError;
   if (scopesError) throw scopesError;
@@ -117,7 +120,7 @@ export async function provisionContractorSiteTeamMember(input: {
     body: { action: 'contractor_site_team_provision', ...input },
   });
   if (error) throw error;
-  if (!data?.ok) throw new Error(data?.message || 'Could not provision the Project Manager.');
+  if (!data?.ok) throw new Error(data?.message || `Could not provision the ${input.scope.role === SITE_TEAM_SURVEYOR_ROLE ? 'Surveyor' : 'Project Manager'}.`);
 }
 
 async function invokeLifecycle(action: 'contractor_site_team_deactivate' | 'contractor_site_team_request_password_reset', userId: string) {
